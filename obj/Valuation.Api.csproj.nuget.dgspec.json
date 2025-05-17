@@ -50,7 +50,7 @@
             },
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
-              "version": "[9.0.3, )"
+              "version": "[8.0.0, )"
             },
             "Microsoft.Azure.Cosmos": {
               "target": "Package",

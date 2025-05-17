@@ -1,13 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "hEiyRHh91Ac=",
-  "success": false,
+  "dgSpecHash": "xoTggxP8I+I=",
+  "success": true,
   "projectFilePath": "/Users/tirurao/Working/Valuation.Api/Valuation.Api.csproj",
   "expectedPackageFiles": [
     "/Users/tirurao/.nuget/packages/azure.core/1.44.1/azure.core.1.44.1.nupkg.sha512",
     "/Users/tirurao/.nuget/packages/azure.storage.blobs/12.24.0/azure.storage.blobs.12.24.0.nupkg.sha512",
     "/Users/tirurao/.nuget/packages/azure.storage.common/12.23.0/azure.storage.common.12.23.0.nupkg.sha512",
-    "/Users/tirurao/.nuget/packages/microsoft.aspnetcore.openapi/9.0.3/microsoft.aspnetcore.openapi.9.0.3.nupkg.sha512",
+    "/Users/tirurao/.nuget/packages/microsoft.aspnetcore.openapi/8.0.0/microsoft.aspnetcore.openapi.8.0.0.nupkg.sha512",
     "/Users/tirurao/.nuget/packages/microsoft.azure.cosmos/3.51.0/microsoft.azure.cosmos.3.51.0.nupkg.sha512",
     "/Users/tirurao/.nuget/packages/microsoft.bcl.asyncinterfaces/6.0.0/microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
     "/Users/tirurao/.nuget/packages/microsoft.bcl.hashcode/1.1.0/microsoft.bcl.hashcode.1.1.0.nupkg.sha512",
@@ -91,15 +91,5 @@
     "/Users/tirurao/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.14/microsoft.aspnetcore.app.ref.8.0.14.nupkg.sha512",
     "/Users/tirurao/.nuget/packages/microsoft.netcore.app.host.osx-arm64/8.0.14/microsoft.netcore.app.host.osx-arm64.8.0.14.nupkg.sha512"
   ],
-  "logs": [
-    {
-      "code": "NU1202",
-      "level": "Error",
-      "message": "Package Microsoft.AspNetCore.OpenApi 9.0.3 is not compatible with net8.0 (.NETCoreApp,Version=v8.0). Package Microsoft.AspNetCore.OpenApi 9.0.3 supports: net9.0 (.NETCoreApp,Version=v9.0)",
-      "libraryId": "Microsoft.AspNetCore.OpenApi",
-      "targetGraphs": [
-        "net8.0"
-      ]
-    }
-  ]
+  "logs": []
 }
