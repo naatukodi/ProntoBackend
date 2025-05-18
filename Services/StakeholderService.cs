@@ -29,7 +29,9 @@ namespace Valuation.Api.Services
 
         public async Task<Stakeholder?> GetAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
-            var container = _cosmos.GetDatabase("ValuationsDb").GetContainer("Valuations");
+            var databaseName = Environment.GetEnvironmentVariable("Cosmos:Database") ?? "ValuationsDb";
+            var containerName = Environment.GetEnvironmentVariable("Cosmos:Container") ?? "Valuations";
+            var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
             var composite = $"{vehicleNumber}|{applicantContact}";
             var pk = new PartitionKey(composite);
 

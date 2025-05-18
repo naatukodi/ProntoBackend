@@ -1,0 +1,32 @@
+﻿<Properties StartupConfiguration="{09D84223-1FE2-74ED-3898-8AD1FBC4FC69}|https">
+  <MonoDevelop.Ide.ItemProperties.Valuation.Api PreferredExecutionTarget="/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app" />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.Workbench ActiveDocument="Program.cs">
+    <Files>
+      <File FileName="Program.cs" Line="78" Column="1" />
+      <File FileName="Models/Valution.cs" Line="1" Column="1" />
+      <File FileName="Services/ValuationService.cs" Line="1" Column="1" />
+      <File FileName="Controllers/VehicleDetailsController.cs" Line="1" Column="1" />
+    </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State name="__root__">
+          <Node name="Valuation.Api" expanded="True">
+            <Node name="Valuation.Api" expanded="True">
+              <Node name="Controllers" expanded="True" />
+              <Node name="Models" expanded="True" />
+              <Node name="Services" expanded="True" />
+            </Node>
+          </Node>
+        </State>
+      </Pad>
+    </Pads>
+  </MonoDevelop.Ide.Workbench>
+  <MultiItemStartupConfigurations />
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore>
+      <Breakpoint file="/Users/tirurao/Working/Valuation.Api/Services/ValuationService.cs" relfile="Services/ValuationService.cs" line="41" column="1" />
+    </BreakpointStore>
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+</Properties>

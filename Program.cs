@@ -28,7 +28,16 @@ if (string.IsNullOrWhiteSpace(accountEndpoint) || string.IsNullOrWhiteSpace(acco
 }
 
 // 4) Create CosmosClient & provision container
-var cosmosClient = new CosmosClient(accountEndpoint, accountKey);
+var cosmosOptions = new CosmosClientOptions
+{
+    ConnectionMode = ConnectionMode.Direct
+    // leave everything else at its default value
+};
+
+var cosmosClient = new CosmosClient(
+    accountEndpoint,
+    accountKey,
+    cosmosOptions);
 var databaseId = cosmosCfg["DatabaseId"] ?? "ValuationsDb";
 var containerId = cosmosCfg["ContainerId"] ?? "Valuations";
 
@@ -57,6 +66,7 @@ builder.Services.AddControllers();
 
 // 7) Application services
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
+builder.Services.AddScoped<IValuationService, ValuationService>();
 
 var app = builder.Build();
 

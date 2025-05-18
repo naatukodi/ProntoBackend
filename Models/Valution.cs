@@ -12,6 +12,7 @@ public class ValuationDocument
     public string? ApplicantContact { get; set; }
     public string? VehicleSegment { get; set; }
     public List<Document>? Documents { get; set; }
+    public VehicleDetailsDto? VehicleDetails { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

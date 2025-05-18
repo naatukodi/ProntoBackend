@@ -1,0 +1,26 @@
+// .vscode/launch.json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET Launch (Web API)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",                // runs the build task
+      "program": "${workspaceFolder}/bin/Debug/net8.0/Valution.Api.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "sourceFileMap": {
+        // if you have views or other projects, map paths here
+      }
+    }
+  ]
+}
