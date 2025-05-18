@@ -5,13 +5,13 @@ namespace Valuation.Api.Models;
 public class ValuationDocument
 {
     public string id { get; set; }
-    public Stakeholder Stakeholder { get; set; }
+    public Stakeholder? Stakeholder { get; set; }
     // Add other properties as needed
-    public string CompositeKey { get; set; }
-    public string VehicleNumber { get; set; }
-    public string ApplicantContact { get; set; }
-    public string VehicleSegment { get; set; }
-    public List<Document> Documents { get; set; }
+    public string? CompositeKey { get; set; }
+    public string? VehicleNumber { get; set; }
+    public string? ApplicantContact { get; set; }
+    public string? VehicleSegment { get; set; }
+    public List<Document>? Documents { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

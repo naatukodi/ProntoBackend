@@ -6,6 +6,7 @@ using Microsoft.Azure.Cosmos;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Valuation.Api.Models;
+using System.Net;
 
 namespace Valuation.Api.Services
 {
@@ -25,6 +26,46 @@ namespace Valuation.Api.Services
             _blobContainerName = configuration["Blob:ContainerName"]
                                  ?? throw new InvalidOperationException("Blob:ContainerName not configured");
         }
+
+        public async Task<Stakeholder?> GetAsync(string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var container = _cosmos.GetDatabase("ValuationsDb").GetContainer("Valuations");
+            var composite = $"{vehicleNumber}|{applicantContact}";
+            var pk = new PartitionKey(composite);
+
+            try
+            {
+                var resp = await container.ReadItemAsync<ValuationDocument>(
+                    id: valuationId, partitionKey: pk);
+                return resp.Resource.Stakeholder;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
+
+        public async Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var container = _cosmos.GetDatabase("ValuationsDb").GetContainer("Valuations");
+            var composite = $"{vehicleNumber}|{applicantContact}";
+            var pk = new PartitionKey(composite);
+
+            // Read & remove the stakeholder section, then upsert
+            try
+            {
+                var resp = await container.ReadItemAsync<ValuationDocument>(
+                    id: valuationId, partitionKey: pk);
+                var doc = resp.Resource;
+                doc.Stakeholder = null;
+                await container.UpsertItemAsync(doc, pk);
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // Nothing to delete
+            }
+        }
+
 
         public async Task UpdateAsync(StakeholderUpdateDto dto)
         {
