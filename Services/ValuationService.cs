@@ -119,7 +119,7 @@ public class ValuationService : IValuationService
         {
             doc.Workflow = new List<WorkflowStep>
             {
-                new(){ StepOrder=1, TemplateStepId=1, AssignedToRole="Stakeholder",  Status="Inprogress" },
+                new(){ StepOrder=1, TemplateStepId=1, AssignedToRole="Stakeholder",  Status="InProgress" },
                 new(){ StepOrder=2, TemplateStepId=2, AssignedToRole="BackEnd",      Status="Pending" },
                 new(){ StepOrder=3, TemplateStepId=3, AssignedToRole="AVO",          Status="Pending" },
                 new(){ StepOrder=4, TemplateStepId=4, AssignedToRole="QC",           Status="Pending" },
