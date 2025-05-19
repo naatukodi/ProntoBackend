@@ -7,6 +7,8 @@ using Valuation.Api.Models;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
+namespace Valuation.Api.Services;
+
 public class ValuationService : IValuationService
 {
     private readonly CosmosClient _cosmos;

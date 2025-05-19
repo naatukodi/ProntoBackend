@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Cosmos;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;

@@ -15,6 +15,7 @@ public class ValuationDocument
     public VehicleDetailsDto? VehicleDetails { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public InspectionDetails? InspectionDetails { get; set; }
 }
 
 public class Stakeholder

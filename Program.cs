@@ -67,6 +67,7 @@ builder.Services.AddControllers();
 // 7) Application services
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
 builder.Services.AddScoped<IValuationService, ValuationService>();
+builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();
 
 var app = builder.Build();
 
