@@ -1,4 +1,7 @@
 using Valuation.Api.Models;
+
+namespace Valuation.Api.Services;
+
 public interface IGetInspectionService
 {
     // …existing…

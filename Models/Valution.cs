@@ -16,6 +16,7 @@ public class ValuationDocument
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public InspectionDetails? InspectionDetails { get; set; }
+    public QualityControl? QualityControl { get; set; }
 }
 
 public class Stakeholder

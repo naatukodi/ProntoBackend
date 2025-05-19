@@ -1,3 +1,5 @@
+namespace Valuation.Api.Models;
+
 public class StakeholderUpdateDto
 {
     public string ValuationId { get; set; }  // cd8cb1dd-… GUID

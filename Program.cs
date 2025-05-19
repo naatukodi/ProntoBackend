@@ -68,6 +68,7 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
 builder.Services.AddScoped<IValuationService, ValuationService>();
 builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();
+builder.Services.AddScoped<IQualityControlService, QualityControlService>();
 
 var app = builder.Build();
 
