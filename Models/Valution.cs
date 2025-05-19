@@ -17,6 +17,7 @@ public class ValuationDocument
     public DateTime UpdatedAt { get; set; }
     public InspectionDetails? InspectionDetails { get; set; }
     public QualityControl? QualityControl { get; set; }
+    public List<WorkflowStep>? Workflow { get; set; }
 }
 
 public class Stakeholder
