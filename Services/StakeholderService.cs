@@ -94,6 +94,19 @@ namespace Valuation.Api.Services
                 };
             }
 
+            // Initialize workflow if missing
+            if (doc.Workflow == null)
+            {
+                doc.Workflow = new List<WorkflowStep>
+            {
+                new(){ StepOrder=1, TemplateStepId=1, AssignedToRole="Stakeholder",  Status="InProgress" },
+                new(){ StepOrder=2, TemplateStepId=2, AssignedToRole="BackEnd",      Status="Pending" },
+                new(){ StepOrder=3, TemplateStepId=3, AssignedToRole="AVO",          Status="Pending" },
+                new(){ StepOrder=4, TemplateStepId=4, AssignedToRole="QC",           Status="Pending" },
+                new(){ StepOrder=5, TemplateStepId=5, AssignedToRole="FinalReport",  Status="Pending" },
+            };
+            }
+
             // 3) Upload files
             async Task<string?> UploadIf(IFormFile? file)
             {
