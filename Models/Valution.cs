@@ -18,6 +18,15 @@ public class ValuationDocument
     public InspectionDetails? InspectionDetails { get; set; }
     public QualityControl? QualityControl { get; set; }
     public List<WorkflowStep>? Workflow { get; set; }
+    public string? Status { get; set; } = "Open";
+    public string? CreatedBy { get; set; }
+    public string? UpdatedBy { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedBy { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? CompletedBy { get; set; }
+    public string? AssignedTo { get; set; }
+    public string? AssignedToRole { get; set; }
 }
 
 public class Stakeholder

@@ -67,8 +67,10 @@ namespace Valuation.Api.Services
 
         public async Task UpdateAsync(StakeholderUpdateDto dto)
         {
-            var database = _cosmos.GetDatabase("ValuationsDb");
-            var container = database.GetContainer("Valuations");
+            var databaseName = Environment.GetEnvironmentVariable("Cosmos:DatabaseId") ?? "ValuationsDb";
+            var containerName = Environment.GetEnvironmentVariable("Cosmos:ContainerId") ?? "Valuations";
+            var database = _cosmos.GetDatabase(databaseName);
+            var container = database.GetContainer(containerName);
 
             // 1) Compute composite PK
             var compositeKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
@@ -92,6 +94,9 @@ namespace Valuation.Api.Services
                     VehicleNumber = dto.VehicleNumber,
                     ApplicantContact = dto.ApplicantContact
                 };
+
+                doc.Status = "Open";
+                doc.CreatedAt = DateTime.UtcNow;
             }
 
             // Initialize workflow if missing
