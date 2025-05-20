@@ -89,6 +89,36 @@ public class ValuationService : IValuationService
         }
     }
 
+    // Returns all valuations which are open
+
+    public async Task<List<OpenValuationDto>> GetOpenValuationsAsync()
+    {
+        var query = new QueryDefinition(@"
+            SELECT
+                c.id,
+                c.VehicleNumber,
+                c.Stakeholder.Applicant.Name     AS applicantName,
+                c.Stakeholder.Applicant.Contact  AS applicantContact,
+                c.CreatedAt,
+                ARRAY(
+                    SELECT VALUE wf
+                    FROM wf IN c.Workflow
+                    WHERE wf.Status = 'InProgress'
+                ) AS inProgressWorkflow
+            FROM c
+            WHERE c.Status = 'Open'
+        ");
+
+        var result = new List<OpenValuationDto>();
+        using var iterator = Container.GetItemQueryIterator<OpenValuationDto>(query);
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync();
+            result.AddRange(response.Resource);
+        }
+        return result;
+    }
+
     public async Task UpdateVehicleDetailsAsync(
         string valuationId,
         VehicleDetailsDto dto,

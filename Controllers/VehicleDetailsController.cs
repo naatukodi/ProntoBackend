@@ -48,4 +48,22 @@ namespace Valuation.Api.Controllers
             return NoContent();
         }
     }
+
+    // New controller for /api/valuations/open
+    [ApiController]
+    [Route("api/valuations")]
+    public class ValuationsController : ControllerBase
+    {
+        private readonly IValuationService _svc;
+        public ValuationsController(IValuationService svc) => _svc = svc;
+
+        // GET /api/valuations/open
+        [HttpGet("open")]
+        public async Task<ActionResult<IEnumerable<OpenValuationDto>>> GetAllOpen()
+        {
+            var openValuations = await _svc.GetOpenValuationsAsync();
+            if (openValuations == null || !openValuations.Any()) return NotFound();
+            return Ok(openValuations);
+        }
+    }
 }
