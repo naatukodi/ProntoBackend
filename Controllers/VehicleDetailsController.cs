@@ -23,17 +23,34 @@ namespace Valuation.Api.Controllers
             return Ok(dto);
         }
 
+        /// <summary>
+        /// Get the stored vehicle details AND enrich them with Attestr API RC data.
+        /// </summary>
+        [HttpGet("with-rc")]
+        public async Task<ActionResult<VehicleDetailsDto>> GetWithRc(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var dto = await _svc.GetVehicleDetailsWithRcCheckAsync(
+                valuationId.ToString(), vehicleNumber, applicantContact);
+            if (dto is null)
+                return NotFound();
+            return Ok(dto);
+        }
+
         // PUT /api/valuations/{valuationId}/vehicledetails  (multipart/form-data)
         [HttpPut]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> Upsert(
             Guid valuationId,
+            [FromQuery] string vehicleNumber,
             [FromForm] VehicleDetailsDto dto,
             [FromQuery] string applicantContact)
         {
             // VehicleDetailsDto now contains all scalar props + IFormFile fields + ApplicantContact
             await _svc.UpdateVehicleDetailsAsync(
-                valuationId.ToString(), dto, applicantContact);
+                valuationId.ToString(), dto, vehicleNumber, applicantContact);
             return NoContent();
         }
 

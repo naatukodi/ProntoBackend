@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 2) Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHttpClient();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo

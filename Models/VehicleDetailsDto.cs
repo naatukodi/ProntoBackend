@@ -43,5 +43,25 @@ namespace Valuation.Api.Models
         // For images, you can extend with IFormFile if you want uploads here
         // public IFormFile? StencilTrace { get; set; }
         // public IFormFile? ChassisPhoto { get; set; }
+
+        // ── newly added fields ────────────────────────────────────────────────
+        public string? Rto                    { get; set; }
+        public string? Lender                 { get; set; }
+        public decimal? ExShowroomPrice       { get; set; }
+        public string? CategoryCode           { get; set; }
+        public string? NormsType              { get; set; }
+        public string? MakerVariant           { get; set; }
+
+        public string? PollutionCertificateNumber { get; set; }
+        public DateTime? PollutionCertificateUpto { get; set; }
+
+        public string? PermitType             { get; set; }
+        public DateTime? PermitIssued         { get; set; }
+        public DateTime? PermitFrom           { get; set; }
+
+        public DateTime? TaxUpto              { get; set; }
+        public string?   TaxPaidUpto          { get; set; }
+
+        public DateTime? ManufacturedDate     { get; set; }
     }
 }
