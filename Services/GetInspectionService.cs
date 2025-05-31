@@ -39,46 +39,11 @@ namespace Valuation.Api.Services
                     partitionKey: GetPk(vehicleNumber, applicantContact));
 
                 var doc = resp.Resource;
-                return doc.InspectionDetails is null ? null : new InspectionDetails
-                {
-                    VehicleInspectedBy = doc.InspectionDetails.VehicleInspectedBy,
-                    DateOfInspection = doc.InspectionDetails.DateOfInspection,
-                    InspectionLocation = doc.InspectionDetails.InspectionLocation,
-                    VehicleMoved = doc.InspectionDetails.VehicleMoved,
-                    EngineStarted = doc.InspectionDetails.EngineStarted,
-                    Odometer = doc.InspectionDetails.Odometer,
-                    VinPlate = doc.InspectionDetails.VinPlate,
-                    BodyType = doc.InspectionDetails.BodyType,
-                    OverallTyreCondition = doc.InspectionDetails.OverallTyreCondition,
-                    OtherAccessoryFitment = doc.InspectionDetails.OtherAccessoryFitment,
-                    WindshieldGlass = doc.InspectionDetails.WindshieldGlass,
-                    RoadWorthyCondition = doc.InspectionDetails.RoadWorthyCondition,
-                    EngineCondition = doc.InspectionDetails.EngineCondition,
-                    SuspensionSystem = doc.InspectionDetails.SuspensionSystem,
-                    SteeringAssy = doc.InspectionDetails.SteeringAssy,
-                    BrakeSystem = doc.InspectionDetails.BrakeSystem,
-                    ChassisCondition = doc.InspectionDetails.ChassisCondition,
-                    BodyCondition = doc.InspectionDetails.BodyCondition,
-                    BatteryCondition = doc.InspectionDetails.BatteryCondition,
-                    PaintWork = doc.InspectionDetails.PaintWork,
-                    ClutchSystem = doc.InspectionDetails.ClutchSystem,
-                    GearBoxAssy = doc.InspectionDetails.GearBoxAssy,
-                    PropellerShaft = doc.InspectionDetails.PropellerShaft,
-                    DifferentialAssy = doc.InspectionDetails.DifferentialAssy,
-                    Cabin = doc.InspectionDetails.Cabin,
-                    Dashboard = doc.InspectionDetails.Dashboard,
-                    Seats = doc.InspectionDetails.Seats,
-                    HeadLamps = doc.InspectionDetails.HeadLamps,
-                    ElectricAssembly = doc.InspectionDetails.ElectricAssembly,
-                    Radiator = doc.InspectionDetails.Radiator,
-                    Intercooler = doc.InspectionDetails.Intercooler,
-                    AllHosePipes = doc.InspectionDetails.AllHosePipes,
-                    Photos = doc.InspectionDetails.Photos
-                };
+                return doc.InspectionDetails ?? new InspectionDetails();
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                return null;
+                return new InspectionDetails();
             }
         }
 

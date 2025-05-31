@@ -58,7 +58,7 @@ public class ValuationService : IValuationService
 
             var doc = resp.Resource;
             if (doc.VehicleDetails is null)
-                return null;
+                return new VehicleDetailsDto();
 
             return new VehicleDetailsDto
             {
@@ -100,7 +100,39 @@ public class ValuationService : IValuationService
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            return null;
+            return new VehicleDetailsDto()
+            {
+                RegistrationNumber = vehicleNumber,
+                Make = "",
+                Model = "",
+                MonthOfMfg = 0,
+                YearOfMfg = 0,
+                BodyType = "",
+                ChassisNumber = "",
+                EngineNumber = "",
+                Colour = "",
+                Fuel = "",
+                OwnerName = "",
+                PresentAddress = "",
+                PermanentAddress = "",
+                Hypothecation = false,
+                Insurer = "",
+                DateOfRegistration = null,
+                ClassOfVehicle = "",
+                EngineCC = null,
+                GrossVehicleWeight = null,
+                OwnerSerialNo = null,
+                SeatingCapacity = null,
+                InsurancePolicyNo = null,
+                InsuranceValidUpTo = null,
+                IDV = null,
+                PermitNo = null,
+                PermitValidUpTo = null,
+                FitnessNo = null,
+                FitnessValidTo = null,
+                BacklistStatus = false,
+                RcStatus = false
+            };
         }
     }
 

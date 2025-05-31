@@ -23,11 +23,23 @@ public class QualityControlService : IQualityControlService
         try
         {
             var resp = await Container.ReadItemAsync<ValuationDocument>(id, pk);
-            return resp.Resource.QualityControl;
+            return resp.Resource.QualityControl ?? new QualityControl
+            {
+                OverallRating = "",
+                ValuationAmount = 0,
+                ChassisPunch = "",
+                Remarks = null
+            };
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
-            return null;
+            return new QualityControl
+            {
+                OverallRating = "",
+                ValuationAmount = 0,
+                ChassisPunch = "",
+                Remarks = null
+            };
         }
     }
 

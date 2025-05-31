@@ -35,11 +35,29 @@ namespace Valuation.Api.Services
             {
                 var resp = await container.ReadItemAsync<ValuationDocument>(
                     id: valuationId, partitionKey: pk);
-                return resp.Resource.Stakeholder;
+                return resp.Resource.Stakeholder ?? new Stakeholder
+                {
+                    Name = "",
+                    ExecutiveName = "",
+                    ExecutiveContact = "",
+                    ExecutiveWhatsapp = "",
+                    ExecutiveEmail = "",
+                    Applicant = new Applicant { Name = "", Contact = "" },
+                    Documents = new List<Document>()
+                };
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
-                return null;
+                return new Stakeholder
+                {
+                    Name = "",
+                    ExecutiveName = "",
+                    ExecutiveContact = "",
+                    ExecutiveWhatsapp = "",
+                    ExecutiveEmail = "",
+                    Applicant = new Applicant { Name = "", Contact = "" },
+                    Documents = new List<Document>()
+                };
             }
         }
 
