@@ -3,36 +3,36 @@ namespace Valuation.Api.Models
     public class VehicleDetailsDto
     {
         // These must match your ValuationDocument.VehicleDetails properties:
-        public string RegistrationNumber { get; set; } = default!;
-        public string Make { get; set; } = default!;
-        public string Model { get; set; } = default!;
-        public int MonthOfMfg { get; set; }
-        public int YearOfMfg { get; set; }
-        public string BodyType { get; set; } = default!;
-        public string ChassisNumber { get; set; } = default!;
-        public string EngineNumber { get; set; } = default!;
-        public string Colour { get; set; } = default!;
-        public string Fuel { get; set; } = default!;
-        public string OwnerName { get; set; } = default!;
-        public string PresentAddress { get; set; } = default!;
-        public string PermanentAddress { get; set; } = default!;
-        public bool Hypothecation { get; set; }
-        public string Insurer { get; set; } = default!;
+        public string? RegistrationNumber { get; set; }
+        public string? Make { get; set; }
+        public string? Model { get; set; }
+        public int? MonthOfMfg { get; set; }
+        public int? YearOfMfg { get; set; }
+        public string? BodyType { get; set; }
+        public string? ChassisNumber { get; set; }
+        public string? EngineNumber { get; set; }
+        public string? Colour { get; set; }
+        public string? Fuel { get; set; }
+        public string? OwnerName { get; set; }
+        public string? PresentAddress { get; set; }
+        public string? PermanentAddress { get; set; }
+        public bool? Hypothecation { get; set; }
+        public string? Insurer { get; set; }
         public DateTime? DateOfRegistration { get; set; }
-        public string ClassOfVehicle { get; set; } = default!;
-        public int EngineCC { get; set; }
-        public double GrossVehicleWeight { get; set; }
-        public string OwnerSerialNo { get; set; } = default!;
-        public int SeatingCapacity { get; set; }
-        public string InsurancePolicyNo { get; set; } = default!;
+        public string? ClassOfVehicle { get; set; }
+        public int? EngineCC { get; set; }
+        public double? GrossVehicleWeight { get; set; }
+        public string? OwnerSerialNo { get; set; }
+        public int? SeatingCapacity { get; set; }
+        public string? InsurancePolicyNo { get; set; }
         public DateTime? InsuranceValidUpTo { get; set; }
-        public decimal IDV { get; set; }
-        public string PermitNo { get; set; } = default!;
+        public decimal? IDV { get; set; }
+        public string? PermitNo { get; set; }
         public DateTime? PermitValidUpTo { get; set; }
-        public string FitnessNo { get; set; } = default!;
+        public string? FitnessNo { get; set; }
         public DateTime? FitnessValidTo { get; set; }
-        public bool BacklistStatus { get; set; }
-        public bool RcStatus { get; set; }
+        public bool? BacklistStatus { get; set; }
+        public bool? RcStatus { get; set; }
         public string? StencilTraceUrl { get; set; }
         public string? ChassisNoPhotoUrl { get; set; }
 
