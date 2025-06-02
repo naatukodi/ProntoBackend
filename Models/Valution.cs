@@ -18,6 +18,7 @@ public class ValuationDocument
     public InspectionDetails? InspectionDetails { get; set; }
     public QualityControl? QualityControl { get; set; }
     public ValuationResponse? ValuationResponse { get; set; }
+    public Dictionary<string, string> PhotoUrls { get; set; } = new();
     public List<WorkflowStep>? Workflow { get; set; }
     public string? Status { get; set; } = "Open";
     public string? CreatedBy { get; set; }

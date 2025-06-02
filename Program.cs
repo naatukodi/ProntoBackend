@@ -92,6 +92,7 @@ builder.Services.AddScoped<IQualityControlService, QualityControlService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
+builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 
 var app = builder.Build();
 
