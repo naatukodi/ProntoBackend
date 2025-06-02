@@ -40,3 +40,6 @@ project.lock.json
 # IDE specific
 .idea/
 *.sln.iml
+
+# Config files
+appsettings*.json

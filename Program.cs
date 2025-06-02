@@ -2,6 +2,8 @@ using Microsoft.Azure.Cosmos;
 using Azure.Storage.Blobs;
 using Valuation.Api.Services;
 using Microsoft.OpenApi.Models;
+using System.Net.Http.Headers;
+using Valuation.Api.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +63,23 @@ var blobContainer = builder.Configuration["Blob:ContainerName"]
 
 builder.Services.AddSingleton(_ => new BlobServiceClient(blobConn));
 builder.Services.AddSingleton(_ => new BlobContainerClient(blobConn, blobContainer));
+// In Startup.ConfigureServices or Program.cs → builder.Services:
+builder.Services.AddHttpClient("OpenAI", client =>
+    {
+        client.BaseAddress = new Uri("https://api.openai.com/");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", builder.Configuration["OpenAI:ApiKey"]);
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
+    });
+
+builder.Services.AddHttpClient("GoogleCSE", client =>
+    {
+        client.BaseAddress = new Uri("https://www.googleapis.com/");
+        client.Timeout = TimeSpan.FromSeconds(10);
+        // We will pass ApiKey and CseId in the query string in code, so no need to set headers here.
+    });
+
 
 // 1) Add MVC controllers
 builder.Services.AddControllers();
@@ -71,6 +90,8 @@ builder.Services.AddScoped<IValuationService, ValuationService>();
 builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();
 builder.Services.AddScoped<IQualityControlService, QualityControlService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
+builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
+builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 
 var app = builder.Build();
 
