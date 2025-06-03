@@ -154,7 +154,7 @@ namespace Valuation.Api.Repositories
         {
             // 1) Build a query string from VehicleDetailsAIDto
             //    e.g. "2018 Honda City Mumbai resale value"
-            var query = $"{details.YearOfMfg} {details.Make} {details.Odometer} resale value";
+            var query = $"{details.YearOfMfg} {details.Model} {details.Make} {details.Odometer}  india resale value";
 
             // 2) Call Google CSE endpoint:
             //    GET /customsearch/v1?key={API_KEY}&cx={CSE_ID}&q={query}&num=3
