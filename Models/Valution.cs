@@ -39,6 +39,8 @@ public class Stakeholder
     public string ExecutiveWhatsapp { get; set; }
     public string ExecutiveEmail { get; set; }
     public Applicant Applicant { get; set; }
+    public string VehicleNumber { get; set; }
+    public string VehicleSegment { get; set; }
     public List<Document> Documents { get; set; }
 }
 

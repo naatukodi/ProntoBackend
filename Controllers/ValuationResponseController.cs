@@ -11,10 +11,31 @@ namespace Valuation.Api.Controllers
     public class ValuationResponseController : ControllerBase
     {
         private readonly IValuationResponseService _svc;
+        private readonly IValuationService _valuationService;
 
-        public ValuationResponseController(IValuationResponseService svc)
+        public ValuationResponseController(IValuationResponseService svc, IValuationService valuationService)
         {
             _svc = svc;
+            _valuationService = valuationService;
+        }
+
+        [HttpGet("FinalReport")]
+        public async Task<ActionResult<ValuationDocument>> GetValuationDocument(
+            Guid id,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var resp = await _valuationService.GetValuationDocumentAsync(
+                id.ToString(),
+                vehicleNumber,
+                applicantContact);
+
+            if (resp == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(resp);
         }
 
         /// <summary>

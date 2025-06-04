@@ -176,6 +176,21 @@ public class ValuationService : IValuationService
         return dto;
     }
 
+    public async Task<ValuationDocument?> GetValuationDocumentAsync(
+        string valuationId, string vehicleNumber, string applicantContact)
+    {
+        try
+        {
+            var resp = await Container.ReadItemAsync<ValuationDocument>(
+                id: valuationId,
+                partitionKey: GetPk(vehicleNumber, applicantContact));
+            return resp.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
     public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
     {
 
