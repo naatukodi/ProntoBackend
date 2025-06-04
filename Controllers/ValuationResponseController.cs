@@ -12,11 +12,13 @@ namespace Valuation.Api.Controllers
     {
         private readonly IValuationResponseService _svc;
         private readonly IValuationService _valuationService;
+        private readonly IFinalReportPdfService _pdfService;
 
-        public ValuationResponseController(IValuationResponseService svc, IValuationService valuationService)
+        public ValuationResponseController(IValuationResponseService svc, IValuationService valuationService, IFinalReportPdfService pdfService)
         {
             _svc = svc;
             _valuationService = valuationService;
+            _pdfService = pdfService;
         }
 
         [HttpGet("FinalReport")]
@@ -36,6 +38,26 @@ namespace Valuation.Api.Controllers
             }
 
             return Ok(resp);
+        }
+
+        [HttpGet("FinalReport/pdf")]
+        public async Task<IActionResult> GetFinalReportPdf(
+        Guid id,
+        [FromQuery] string vehicleNumber,
+        [FromQuery] string applicantContact)
+        {
+            // 1) Fetch the FinalReport object from your repository
+            var report = await _valuationService.GetValuationDocumentAsync(id.ToString(), vehicleNumber, applicantContact);
+            if (report == null)
+                return NotFound();
+
+            // 2) Generate PDF bytes
+            byte[] pdfBytes = await _pdfService.GeneratePdfAsync(report);
+
+            // 3) Return as a file result
+            string fileName = $"FinalReport_{id}_{System.DateTime.UtcNow:yyyyMMdd}.pdf";
+
+            return File(pdfBytes, "application/pdf", fileName);
         }
 
         /// <summary>

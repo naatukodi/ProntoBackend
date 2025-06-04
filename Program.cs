@@ -7,6 +7,11 @@ using Valuation.Api.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- SET QUESTPDF LICENSE HERE ---
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
+// Enable detailed layout diagnostics
+QuestPDF.Settings.EnableDebugging = true;
 
 // 2) Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -94,6 +99,7 @@ builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
+builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 
 var app = builder.Build();
 
