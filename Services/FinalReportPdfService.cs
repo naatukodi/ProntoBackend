@@ -1,6 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.Net.Http;
+using System.Threading.Tasks;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
-using Valuation.Api.Models;  // <- adjust to match your actual models namespace
+using QuestPDF.Infrastructure;
+using Valuation.Api.Models;  // ← adjust to your actual namespace
 
 namespace Valuation.Api.Services
 {
@@ -21,45 +26,47 @@ namespace Valuation.Api.Services
         [Obsolete]
         public async Task<byte[]> GeneratePdfAsync(ValuationDocument report)
         {
-            // 1) Download all photos into memory
-            // var photoStreams = new Dictionary<string, byte[]>();
-            // foreach (var kvp in report.PhotoUrls)
-            // {
-            //     if (string.IsNullOrEmpty(kvp.Value))
-            //         continue;
+            // 1) Download all photos into memory so we can embed thumbnails
+            var photoStreams = new Dictionary<string, byte[]>();
+            foreach (var kvp in report.PhotoUrls)
+            {
+                if (string.IsNullOrEmpty(kvp.Value))
+                    continue;
 
-            //     var response = await _httpClient.GetAsync(kvp.Value);
-            //     response.EnsureSuccessStatusCode();
-            //     photoStreams[kvp.Key] = await response.Content.ReadAsByteArrayAsync();
-            // }
+                var response = await _httpClient.GetAsync(kvp.Value);
+                response.EnsureSuccessStatusCode();
+                photoStreams[kvp.Key] = await response.Content.ReadAsByteArrayAsync();
+            }
 
-            // 2) Build a document with one Page(...) per section
+            // 2) Build the PDF document
             byte[] pdfBytes = QuestPDF.Fluent.Document.Create(doc =>
             {
-                // --- Page 1: Stakeholder & Vehicle Details ---
+                // ─── Page 1: Pronto Moto Valuation Report ───
                 doc.Page(page =>
                 {
                     page.Size(PageSizes.A4);
                     page.Margin(30);
                     page.DefaultTextStyle(x => x.FontSize(12));
 
-                    // Header
+                    // Main Heading, centered
                     page.Header()
-                        .Text($"Final Report: {report.id}")
+                        .AlignCenter()
+                        .Text("Pronto Moto Valuation Report")
                         .SemiBold()
-                        .FontSize(18)
+                        .FontSize(20)
                         .FontColor(Colors.Black);
 
-                    // Content: Stakeholder + Vehicle Details in a vertical stack
+                    // Stakeholder & Vehicle Details
                     page.Content().Column(col =>
                     {
-                        // Stakeholder Section
-                        col.Item().Text("Stakeholder").Bold().FontSize(14);
+                        col.Item().PaddingBottom(10)
+                            .Text("Stakeholder").Bold().FontSize(14);
+
                         col.Item().Table(table =>
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(120);
+                                columns.ConstantColumn(130);
                                 columns.RelativeColumn();
                             });
 
@@ -72,24 +79,23 @@ namespace Valuation.Api.Services
                             }
 
                             var st = report.Stakeholder;
-                            addRow("Name", st.Name);
-                            addRow("Executive", st.ExecutiveName);
-                            addRow("Contact", st.ExecutiveContact);
-                            addRow("WhatsApp", st.ExecutiveWhatsapp);
-                            addRow("Email", st.ExecutiveEmail);
-                            addRow("Applicant", st.Applicant.Name);
-                            addRow("Applicant Contact", st.Applicant.Contact);
+                            addRow("Name",               st.Name);
+                            addRow("Executive Name",     st.ExecutiveName);
+                            addRow("Contact Number",     st.ExecutiveContact);
+                            addRow("WhatsApp Number",    st.ExecutiveWhatsapp);
+                            addRow("Email",              st.ExecutiveEmail);
+                            addRow("Applicant Name",     st.Applicant.Name);
+                            addRow("Applicant Contact",  st.Applicant.Contact);
                         });
 
-                        col.Item().PaddingRight(10); // small gap
+                        col.Item().PaddingTop(20).PaddingBottom(10)
+                            .Text("Vehicle Details").Bold().FontSize(14);
 
-                        // Vehicle Details Section
-                        col.Item().Text("Vehicle Details").Bold().FontSize(14);
                         col.Item().Table(table =>
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(120);
+                                columns.ConstantColumn(130);
                                 columns.RelativeColumn();
                             });
 
@@ -102,23 +108,23 @@ namespace Valuation.Api.Services
                             }
 
                             var vd = report.VehicleDetails;
-                            addVRow("Registration No.", vd.RegistrationNumber?? "-");
-                            addVRow("Make", vd.Make?? "-");
-                            addVRow("Model", vd.Model?? "-");
-                            addVRow("Year of Mfg", vd.YearOfMfg.ToString()?? "-");
-                            addVRow("Body Type", vd.BodyType?? "-");
-                            addVRow("Chassis No.", vd.ChassisNumber?? "-");
-                            addVRow("Engine No.", vd.EngineNumber?? "-");
-                            addVRow("Color", vd.Colour?? "-");
-                            addVRow("Fuel", vd.Fuel?? "-");
-                            addVRow("Owner", vd.OwnerName?? "-");
-                            addVRow("RTO", vd.Rto?? "-");
-                            // …add more fields as needed…
+                            addVRow("Registration No.",      vd.RegistrationNumber ?? "-");
+                            addVRow("Make",                 vd.Make ?? "-");
+                            addVRow("Model",                vd.Model ?? "-");
+                            addVRow("Year of Mfg",          vd.YearOfMfg.ToString() ?? "-");
+                            addVRow("Body Type",            vd.BodyType ?? "-");
+                            addVRow("Chassis No.",          vd.ChassisNumber ?? "-");
+                            addVRow("Engine No.",           vd.EngineNumber ?? "-");
+                            addVRow("Color",                vd.Colour ?? "-");
+                            addVRow("Fuel",                 vd.Fuel ?? "-");
+                            addVRow("Owner Name",           vd.OwnerName ?? "-");
+                            addVRow("RTO",                  vd.Rto ?? "-");
+                            // …add any additional fields you need…
                         });
                     });
                 });
 
-                // --- Page 2: Inspection Details ---
+                // ─── Page 2: Inspection Details & Quality Control ───
                 doc.Page(page =>
                 {
                     page.Size(PageSizes.A4);
@@ -126,100 +132,102 @@ namespace Valuation.Api.Services
                     page.DefaultTextStyle(x => x.FontSize(12));
 
                     page.Header()
-                        .Text("Inspection Details")
-                        .SemiBold()
-                        .FontSize(16);
-
-                    page.Content().Table(table =>
-                    {
-                        table.ColumnsDefinition(columns =>
-                        {
-                            columns.ConstantColumn(120);
-                            columns.RelativeColumn();
-                        });
-
-                        var ins = report.InspectionDetails;
-                        void addIRow(string label, string value)
-                        {
-                            table.Cell().Text(label).SemiBold();
-                            table.Cell()
-                                  .Text(value ?? "-")
-                                  .WrapAnywhere();
-                        }
-
-                        addIRow("Inspected By", ins.VehicleInspectedBy);
-                        addIRow("Date", ins.DateOfInspection?.ToString("dd MMM yyyy") ?? "-");
-                        addIRow("Location", ins.InspectionLocation?? "-");
-                        addIRow("Odometer", ins.Odometer?.ToString() ?? "-");
-                        addIRow("Engine Started", ins.EngineStarted == true ? "Yes" : "No");
-                        addIRow("Road Worthy", ins.RoadWorthyCondition == true ? "Yes" : "No");
-                        addIRow("Tyre Condition", ins.OverallTyreCondition?? "-");
-                        addIRow("Engine Condition", ins.EngineCondition?? "-");
-                        addIRow("Brake Condition", ins.BrakeSystem?? "-");
-                        // …add more inspection fields as needed…
-                    });
-                });
-
-                // --- Page 3: Quality Control ---
-                doc.Page(page =>
-                {
-                    page.Size(PageSizes.A4);
-                    page.Margin(30);
-                    page.DefaultTextStyle(x => x.FontSize(12));
-
-                    page.Header()
-                        .Text("Quality Control")
-                        .SemiBold()
-                        .FontSize(16);
-
-                    page.Content().Table(table =>
-                    {
-                        table.ColumnsDefinition(columns =>
-                        {
-                            columns.ConstantColumn(120);
-                            columns.RelativeColumn();
-                        });
-
-                        var qc = report.QualityControl;
-                        void addQRow(string label, string value)
-                        {
-                            table.Cell().Text(label).SemiBold();
-                            table.Cell()
-                                  .Text(value ?? "-")
-                                  .WrapAnywhere();
-                        }
-
-                        addQRow("Overall Rating", qc.OverallRating);
-                        addQRow("Valuation Amount", $"₹{qc.ValuationAmount}");
-                        addQRow("Chassis Punch", qc.ChassisPunch);
-                        addQRow("Remarks", qc.Remarks);
-                    });
-                });
-
-                // --- Page 4: Valuation Response ---
-                doc.Page(page =>
-                {
-                    page.Size(PageSizes.A4);
-                    page.Margin(30);
-                    page.DefaultTextStyle(x => x.FontSize(12));
-
-                    page.Header()
-                        .Text("Valuation Response")
+                        .Text("Inspection Details & Quality Control")
                         .SemiBold()
                         .FontSize(16);
 
                     page.Content().Column(col =>
                     {
-                        // Raw Response in a two-column table so it wraps
+                        // Inspection Details
+                        col.Item().PaddingBottom(10)
+                            .Text("Inspection Details").Bold().FontSize(14);
+
                         col.Item().Table(table =>
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.ConstantColumn(120);
+                                columns.ConstantColumn(130);
                                 columns.RelativeColumn();
                             });
 
-                            table.Cell().Text("Raw Response").SemiBold();
+                            var ins = report.InspectionDetails;
+                            void addIRow(string label, string value)
+                            {
+                                table.Cell().Text(label).SemiBold();
+                                table.Cell()
+                                      .Text(value ?? "-")
+                                      .WrapAnywhere();
+                            }
+
+                            addIRow("Inspected By",        ins.VehicleInspectedBy);
+                            addIRow("Date of Inspection",  ins.DateOfInspection?.ToString("dd MMM yyyy") ?? "-");
+                            addIRow("Vehicle Moved",       ins.VehicleMoved == true ? "Yes" : "No");
+                            addIRow("VIN Plate",           ins.VinPlate == true ? "Yes" : "No");
+                            addIRow("Location",            ins.InspectionLocation ?? "-");
+                            addIRow("Odometer",            ins.Odometer?.ToString() ?? "-");
+                            addIRow("Engine Started",      ins.EngineStarted == true ? "Yes" : "No");
+                            addIRow("Road Worthy",         ins.RoadWorthyCondition == true ? "Yes" : "No");
+                            addIRow("Tyre Condition",      ins.OverallTyreCondition ?? "-");
+                            addIRow("Engine Condition",    ins.EngineCondition ?? "-");
+                            addIRow("Brake Condition",     ins.BrakeSystem ?? "-");
+                            // …add more inspection fields if needed…
+                        });
+
+                        // spacing between tables
+                        col.Item().PaddingTop(20).PaddingBottom(10)
+                            .Text("Quality Control").Bold().FontSize(14);
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(130);
+                                columns.RelativeColumn();
+                            });
+
+                            var qc = report.QualityControl;
+                            void addQRow(string label, string value)
+                            {
+                                table.Cell().Text(label).SemiBold();
+                                table.Cell()
+                                      .Text(value ?? "-")
+                                      .WrapAnywhere();
+                            }
+
+                            addQRow("Overall Rating",   qc.OverallRating);
+                            addQRow("Valuation Amount", $"₹{qc.ValuationAmount}");
+                            addQRow("Chassis Punch",    qc.ChassisPunch);
+                            addQRow("Remarks",          qc.Remarks ?? "-");
+                        });
+                    });
+                });
+
+                // ─── Page 3: AI Analysis ───
+                doc.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(30);
+                    page.DefaultTextStyle(x => x.FontSize(12));
+
+                    page.Header()
+                        .Text("AI Analysis")
+                        .SemiBold()
+                        .FontSize(16);
+
+                    page.Content().Column(col =>
+                    {
+                        col.Item().PaddingBottom(10)
+                            .Text("Raw AI Output").Bold().FontSize(14);
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(130);
+                                columns.RelativeColumn();
+                            });
+
+                            table.Cell().Text("Content").SemiBold();
                             table.Cell()
                                   .Text(report.ValuationResponse.RawResponse ?? "-")
                                   .FontSize(11)
@@ -233,44 +241,59 @@ namespace Valuation.Api.Services
                                       .WrapAnywhere();
                             }
 
-                            addVRes("Low Range (Lacs)", report.ValuationResponse.LowRange);
-                            addVRes("Mid Range (Lacs)", report.ValuationResponse.MidRange);
+                            addVRes("Low Range (Lacs)",  report.ValuationResponse.LowRange);
+                            addVRes("Mid Range (Lacs)",  report.ValuationResponse.MidRange);
                             addVRes("High Range (Lacs)", report.ValuationResponse.HighRange);
                         });
                     });
                 });
 
-                // --- Page 5+: Photos (one or more pages) ---
-                // If there are many photos, we can group them two per row or one per row.
-                // Below, we simply list them one after another. QuestPDF will push to subsequent pages if needed.
-            //     doc.Page(page =>
-            //     {
-            //         page.Size(PageSizes.A4);
-            //         page.Margin(30);
-            //         page.DefaultTextStyle(x => x.FontSize(12));
+                // ─── Page 4+: Photos as Thumbnails with Hyperlinks ───
+                doc.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(30);
+                    page.DefaultTextStyle(x => x.FontSize(12));
 
-            //         page.Header()
-            //             .Text("Photos")
-            //             .SemiBold()
-            //             .FontSize(16);
+                    page.Header()
+                        .Text("Photos")
+                        .SemiBold()
+                        .FontSize(16);
 
-            //         page.Content().Column(col =>
-            //         {
-            //             foreach (var kvp in photoStreams)
-            //             {
-            //                 // Show each image scaled to fit page width
-            //                 col.Item()
-            //                    .Image(kvp.Value)
-            //                    .FitWidth();
+                    page.Content().Grid(grid =>
+                    {
+                        // Two columns of thumbnails
+                        grid.Columns(2);
 
-            //                 col.Item()
-            //                    .Text(kvp.Key)
-            //                    .FontSize(10)
-            //                    .Italic();
-            //             }
-            //         });
-            //     });
-             })
+                        foreach (var kvp in photoStreams)
+                        {
+                            string imageName = kvp.Key;
+                            byte[] imageData = kvp.Value;
+                            string originalUrl = report.PhotoUrls[imageName]!;
+
+                            // Each cell is a Column containing a linked thumbnail + caption
+                            grid.Item().Column(col =>
+                            {
+                                // 100×100 container, then FitArea for the image
+                                col.Item()
+                                   .Width(100)
+                                   .Height(100)
+                                   .Hyperlink(originalUrl)
+                                   .Image(imageData)
+                                   .FitArea();  // now fits inside 100×100 without conflict
+
+                                // Caption under thumbnail, also a hyperlink
+                                col.Item()
+                                   .Hyperlink(originalUrl)
+                                   .Text(imageName)
+                                   .FontSize(10)
+                                   .Italic()
+                                   .AlignCenter();
+                            });
+                        }
+                    });
+                });
+            })
             .GeneratePdf();
 
             return pdfBytes;
