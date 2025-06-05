@@ -55,7 +55,7 @@ namespace Valuation.Api.Controllers
             byte[] pdfBytes = await _pdfService.GeneratePdfAsync(report);
 
             // 3) Return as a file result
-            string fileName = $"FinalReport_{id}_{System.DateTime.UtcNow:yyyyMMdd}.pdf";
+            string fileName = $"{vehicleNumber}_{System.DateTime.UtcNow:yyyyMMdd}.pdf";
 
             return File(pdfBytes, "application/pdf", fileName);
         }
