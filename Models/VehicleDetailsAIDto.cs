@@ -18,9 +18,9 @@ namespace Valuation.Api.Models
 
     public class ValuationResponse
     {
-        public string RawResponse { get; set; } = "";
-        public decimal LowRange { get; set; }
-        public decimal MidRange { get; set; }
-        public decimal HighRange { get; set; }
+        public string? RawResponse { get; set; } = "";
+        public decimal? LowRange { get; set; }
+        public decimal? MidRange { get; set; }
+        public decimal? HighRange { get; set; }
     }
 }
