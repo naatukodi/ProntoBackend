@@ -4,6 +4,7 @@ using Valuation.Api.Services;
 using Microsoft.OpenApi.Models;
 using System.Net.Http.Headers;
 using Valuation.Api.Repositories;
+using Azure.Data.Tables;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,13 @@ if (string.IsNullOrWhiteSpace(accountEndpoint) || string.IsNullOrWhiteSpace(acco
     throw new InvalidOperationException(
         "Missing Cosmos configuration. Ensure Cosmos:AccountEndpoint and Cosmos:AccountKey are set.");
 }
+builder.Services.AddSingleton(sp =>
+{
+    var conn = builder.Configuration.GetConnectionString("TableStorage")
+               ?? throw new InvalidOperationException("TableStorage not configured.");
+    return new TableServiceClient(conn);
+});
+
 
 // 4) Create CosmosClient & provision container
 var cosmosOptions = new CosmosClientOptions
@@ -100,6 +108,7 @@ builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
 builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
+builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
 
 var app = builder.Build();
 

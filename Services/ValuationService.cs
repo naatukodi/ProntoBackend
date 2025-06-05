@@ -136,7 +136,6 @@ public class ValuationService : IValuationService
         }
     }
 
-    // Returns all valuations which are open
     public async Task<VehicleDetailsDto?> GetVehicleDetailsWithRcCheckAsync(
         string valuationId,
         string registrationNumber,
