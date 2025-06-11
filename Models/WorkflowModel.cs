@@ -1,5 +1,3 @@
-using System;
-
 namespace Valuation.Api.Models
 {
     public class WorkflowModel

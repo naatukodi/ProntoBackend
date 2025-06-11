@@ -1,16 +1,8 @@
-using System;
-using System.Linq;
-using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Threading.Tasks;
-using System.Text;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
 using Valuation.Api.Services;
 using Valuation.Api.Repositories;
 
@@ -85,30 +77,6 @@ builder.Services.AddHttpClient("GoogleCSE", client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 
-// 8) JWT Bearer Authentication (custom OTP tokens)
-var jwtKey = builder.Configuration["Jwt:Key"];
-var jwtIss = builder.Configuration["Jwt:Issuer"];
-var jwtAud = builder.Configuration["Jwt:Audience"];
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-  .AddJwtBearer(options =>
-  {
-      options.TokenValidationParameters = new TokenValidationParameters
-      {
-          ValidateIssuerSigningKey = true,
-          IssuerSigningKey = new SymmetricSecurityKey(
-                 Encoding.UTF8.GetBytes(jwtKey)),
-          ValidateIssuer = true,
-          ValidIssuer = jwtIss,
-          ValidateAudience = true,
-          ValidAudience = jwtAud,
-          ValidateLifetime = true,
-          ClockSkew = TimeSpan.Zero
-      };
-  });
-
-builder.Services.AddAuthorization();
-
 // 9) Application services
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
 builder.Services.AddScoped<IValuationService, ValuationService>();
@@ -121,7 +89,6 @@ builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
 builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
-builder.Services.AddScoped<IOtpService, OtpService>();
 
 // 10) MVC controllers
 builder.Services.AddControllers();

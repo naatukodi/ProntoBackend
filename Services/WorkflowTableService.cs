@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Azure;
 using Azure.Data.Tables;
 using Valuation.Api.Models;
