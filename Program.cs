@@ -89,6 +89,7 @@ builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
 builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
+builder.Services.AddSingleton<IRoleService, TableRoleService>();
 
 // 10) MVC controllers
 builder.Services.AddControllers();
