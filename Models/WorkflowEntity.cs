@@ -23,5 +23,14 @@ namespace Valuation.Api.Models
         public DateTime? CompletedAt { get; set; }
         public string AssignedTo { get; set; } = default!;
         public string Location { get; set; } = default!;
+
+        public string? AssignedToRole { get; set; } = default!;
+        public string? CompletedBy { get; set; } = default!;
+        public string? CreatedBy { get; set; } = default!;
+        public string? AssignedToPhoneNumber { get; set; }
+        public string? AssignedToEmail { get; set; }
+        public string? AssignedToWhatsapp { get; set; }
+        public bool? RedFlag { get; set; }
+        public string? Remarks { get; set; }
     }
 }

@@ -62,7 +62,12 @@ namespace Valuation.Api.Services
                 CreatedAt = createdAtUtc,
                 CompletedAt = dto.CompletedAt,
                 AssignedTo = dto.AssignedTo,
-                Location = dto.Location
+                Location = dto.Location,
+                RedFlag = dto.RedFlag,
+                Remarks = dto.Remarks,
+                AssignedToPhoneNumber = dto.AssignedToPhoneNumber,
+                AssignedToEmail = dto.AssignedToEmail,
+                AssignedToWhatsapp = dto.AssignedToWhatsapp
             };
 
             // Upsert (insert or replace)
@@ -91,7 +96,12 @@ namespace Valuation.Api.Services
                         CreatedAt = entity.CreatedAt,
                         CompletedAt = entity.CompletedAt,
                         AssignedTo = entity.AssignedTo,
-                        Location = entity.Location
+                        Location = entity.Location,
+                        RedFlag = entity.RedFlag,
+                        Remarks = entity.Remarks,
+                        AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                        AssignedToEmail = entity.AssignedToEmail,
+                        AssignedToWhatsapp = entity.AssignedToWhatsapp
                     });
                 }
             }
@@ -134,7 +144,12 @@ namespace Valuation.Api.Services
                     CreatedAt = e.CreatedAt,
                     CompletedAt = e.CompletedAt,
                     AssignedTo = e.AssignedTo,
-                    Location = e.Location
+                    Location = e.Location,
+                    RedFlag = e.RedFlag,
+                        Remarks = e.Remarks,
+                        AssignedToPhoneNumber = e.AssignedToPhoneNumber,
+                        AssignedToEmail = e.AssignedToEmail,
+                        AssignedToWhatsapp = e.AssignedToWhatsapp
                 };
             }
             catch (RequestFailedException ex) when (ex.Status == 404)

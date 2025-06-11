@@ -38,5 +38,10 @@ namespace Valuation.Api.Models
 
         [Required]
         public string Location { get; set; } = default!;
+        public string? AssignedToPhoneNumber { get; set; }
+        public string? AssignedToEmail { get; set; }
+        public string? AssignedToWhatsapp { get; set; }
+        public bool? RedFlag { get; set; }
+        public string? Remarks { get; set; }
     }
 }
