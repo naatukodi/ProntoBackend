@@ -11,14 +11,17 @@ namespace Valuation.Api.Services
         private readonly CosmosClient _cosmos;
         private readonly BlobServiceClient _blobService;
         private readonly string _blobContainerName;
+        private readonly IWorkflowTableService _workflowTableService;
 
         public StakeholderService(
             CosmosClient cosmos,
             BlobServiceClient blobService,
+            IWorkflowTableService workflowTableService,
             IConfiguration configuration)
         {
             _cosmos = cosmos;
             _blobService = blobService;
+            _workflowTableService = workflowTableService;
             _blobContainerName = configuration["Blob:ContainerName"]
                                  ?? throw new InvalidOperationException("Blob:ContainerName not configured");
         }
@@ -181,6 +184,25 @@ namespace Valuation.Api.Services
 
             // 6) Upsert (creates or replaces)
             await container.UpsertItemAsync(doc, pk);
+
+            // 7) Mirror into Azure Table Storage
+            var workflowDto = new WorkflowUpdateDto
+            {
+                ValuationId        = dto.ValuationId,
+                VehicleNumber      = dto.VehicleNumber,
+                ApplicantName      = dto.ApplicantName,
+                ApplicantContact   = dto.ApplicantContact,
+                Workflow           = "Stakeholder",          // or map from your dto if it differs
+                WorkflowStepOrder  = 1,
+                Status             = "InProgress",
+                CreatedAt          = doc.CreatedAt,
+                RedFlag            = doc.RedFlag,
+                Remarks            = doc.Remarks,
+                AssignedToPhoneNumber = doc.AssignedToPhoneNumber,
+                AssignedToEmail      = doc.AssignedToEmail,
+                AssignedToWhatsapp   = doc.AssignedToWhatsapp
+            };
+            await _workflowTableService.UpdateAsync(workflowDto);
         }
     }
 }

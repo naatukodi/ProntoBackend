@@ -27,10 +27,8 @@ var cosmosCfg = builder.Configuration.GetSection("Cosmos");
 var accountEndpoint = cosmosCfg["AccountEndpoint"];
 var accountKey = cosmosCfg["AccountKey"];
 if (string.IsNullOrWhiteSpace(accountEndpoint) || string.IsNullOrWhiteSpace(accountKey))
-{
     throw new InvalidOperationException(
         "Missing Cosmos configuration. Ensure Cosmos:AccountEndpoint and Cosmos:AccountKey are set.");
-}
 
 // 4) Initialize Cosmos DB and provision container
 var cosmosOptions = new CosmosClientOptions { ConnectionMode = ConnectionMode.Direct };
@@ -47,16 +45,25 @@ await dbResponse.Database.CreateContainerIfNotExistsAsync(new ContainerPropertie
 
 builder.Services.AddSingleton(_ => cosmosClient);
 
-// 5) Azure Table Storage client
+// 5) Azure Table Storage client & Workflow table
 var tableConn = builder.Configuration.GetConnectionString("TableStorage")
-               ?? throw new InvalidOperationException("TableStorage connection string not configured.");
-builder.Services.AddSingleton(_ => new TableServiceClient(tableConn));
+                  ?? throw new InvalidOperationException("TableStorage connection string not configured.");
+var tableName = builder.Configuration["TableStorage:TableName"] ?? "Workflow";
+
+// ensure the table exists
+var tableServiceClient = new TableServiceClient(tableConn);
+await tableServiceClient.CreateTableIfNotExistsAsync(tableName);
+
+// register TableServiceClient and TableClient for DI
+builder.Services.AddSingleton(tableServiceClient);
+builder.Services.AddSingleton(sp =>
+    sp.GetRequiredService<TableServiceClient>().GetTableClient(tableName));
 
 // 6) Blob Storage clients
 var blobConn = builder.Configuration["Blob:ConnectionString"]
-               ?? throw new InvalidOperationException("Missing Blob:ConnectionString");
+                     ?? throw new InvalidOperationException("Missing Blob:ConnectionString");
 var blobContainer = builder.Configuration["Blob:ContainerName"]
-                    ?? throw new InvalidOperationException("Missing Blob:ContainerName");
+                     ?? throw new InvalidOperationException("Missing Blob:ContainerName");
 
 builder.Services.AddSingleton(_ => new BlobServiceClient(blobConn));
 builder.Services.AddSingleton(_ => new BlobContainerClient(blobConn, blobContainer));
@@ -77,26 +84,31 @@ builder.Services.AddHttpClient("GoogleCSE", client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 
-// 9) Application services
+// 8) Application services
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
 builder.Services.AddScoped<IValuationService, ValuationService>();
 builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();
 builder.Services.AddScoped<IQualityControlService, QualityControlService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
+builder.Services.AddScoped<WorkflowTableService>();
+
+// ensure the TableClient injection works for WorkflowTableService
+builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
+
 builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
 builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
-builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
 builder.Services.AddSingleton<IRoleService, TableRoleService>();
 
-// 10) MVC controllers
+
+// 9) MVC controllers
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// 11) Middleware pipeline
+// 10) Middleware pipeline
 app.UseRouting();
 
 app.UseSwagger();

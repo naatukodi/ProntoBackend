@@ -28,7 +28,12 @@ public class ValuationDocument
     public DateTime? CompletedAt { get; set; }
     public string? CompletedBy { get; set; }
     public string? AssignedTo { get; set; }
+    public string? AssignedToPhoneNumber { get; set; }
+    public string? AssignedToEmail { get; set; }
+    public string? AssignedToWhatsapp { get; set; }
     public string? AssignedToRole { get; set; }
+    public string? RedFlag { get; set; } // Nullable to allow for no red flag
+    public string? Remarks { get; set; }
 }
 
 public class Stakeholder
@@ -41,6 +46,8 @@ public class Stakeholder
     public Applicant Applicant { get; set; }
     public string VehicleNumber { get; set; }
     public string? VehicleSegment { get; set; }
+    public string ValuationType { get; set; } // e.g., "New", "Used", "Insurance"
+    public string Location { get; set; } // e.g., "Mumbai", "Delhi"
     public List<Document>? Documents { get; set; }
 }
 

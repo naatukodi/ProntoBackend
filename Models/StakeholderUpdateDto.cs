@@ -11,6 +11,8 @@ public class StakeholderUpdateDto
     public string ApplicantName { get; set; }
     public string ApplicantContact { get; set; }
     public string VehicleNumber { get; set; }
+    public string ValuationType { get; set; } // e.g., "New", "Used", "Insurance"
+    public string Location { get; set; } // e.g., "Mumbai", "Delhi"
     public string? VehicleSegment { get; set; }
     public IFormFile? RcFile { get; set; }
     public IFormFile? InsuranceFile { get; set; }
