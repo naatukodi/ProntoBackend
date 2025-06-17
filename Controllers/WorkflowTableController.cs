@@ -76,7 +76,7 @@ namespace Valuation.Api.Controllers
     }
 
     [ApiController]
-    [Route("api/workflows/open")]
+    [Route("api/valuations/workflows/open")]
     public class OpenWorkflowsController : ControllerBase
     {
         private readonly IWorkflowTableService _svc;
