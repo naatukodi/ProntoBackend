@@ -144,10 +144,10 @@ namespace Valuation.Api.Services
                     AssignedTo = e.AssignedTo,
                     Location = e.Location,
                     RedFlag = e.RedFlag,
-                        Remarks = e.Remarks,
-                        AssignedToPhoneNumber = e.AssignedToPhoneNumber,
-                        AssignedToEmail = e.AssignedToEmail,
-                        AssignedToWhatsapp = e.AssignedToWhatsapp
+                    Remarks = e.Remarks,
+                    AssignedToPhoneNumber = e.AssignedToPhoneNumber,
+                    AssignedToEmail = e.AssignedToEmail,
+                    AssignedToWhatsapp = e.AssignedToWhatsapp
                 };
             }
             catch (RequestFailedException ex) when (ex.Status == 404)

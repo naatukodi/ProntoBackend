@@ -188,19 +188,20 @@ namespace Valuation.Api.Services
             // 7) Mirror into Azure Table Storage
             var workflowDto = new WorkflowUpdateDto
             {
-                ValuationId        = dto.ValuationId,
-                VehicleNumber      = dto.VehicleNumber,
-                ApplicantName      = dto.ApplicantName,
-                ApplicantContact   = dto.ApplicantContact,
+                ValuationId        = doc.id,
+                VehicleNumber      = doc.VehicleNumber ?? dto.VehicleNumber,
+                ApplicantName      = doc.Stakeholder?.Applicant?.Name ?? dto.ApplicantName,
+                ApplicantContact   = doc.Stakeholder?.Applicant?.Contact ?? dto.ApplicantContact,
+                Location           = doc.Stakeholder?.Location ?? "Unknown", // or set a default
                 Workflow           = "Stakeholder",          // or map from your dto if it differs
                 WorkflowStepOrder  = 1,
                 Status             = "InProgress",
                 CreatedAt          = doc.CreatedAt,
                 RedFlag            = doc.RedFlag,
                 Remarks            = doc.Remarks,
-                AssignedToPhoneNumber = doc.AssignedToPhoneNumber,
-                AssignedToEmail      = doc.AssignedToEmail,
-                AssignedToWhatsapp   = doc.AssignedToWhatsapp
+                AssignedToPhoneNumber = doc.AssignedToPhoneNumber ?? "",
+                AssignedToEmail      = doc.AssignedToEmail ?? "",
+                AssignedToWhatsapp   = doc.AssignedToWhatsapp ?? ""
             };
             await _workflowTableService.UpdateAsync(workflowDto);
         }
