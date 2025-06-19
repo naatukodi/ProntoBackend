@@ -92,6 +92,9 @@ builder.Services.AddScoped<IQualityControlService, QualityControlService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<WorkflowTableService>();
 
+builder.Services.AddHttpClient(nameof(PincodeTableService));
+builder.Services.AddSingleton<IPincodeTableService, PincodeTableService>();
+
 // ensure the TableClient injection works for WorkflowTableService
 builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
 
