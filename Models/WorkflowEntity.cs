@@ -31,5 +31,7 @@ namespace Valuation.Api.Models
         public string? AssignedToWhatsapp { get; set; }
         public string? RedFlag { get; set; }
         public string? Remarks { get; set; }
+        public string Name { get; set; } = default!;
+        public string? ValuationType { get; set; } = default!;
     }
 }

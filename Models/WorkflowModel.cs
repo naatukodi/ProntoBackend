@@ -18,5 +18,7 @@ namespace Valuation.Api.Models
         public string? RedFlag { get; set; }
         public string? Remarks { get; set; }
         public string? Location { get; set; } = default!;
+        public string Name { get; set; } = default!;
+        public string? ValuationType { get; set; } = default!;
     }
 }

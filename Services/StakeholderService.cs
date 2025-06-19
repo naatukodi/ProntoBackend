@@ -188,20 +188,22 @@ namespace Valuation.Api.Services
             // 7) Mirror into Azure Table Storage
             var workflowDto = new WorkflowUpdateDto
             {
-                ValuationId        = doc.id,
-                VehicleNumber      = doc.VehicleNumber ?? dto.VehicleNumber,
-                ApplicantName      = doc.Stakeholder?.Applicant?.Name ?? dto.ApplicantName,
-                ApplicantContact   = doc.Stakeholder?.Applicant?.Contact ?? dto.ApplicantContact,
-                Location           = doc.Stakeholder?.Location ?? "Unknown", // or set a default
-                Workflow           = "Stakeholder",          // or map from your dto if it differs
-                WorkflowStepOrder  = 1,
-                Status             = "InProgress",
-                CreatedAt          = doc.CreatedAt,
-                RedFlag            = doc.RedFlag,
-                Remarks            = doc.Remarks,
+                ValuationId = doc.id,
+                VehicleNumber = doc.VehicleNumber ?? dto.VehicleNumber,
+                ApplicantName = doc.Stakeholder?.Applicant?.Name ?? dto.ApplicantName,
+                ApplicantContact = doc.Stakeholder?.Applicant?.Contact ?? dto.ApplicantContact,
+                Location = doc.Stakeholder?.Location ?? "Unknown", // or set a default
+                Workflow = "Stakeholder",          // or map from your dto if it differs
+                WorkflowStepOrder = 1,
+                Status = "InProgress",
+                CreatedAt = doc.CreatedAt,
+                RedFlag = doc.RedFlag,
+                Remarks = doc.Remarks,
                 AssignedToPhoneNumber = doc.AssignedToPhoneNumber ?? "",
-                AssignedToEmail      = doc.AssignedToEmail ?? "",
-                AssignedToWhatsapp   = doc.AssignedToWhatsapp ?? ""
+                AssignedToEmail = doc.AssignedToEmail ?? "",
+                AssignedToWhatsapp = doc.AssignedToWhatsapp ?? "",
+                Name = doc.Stakeholder?.Name ?? "",
+                ValuationType = doc.Stakeholder?.ValuationType ?? ""
             };
             await _workflowTableService.UpdateAsync(workflowDto);
         }
