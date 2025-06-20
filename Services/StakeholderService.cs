@@ -1,6 +1,7 @@
-using Microsoft.Azure.Cosmos;
+// Services/StakeholderService.cs
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Microsoft.Azure.Cosmos;
 using Valuation.Api.Models;
 using System.Net;
 
@@ -22,22 +23,20 @@ namespace Valuation.Api.Services
             _cosmos = cosmos;
             _blobService = blobService;
             _workflowTableService = workflowTableService;
-            _blobContainerName = configuration["Blob:ContainerName"]
-                                 ?? throw new InvalidOperationException("Blob:ContainerName not configured");
+            _blobContainerName = configuration["Blob:ContainerName"]!
+                ?? throw new InvalidOperationException("Blob:ContainerName not configured");
         }
 
         public async Task<Stakeholder?> GetAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
             var databaseName = Environment.GetEnvironmentVariable("Cosmos:Database") ?? "ValuationsDb";
             var containerName = Environment.GetEnvironmentVariable("Cosmos:Container") ?? "Valuations";
-            var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
-            var composite = $"{vehicleNumber}|{applicantContact}";
-            var pk = new PartitionKey(composite);
 
+            var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
             try
             {
-                var resp = await container.ReadItemAsync<ValuationDocument>(
-                    id: valuationId, partitionKey: pk);
+                var resp = await container.ReadItemAsync<ValuationDocument>(valuationId, pk);
                 return resp.Resource.Stakeholder ?? new Stakeholder
                 {
                     Name = "",
@@ -66,58 +65,61 @@ namespace Valuation.Api.Services
 
         public async Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
-            var container = _cosmos.GetDatabase("ValuationsDb").GetContainer("Valuations");
-            var composite = $"{vehicleNumber}|{applicantContact}";
-            var pk = new PartitionKey(composite);
-
-            // Read & remove the stakeholder section, then upsert
+            var databaseName = Environment.GetEnvironmentVariable("Cosmos:Database") ?? "ValuationsDb";
+            var containerName = Environment.GetEnvironmentVariable("Cosmos:Container") ?? "Valuations";
+            var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
             try
             {
-                var resp = await container.ReadItemAsync<ValuationDocument>(
-                    id: valuationId, partitionKey: pk);
+                var resp = await container.ReadItemAsync<ValuationDocument>(valuationId, pk);
                 var doc = resp.Resource;
                 doc.Stakeholder = null;
                 await container.UpsertItemAsync(doc, pk);
             }
-            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                // Nothing to delete
-            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { }
         }
-
 
         public async Task UpdateAsync(StakeholderUpdateDto dto)
         {
             var databaseName = Environment.GetEnvironmentVariable("Cosmos:DatabaseId") ?? "ValuationsDb";
             var containerName = Environment.GetEnvironmentVariable("Cosmos:ContainerId") ?? "Valuations";
-            var database = _cosmos.GetDatabase(databaseName);
-            var container = database.GetContainer(containerName);
 
+            var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
             // 1) Compute composite PK
             var compositeKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
             var pk = new PartitionKey(compositeKey);
-
-            // 2) Try to read existing, or create new
+            //var pk = new PartitionKey($"{dto.VehicleNumber}|{dto.ApplicantContact}");
             ValuationDocument doc;
             try
             {
-                var resp = await container.ReadItemAsync<ValuationDocument>(
-                    id: dto.ValuationId,
-                    partitionKey: pk);
+                var resp = await container.ReadItemAsync<ValuationDocument>(dto.ValuationId, pk);
                 doc = resp.Resource;
             }
-            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {
                 doc = new ValuationDocument
                 {
                     id = dto.ValuationId,
-                    CompositeKey = compositeKey,
+                    CompositeKey = pk.ToString(),
                     VehicleNumber = dto.VehicleNumber,
                     ApplicantContact = dto.ApplicantContact
                 };
 
                 doc.Status = "Open";
                 doc.CreatedAt = DateTime.UtcNow;
+            }
+
+
+
+            // Upload files
+            async Task<string?> Upload(IFormFile? file)
+            {
+                if (file == null) return null;
+                var containerClient = _blobService.GetBlobContainerClient(_blobContainerName);
+                var blobName = $"{dto.VehicleNumber}/{dto.ApplicantContact}/{Guid.NewGuid()}-{file.FileName}";
+                var client = containerClient.GetBlobClient(blobName);
+                await client.UploadAsync(file.OpenReadStream(), new BlobHttpHeaders { ContentType = file.ContentType });
+                return client.Uri.ToString();
             }
 
             // Initialize workflow if missing
@@ -133,36 +135,7 @@ namespace Valuation.Api.Services
             };
             }
 
-            // 3) Upload files
-            async Task<string?> UploadIf(IFormFile? file)
-            {
-                if (file == null) return null;
-
-                var containerClient = _blobService.GetBlobContainerClient(_blobContainerName);
-                var blobName = $"{dto.VehicleNumber}/{dto.ApplicantContact}/{Guid.NewGuid()}-{file.FileName}";
-                var blobClient = containerClient.GetBlobClient(blobName);
-
-                var headers = new BlobHttpHeaders
-                {
-                    ContentType = file.ContentType
-                };
-
-                using var stream = file.OpenReadStream();
-                await blobClient.UploadAsync(stream, headers);
-                return blobClient.Uri.ToString();
-            }
-
-            var rcUrl = await UploadIf(dto.RcFile);
-            var insUrl = await UploadIf(dto.InsuranceFile);
-            var otherUrls = new List<string>();
-            if (dto.OtherFiles != null)
-            {
-                foreach (var f in dto.OtherFiles)
-                    if (await UploadIf(f) is string u)
-                        otherUrls.Add(u);
-            }
-
-            // 4) Patch the Stakeholder sub-document
+            // Map location
             doc.Stakeholder = new Stakeholder
             {
                 Name = dto.Name,
@@ -170,30 +143,52 @@ namespace Valuation.Api.Services
                 ExecutiveContact = dto.ExecutiveContact,
                 ExecutiveWhatsapp = dto.ExecutiveWhatsapp,
                 ExecutiveEmail = dto.ExecutiveEmail,
-                Applicant = new Applicant { Name = dto.ApplicantName, Contact = dto.ApplicantContact },
-                Documents = new List<Document>
+                ValuationType = dto.ValuationType,
+                VehicleSegment = dto.VehicleSegment,
+                VehicleLocation = new VehicleLocation
                 {
-                    new Document { Type = "RC",        FilePath = rcUrl     ?? "", UploadedAt = DateTime.UtcNow },
-                    new Document { Type = "Insurance", FilePath = insUrl    ?? "", UploadedAt = DateTime.UtcNow },
-                    // If you want to surface others, you could append them here
+                    Pincode = dto.Pincode,
+                    Name = dto.LocationName,
+                    District = dto.District,
+                    Division = dto.Division,
+                    Block = dto.Block,
+                    State = dto.State,
+                    Country = dto.Country
+
+                },
+                Applicant = new Applicant
+                {
+                    Name = dto.ApplicantName,
+                    Contact = dto.ApplicantContact
                 }
             };
+
+            // Upload documents
+            var docs = new List<Document>();
+            if (await Upload(dto.RcFile) is string rcUrl)
+                docs.Add(new Document { Type = "RC", FilePath = rcUrl, UploadedAt = DateTime.UtcNow });
+            if (await Upload(dto.InsuranceFile) is string insUrl)
+                docs.Add(new Document { Type = "Insurance", FilePath = insUrl, UploadedAt = DateTime.UtcNow });
+            if (dto.OtherFiles != null)
+                foreach (var f in dto.OtherFiles)
+                    if (await Upload(f) is string u)
+                        docs.Add(new Document { Type = "Other", FilePath = u, UploadedAt = DateTime.UtcNow });
+            doc.Stakeholder.Documents = docs;
 
             // 5) Ensure CompositeKey is set
             doc.CompositeKey = compositeKey;
 
-            // 6) Upsert (creates or replaces)
             await container.UpsertItemAsync(doc, pk);
 
-            // 7) Mirror into Azure Table Storage
+            // Mirror to Table
             var workflowDto = new WorkflowUpdateDto
             {
-                ValuationId = doc.id,
-                VehicleNumber = doc.VehicleNumber ?? dto.VehicleNumber,
-                ApplicantName = doc.Stakeholder?.Applicant?.Name ?? dto.ApplicantName,
-                ApplicantContact = doc.Stakeholder?.Applicant?.Contact ?? dto.ApplicantContact,
-                Location = doc.Stakeholder?.Location ?? "Unknown", // or set a default
-                Workflow = "Stakeholder",          // or map from your dto if it differs
+                ValuationId = dto.ValuationId,
+                VehicleNumber = dto.VehicleNumber,
+                ApplicantName = dto.ApplicantName,
+                ApplicantContact = dto.ApplicantContact,
+                Location = dto.LocationName,
+                Workflow = "Stakeholder",
                 WorkflowStepOrder = 1,
                 Status = "InProgress",
                 CreatedAt = doc.CreatedAt,
@@ -206,6 +201,12 @@ namespace Valuation.Api.Services
                 ValuationType = doc.Stakeholder?.ValuationType ?? ""
             };
             await _workflowTableService.UpdateAsync(workflowDto);
+        }
+
+        public Task UpdateDocumentsAsync(StakeholderUpdateDto dto)
+        {
+            // Could implement separate logic to only upload docs
+            return UpdateAsync(dto);
         }
     }
 }

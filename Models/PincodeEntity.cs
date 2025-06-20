@@ -14,6 +14,8 @@ namespace Valuation.Api.Services.Entities
         // cached fields
         public string Name { get; set; } = default!;
         public string Block { get; set; } = default!;
+        public string District { get; set; } = default!;
+        public string Division { get; set; } = default!;
         public string State { get; set; } = default!;
         public string Country { get; set; } = default!;
     }

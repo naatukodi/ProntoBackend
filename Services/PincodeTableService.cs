@@ -27,7 +27,7 @@ namespace Valuation.Api.Services
 
         public async Task<IReadOnlyList<PincodeModel>> GetByPincodeAsync(string pincode)
         {
-             var cutoff = DateTimeOffset.UtcNow.Subtract(CacheDuration);
+            var cutoff = DateTimeOffset.UtcNow.Subtract(CacheDuration);
 
             // build a valid OData filter string
             // – PartitionKey must be in single quotes
@@ -40,10 +40,13 @@ namespace Valuation.Api.Services
             var cached = new List<PincodeModel>();
             await foreach (var ent in _tableClient.QueryAsync<PincodeEntity>(filter: filter))
             {
-                cached.Add(new PincodeModel {
-                    Name    = ent.Name,
-                    Block   = ent.Block,
-                    State   = ent.State,
+                cached.Add(new PincodeModel
+                {
+                    Name = ent.Name,
+                    Block = ent.Block,
+                    District = ent.District,
+                    Division = ent.Division,
+                    State = ent.State,
                     Country = ent.Country,
                     Pincode = ent.PartitionKey
                 });
@@ -73,22 +76,28 @@ namespace Valuation.Api.Services
             var fresh = new List<PincodeModel>();
             foreach (var office in first.PostOffice)
             {
-                var entity = new PincodeEntity {
+                var entity = new PincodeEntity
+                {
                     PartitionKey = pincode,
-                    RowKey       = office.Name,
-                    Name         = office.Name,
-                    Block        = office.Block,
-                    State        = office.State,
-                    Country      = office.Country
+                    RowKey = office.Name,
+                    Name = office.Name,
+                    Block = office.Block,
+                    District = office.District,
+                    Division = office.Division,
+                    State = office.State,
+                    Country = office.Country
                 };
 
                 await _tableClient
                    .UpsertEntityAsync(entity, TableUpdateMode.Replace);
 
-                fresh.Add(new PincodeModel {
-                    Name    = office.Name,
-                    Block   = office.Block,
-                    State   = office.State,
+                fresh.Add(new PincodeModel
+                {
+                    Name = office.Name,
+                    Block = office.Block,
+                    District = office.District,
+                    Division = office.Division,
+                    State = office.State,
                     Country = office.Country,
                     Pincode = pincode
                 });
@@ -106,6 +115,8 @@ namespace Valuation.Api.Services
         {
             public string Name { get; set; } = default!;
             public string Block { get; set; } = default!;
+            public string District { get; set; } = default!;
+            public string Division { get; set; } = default!;
             public string State { get; set; } = default!;
             public string Country { get; set; } = default!;
         }

@@ -35,32 +35,3 @@ public class ValuationDocument
     public string? RedFlag { get; set; } // Nullable to allow for no red flag
     public string? Remarks { get; set; }
 }
-
-public class Stakeholder
-{
-    public string Name { get; set; }
-    public string ExecutiveName { get; set; }
-    public string ExecutiveContact { get; set; }
-    public string? ExecutiveWhatsapp { get; set; }
-    public string? ExecutiveEmail { get; set; }
-    public Applicant Applicant { get; set; }
-    public string VehicleNumber { get; set; }
-    public string? VehicleSegment { get; set; }
-    public string ValuationType { get; set; } // e.g., "New", "Used", "Insurance"
-    public string Location { get; set; } // e.g., "Mumbai", "Delhi"
-    public List<Document>? Documents { get; set; }
-}
-
-public class Applicant
-{
-    public string Name { get; set; }
-    public string Contact { get; set; }
-}
-
-public class Document
-{
-    public string Type { get; set; }
-    public string FilePath { get; set; }
-    public DateTime UploadedAt { get; set; }
-
-}
