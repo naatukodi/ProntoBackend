@@ -33,114 +33,66 @@ namespace Valuation.Api.Repositories
                     "Missing Google CSE ID. Please set `GoogleCSE:CseId` in appsettings.json or as an environment variable.");
         }
 
-        public async Task<string> GetVehicleValuationResponseAsync(VehicleDetailsAIDto details)
-        {
-            // 1) Query Google Custom Search to get top-3 snippets
-            var searchResults = await GetTopGoogleSnippetsAsync(details);
+        private const string Model = "gpt-4o-mini";
 
-            // 2) Build the “chat” payload including those snippets
-            var systemMessage = new
+        public async Task<string> GetVehicleValuationAsync(VehicleDetailsAIDto d)
+        {
+            // 1) Build system prompt
+            var system = new
             {
                 role = "system",
-                content = "You are a vehicle-valuation assistant. " +
-                          "When given a set of web-search snippets about a vehicle, you will return EXACTLY three INR ranges: low, mid, and high."
+                content =
+                    "You are a vehicle-valuation assistant for the Indian market. " +
+                    "Given vehicle details, return EXACTLY three INR price ranges: low, mid, and high, " +
+                    "each formatted like “₹7.5 L – ₹8 L”, plus a 1–2 sentence rationale for each."
             };
 
-            // Build a “user” message that embeds the snippets
-            var userContent = new StringBuilder();
-            userContent.AppendLine("Here are the top Google search results for this vehicle:");
-            userContent.AppendLine();
+            // 2) Build a single user message embedding all fields
+            var userSb = new StringBuilder();
+            userSb.AppendLine("Here are the vehicle details:");
+            userSb.AppendLine($"- RegistrationNumber: {d.RegistrationNumber}");
+            userSb.AppendLine($"- Make: {d.Make}");
+            userSb.AppendLine($"- Model: {d.Model}");
+            userSb.AppendLine($"- YearOfMfg: {d.YearOfMfg}");
+            userSb.AppendLine($"- Colour: {d.Colour}");
+            userSb.AppendLine($"- Fuel: {d.Fuel}");
+            userSb.AppendLine($"- EngineCC: {d.EngineCC}");
+            userSb.AppendLine($"- IDV: {d.IDV}");
+            userSb.AppendLine($"- DateOfRegistration: {d.DateOfRegistration:yyyy-MM-dd}");
+            userSb.AppendLine($"- City: {d.City}");
+            userSb.AppendLine($"- Odometer: {d.Odometer}");
+            userSb.AppendLine();
+            userSb.AppendLine("Please deliver:");
 
-            for (int i = 0; i < searchResults.Count; i++)
-            {
-                var item = searchResults[i];
-                userContent.AppendLine($"{i + 1}. Title: {item.Title}");
-                userContent.AppendLine($"   Snippet: {item.Snippet}");
-                userContent.AppendLine($"   URL: {item.Link}");
-                userContent.AppendLine();
-            }
-
-            userContent.AppendLine(
-                "Based on these results, please provide:\n" +
-                "1. A fair market INR price range for low, mid, and high (e.g., “₹7.5 L – ₹8 L” for low, “₹8 L – ₹8.5 L” for mid, etc.).\n" +
-                "2. A brief rationale (1–2 sentences) explaining each range."
-            );
-
-            var userMessage = new
+            var user = new
             {
                 role = "user",
-                content = userContent.ToString()
+                content = userSb.ToString()
             };
 
-            var requestBody = new
+            // 3) Assemble request
+            var payload = new
             {
-                model = "gpt-3.5-turbo",
-                messages = new[] { systemMessage, userMessage },
+                model = Model,
+                messages = new[] { system, user },
                 temperature = 0.2,
-                max_tokens = 200
+                max_tokens = 200   // adjust upward if you need longer rationale
             };
 
-            var jsonPayload = JsonSerializer.Serialize(requestBody);
+            var json = JsonSerializer.Serialize(payload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var resp = await _openAiClient.PostAsync("/v1/chat/completions", content);
+            resp.EnsureSuccessStatusCode();
 
-            // 3) Call OpenAI with retry-on-429 logic
-            for (int attempt = 1; attempt <= MaxRetries; attempt++)
-            {
-                using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-                var response = await _openAiClient.PostAsync("/v1/chat/completions", content);
-
-                if (response.StatusCode == (HttpStatusCode)429)
-                {
-                    // Extract Retry-After header if present
-                    TimeSpan delay;
-                    if (response.Headers.RetryAfter != null)
-                    {
-                        if (response.Headers.RetryAfter.Delta.HasValue)
-                        {
-                            delay = response.Headers.RetryAfter.Delta.Value;
-                        }
-                        else if (response.Headers.RetryAfter.Date.HasValue)
-                        {
-                            var retryDate = response.Headers.RetryAfter.Date.Value;
-                            var now = DateTimeOffset.UtcNow;
-                            delay = retryDate > now
-                                ? retryDate - now
-                                : TimeSpan.FromSeconds(1);
-                        }
-                        else
-                        {
-                            delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        }
-                    }
-                    else
-                    {
-                        delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                    }
-
-                    if (attempt == MaxRetries)
-                        response.EnsureSuccessStatusCode(); // Throw on final attempt
-
-                    await Task.Delay(delay);
-                    continue;
-                }
-
-                // For 4xx/5xx (non-429), this will throw
-                response.EnsureSuccessStatusCode();
-
-                // Parse the successful response
-                var responseJson = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(responseJson);
-                var chatContent = doc
-                    .RootElement
-                    .GetProperty("choices")[0]
-                    .GetProperty("message")
-                    .GetProperty("content")
-                    .GetString() ?? string.Empty;
-
-                return chatContent.Trim();
-            }
-
-            throw new InvalidOperationException("Exceeded maximum OpenAI retry attempts.");
+            var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            return doc.RootElement
+                      .GetProperty("choices")[0]
+                      .GetProperty("message")
+                      .GetProperty("content")
+                      .GetString()!
+                      .Trim();
         }
+
 
         /// <summary>
         /// Calls Google Custom Search JSON API and returns up to top 3 results (title, snippet, link).

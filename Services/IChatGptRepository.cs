@@ -4,6 +4,6 @@ namespace Valuation.Api.Repositories
 {
     public interface IChatGptRepository
     {
-        Task<string> GetVehicleValuationResponseAsync(VehicleDetailsAIDto details);
+        Task<string> GetVehicleValuationAsync(VehicleDetailsAIDto details);
     }
 }

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Azure.Cosmos;
 using Valuation.Api.Models;
 using Valuation.Api.Repositories;
@@ -59,7 +60,12 @@ namespace Valuation.Api.Services
             };
 
             // 1) Call ChatGPT to do the “web search” valuation
-            var rawResponse = await _chatGptRepo.GetVehicleValuationResponseAsync(detailsDto);
+            //var rawResponse = await _chatGptRepo.GetVehicleValuationResponseAsync(detailsDto);
+            var rawResponse = await _chatGptRepo.GetVehicleValuationAsync(detailsDto);
+            if (string.IsNullOrWhiteSpace(rawResponse))
+            {
+                return new VehicleValuation { RawResponse = string.Empty };
+            }
 
             // Parse ranges and update document
             var valuation = ParseRanges(rawResponse);
