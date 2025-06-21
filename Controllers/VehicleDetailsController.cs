@@ -19,7 +19,8 @@ namespace Valuation.Api.Controllers
         {
             var dto = await _svc.GetVehicleDetailsAsync(
                 valuationId.ToString(), vehicleNumber, applicantContact);
-            if (dto == null) return NotFound();
+            if (dto == null)
+                return Ok(new VehicleDetailsDto());
             return Ok(dto);
         }
 

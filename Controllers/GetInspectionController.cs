@@ -18,7 +18,8 @@ public class InspectionController : ControllerBase
         [FromQuery] string applicantContact)
     {
         var x = await _svc.GetInspectionAsync(id.ToString(), vehicleNumber, applicantContact);
-        if (x == null) return NotFound();
+        if (x == null)
+            return Ok(new InspectionDetailsDto());
         return Ok(x);
     }
 

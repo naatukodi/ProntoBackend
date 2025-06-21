@@ -17,7 +17,8 @@ public class QualityControlController : ControllerBase
         [FromQuery] string applicantContact)
     {
         var qc = await _svc.GetQualityControlAsync(id.ToString(), vehicleNumber, applicantContact);
-        if (qc == null) return NotFound();
+        if (qc == null)
+            return Ok(new QualityControlDto());
         return Ok(qc);
     }
 
@@ -29,6 +30,7 @@ public class QualityControlController : ControllerBase
         [FromQuery] string applicantContact)
     {
         await _svc.UpdateQualityControlAsync(id.ToString(), dto, vehicleNumber, applicantContact);
+        var updatedQc = await _svc.GetQualityControlAsync(id.ToString(), vehicleNumber, applicantContact);
         return NoContent();
     }
 
