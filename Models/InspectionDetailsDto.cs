@@ -1,8 +1,10 @@
 // Models/InspectionDetailsDto.cs
+using Microsoft.AspNetCore.Http;
 namespace Valuation.Api.Models
 {
     public class InspectionDetailsDto
     {
+        // --- Original fields ---
         public string VehicleInspectedBy { get; set; } = default!;
         public DateTime? DateOfInspection { get; set; }
         public string? InspectionLocation { get; set; }
@@ -43,5 +45,45 @@ namespace Valuation.Api.Models
 
         // Multiple uploads
         public IList<IFormFile>? Photos { get; set; }
+
+
+        // --- Newly requested additional fields ---
+        public IFormFile? FrontPhoto { get; set; }
+
+        public string? FuelSystem { get; set; }
+        public string? ExteriorCondition { get; set; }
+        public string? InteriorCondition { get; set; }
+        public string? DriveShafts { get; set; }
+        public string? SteeringSystem { get; set; }
+        public string? SteeringWheel { get; set; }
+        public string? SteeringColumn { get; set; }
+        public string? SteeringBox { get; set; }
+        public string? SteeringLinkages { get; set; }
+        public string? SteeringHandle { get; set; }
+        public string? FrontForkAssy { get; set; }
+        public string? Bonnet { get; set; }
+        public string? Bumpers { get; set; }
+        public string? Doors { get; set; }
+        public string? Fenders { get; set; }
+        public string? Mudguards { get; set; }
+        public string? AllGlasses { get; set; }
+        public string? FrontFairing { get; set; }
+        public string? RearCowls { get; set; }
+        public string? Boom { get; set; }
+        public string? Bucket { get; set; }
+        public string? ChainTrack { get; set; }
+        public string? HydraulicCylinders { get; set; }
+        public string? SwingUnit { get; set; }
+        public string? Upholstery { get; set; }
+        public string? InteriorTrims { get; set; }
+        public string? SpeedoMeter { get; set; }
+        public string? FrontAxles { get; set; }
+        public string? RearAxles { get; set; }
+        public string? AirConditioner { get; set; }
+        public string? Audio { get; set; }
+        public string? RightSideWing { get; set; }
+        public string? LeftSideWing { get; set; }
+        public string? TailGate { get; set; }
+        public string? LoadFloor { get; set; }
     }
 }
