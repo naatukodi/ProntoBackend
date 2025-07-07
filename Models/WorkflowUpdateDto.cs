@@ -10,8 +10,7 @@ namespace Valuation.Api.Models
         [Required]
         public string VehicleNumber { get; set; } = default!;
 
-        [Required]
-        public string ApplicantName { get; set; } = default!;
+        public string? ApplicantName { get; set; } = default!;
 
         [Required]
         public string ApplicantContact { get; set; } = default!;
@@ -22,8 +21,7 @@ namespace Valuation.Api.Models
         [Required]
         public int WorkflowStepOrder { get; set; }
 
-        [Required]
-        public string Status { get; set; } = default!;
+        public string? Status { get; set; } = default!;
 
         // CreatedAt is handled server-side; do not supply.
         // If  null, leave as-is (for updates). If new record, service stamps UtcNow.
@@ -31,18 +29,17 @@ namespace Valuation.Api.Models
 
         // Client can set CompletedAt when they finish a step.
         public DateTime? CompletedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
 
-        [Required]
-        public string AssignedTo { get; set; } = default!;
+        public string? AssignedTo { get; set; } = default!;
 
-        [Required]
-        public string Location { get; set; } = default!;
+        public string? Location { get; set; } = default!;
         public string? AssignedToPhoneNumber { get; set; }
         public string? AssignedToEmail { get; set; }
         public string? AssignedToWhatsapp { get; set; }
         public string? RedFlag { get; set; }
         public string? Remarks { get; set; }
-        public string Name { get; set; } = default!;
+        public string? Name { get; set; } = default!;
         public string? ValuationType { get; set; } = default!;
     }
 }

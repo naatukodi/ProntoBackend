@@ -29,49 +29,50 @@ namespace Valuation.Api.Services
             var partitionKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
             var rowKey = dto.ValuationId;
 
-            // Try to fetch existing entity (to preserve CreatedAt if exists)
-            DateTime createdAtUtc;
+            WorkflowEntity entity;
+
             try
             {
-                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
-                    partitionKey: partitionKey,
-                    rowKey: rowKey).ConfigureAwait(false);
+            // Fetch existing entity
+            var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                partitionKey: partitionKey,
+                rowKey: rowKey).ConfigureAwait(false);
 
-                // Existing: preserve CreatedAt
-                createdAtUtc = response.Value.CreatedAt;
+            entity = response.Value;
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: mark new record
-                createdAtUtc = DateTime.UtcNow;
-            }
-
-            // Build the TableEntity
-            var entity = new WorkflowEntity
+            // Not found: create new entity
+            entity = new WorkflowEntity
             {
                 PartitionKey = partitionKey,
                 RowKey = rowKey,
-                VehicleNumber = dto.VehicleNumber,
-                ApplicantName = dto.ApplicantName,
-                ApplicantContact = dto.ApplicantContact,
-                Workflow = dto.Workflow,
-                WorkflowStepOrder = dto.WorkflowStepOrder,
-                Status = dto.Status,
-                CreatedAt = createdAtUtc,
-                CompletedAt = dto.CompletedAt,
-                AssignedTo = dto.AssignedTo,
-                Location = dto.Location,
-                RedFlag = dto.RedFlag,
-                Remarks = dto.Remarks,
-                AssignedToPhoneNumber = dto.AssignedToPhoneNumber,
-                AssignedToEmail = dto.AssignedToEmail,
-                AssignedToWhatsapp = dto.AssignedToWhatsapp,
-                Name = dto.Name,
-                ValuationType = dto.ValuationType
+                CreatedAt = DateTime.UtcNow
             };
+            }
 
-            // Upsert (insert or replace)
-            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace).ConfigureAwait(false);
+            // Only update fields that are not null in dto (for reference types) or have value (for value types)
+            if (dto.VehicleNumber != null) entity.VehicleNumber = dto.VehicleNumber;
+            if (dto.ApplicantName != null) entity.ApplicantName = dto.ApplicantName;
+            if (dto.ApplicantContact != null) entity.ApplicantContact = dto.ApplicantContact;
+            if (dto.Workflow != null) entity.Workflow = dto.Workflow;
+            if (dto.WorkflowStepOrder != 0) entity.WorkflowStepOrder = dto.WorkflowStepOrder;
+            if (dto.Status != null) entity.Status = dto.Status;
+            if (dto.CompletedAt.HasValue) entity.CompletedAt = dto.CompletedAt;
+            if (dto.AssignedTo != null) entity.AssignedTo = dto.AssignedTo;
+            if (dto.Location != null) entity.Location = dto.Location;
+            if (dto.RedFlag != null) entity.RedFlag = dto.RedFlag;
+            if (dto.Remarks != null) entity.Remarks = dto.Remarks;
+            if (dto.AssignedToPhoneNumber != null) entity.AssignedToPhoneNumber = dto.AssignedToPhoneNumber;
+            if (dto.AssignedToEmail != null) entity.AssignedToEmail = dto.AssignedToEmail;
+            if (dto.AssignedToWhatsapp != null) entity.AssignedToWhatsapp = dto.AssignedToWhatsapp;
+            if (dto.Name != null) entity.Name = dto.Name;
+            if (dto.ValuationType != null) entity.ValuationType = dto.ValuationType;
+
+            entity.UpdatedAt = DateTime.UtcNow;
+
+            // Upsert (insert or merge)
+            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
         }
 
         public async Task<List<WorkflowModel?>> GetWorkflowInProgressAsync()

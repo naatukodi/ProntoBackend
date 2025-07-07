@@ -13,15 +13,16 @@ namespace Valuation.Api.Models
 
         // These are the properties we want to persist:
         public string VehicleNumber { get; set; } = default!;
-        public string ApplicantName { get; set; } = default!;
+        public string? ApplicantName { get; set; } = default!;
         public string ApplicantContact { get; set; } = default!;
         public string Workflow { get; set; } = default!;
         public int WorkflowStepOrder { get; set; }
-        public string Status { get; set; } = default!;
-        public DateTime CreatedAt { get; set; }
+        public string? Status { get; set; } = default!;
+        public DateTime? CreatedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
-        public string AssignedTo { get; set; } = default!;
-        public string Location { get; set; } = default!;
+        public DateTime? UpdatedAt { get; set; }
+        public string? AssignedTo { get; set; } = default!;
+        public string? Location { get; set; } = default!;
 
         public string? AssignedToRole { get; set; } = default!;
         public string? CompletedBy { get; set; } = default!;
@@ -31,7 +32,7 @@ namespace Valuation.Api.Models
         public string? AssignedToWhatsapp { get; set; }
         public string? RedFlag { get; set; }
         public string? Remarks { get; set; }
-        public string Name { get; set; } = default!;
+        public string? Name { get; set; } = default!;
         public string? ValuationType { get; set; } = default!;
     }
 }
