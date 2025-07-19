@@ -64,5 +64,12 @@ namespace Valuation.Api.Models
         public string? TaxPaidUpto { get; set; }
 
         public DateTime? ManufacturedDate { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; }
+        public string? AssignedTo { get; set; }
+        public string? AssignedToPhoneNumber { get; set; }
+        public string? AssignedToEmail { get; set; }
+        public string? AssignedToWhatsapp { get; set; }
     }
 }

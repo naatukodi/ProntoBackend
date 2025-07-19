@@ -45,6 +45,28 @@ namespace Valuation.Api.Controllers
                 valuationId.ToString(), vehicleNumber, applicantContact);
             return NoContent();
         }
+
+        [HttpPost("assignment")]
+        public async Task<IActionResult> UpdateAssignment(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromQuery] string? assignedTo = null,
+            [FromQuery] string? assignedToPhoneNumber = null,
+            [FromQuery] string? assignedToEmail = null,
+            [FromQuery] string? assignedToWhatsapp = null)
+        {
+            await _svc.UpdateAssignmentAsync(
+                valuationId.ToString(),
+                vehicleNumber,
+                applicantContact,
+                assignedTo,
+                assignedToPhoneNumber,
+                assignedToEmail,
+                assignedToWhatsapp);
+            return NoContent();
+        }
+
     }
 
     [ApiController]

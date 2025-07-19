@@ -8,6 +8,17 @@ public interface IValuationService
     Task<ValuationDocument?> GetValuationDocumentAsync(string valuationId, string vehicleNumber, string applicantContact);
     Task<VehicleDetailsDto?> GetVehicleDetailsAsync(string valuationId, string vehicleNumber, string applicantContact);
     Task UpdateVehicleDetailsAsync(string valuationId, VehicleDetailsDto vehicleDetails, string vehicleNumber, string applicantContact);
+    Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp);
+
+    Task updateAssignmentAsync(
+        string valuationId,
+        string vehicleNumber,
+        string applicantContact,
+        string? assignedTo,
+        string? assignedToPhoneNumber,
+        string? assignedToEmail,
+        string? assignedToWhatsapp);
+
     Task DeleteVehicleDetailsAsync(string valuationId, string vehicleNumber, string applicantContact);
     Task<List<OpenValuationDto>> GetOpenValuationsAsync();
 

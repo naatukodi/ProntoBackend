@@ -33,22 +33,22 @@ namespace Valuation.Api.Services
 
             try
             {
-            // Fetch existing entity
-            var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
-                partitionKey: partitionKey,
-                rowKey: rowKey).ConfigureAwait(false);
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
 
-            entity = response.Value;
+                entity = response.Value;
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-            // Not found: create new entity
-            entity = new WorkflowEntity
-            {
-                PartitionKey = partitionKey,
-                RowKey = rowKey,
-                CreatedAt = DateTime.UtcNow
-            };
+                // Not found: create new entity
+                entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    CreatedAt = DateTime.UtcNow
+                };
             }
 
             // Only update fields that are not null in dto (for reference types) or have value (for value types)
@@ -121,7 +121,289 @@ namespace Valuation.Api.Services
             return results;
         }
 
+        public async Task StakeholderWFUpdateAssignmentAsync(
+                    string valuationId,
+                    string vehicleNumber,
+                    string applicantContact,
+                    string? assignedTo,
+                    string? assignedToPhoneNumber,
+                    string? assignedToEmail,
+                    string? assignedToWhatsapp)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
 
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update assignment fields
+                entity.StakeholderAssignedTo = assignedTo ?? "";
+                entity.StakeholderAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
+                entity.StakeholderAssignedToEmail = assignedToEmail ?? "";
+                entity.StakeholderAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.UpdatedAt = DateTime.UtcNow;
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found: create new entity with assignment fields
+                var entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    StakeholderAssignedTo = assignedTo ?? "",
+                    StakeholderAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
+                    StakeholderAssignedToEmail = assignedToEmail ?? "",
+                    StakeholderAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
+        public async Task BackendWFUpdateAssignmentAsync(
+                    string valuationId,
+                    string vehicleNumber,
+                    string applicantContact,
+                    string? assignedTo,
+                    string? assignedToPhoneNumber,
+                    string? assignedToEmail,
+                    string? assignedToWhatsapp)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update assignment fields
+                entity.BackEndAssignedTo = assignedTo ?? "";
+                entity.BackEndAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
+                entity.BackEndAssignedToEmail = assignedToEmail ?? "";
+                entity.BackEndAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.UpdatedAt = DateTime.UtcNow;
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found: create new entity with assignment fields
+                var entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    BackEndAssignedTo = assignedTo ?? "",
+                    BackEndAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
+                    BackEndAssignedToEmail = assignedToEmail ?? "",
+                    BackEndAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
+        public async Task AVOWFUpdateAssignmentAsync(
+                    string valuationId,
+                    string vehicleNumber,
+                    string applicantContact,
+                    string? assignedTo,
+                    string? assignedToPhoneNumber,
+                    string? assignedToEmail,
+                    string? assignedToWhatsapp)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update assignment fields
+                entity.AVOAssignedTo = assignedTo ?? "";
+                entity.AVOAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
+                entity.AVOAssignedToEmail = assignedToEmail ?? "";
+                entity.AVOAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.UpdatedAt = DateTime.UtcNow;
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found: create new entity with assignment fields
+                var entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    AVOAssignedTo = assignedTo ?? "",
+                    AVOAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
+                    AVOAssignedToEmail = assignedToEmail ?? "",
+                    AVOAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
+        public async Task QualityControlWFUpdateAssignmentAsync(
+                    string valuationId,
+                    string vehicleNumber,
+                    string applicantContact,
+                    string? assignedTo,
+                    string? assignedToPhoneNumber,
+                    string? assignedToEmail,
+                    string? assignedToWhatsapp)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update assignment fields
+                entity.QualityControlAssignedTo = assignedTo ?? "";
+                entity.QualityControlAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
+                entity.QualityControlAssignedToEmail = assignedToEmail ?? "";
+                entity.QualityControlAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.UpdatedAt = DateTime.UtcNow;
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found: create new entity with assignment fields
+                var entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    QualityControlAssignedTo = assignedTo ?? "",
+                    QualityControlAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
+                    QualityControlAssignedToEmail = assignedToEmail ?? "",
+                    QualityControlAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
+        public async Task FinalReportWFUpdateAssignmentAsync(
+                    string valuationId,
+                    string vehicleNumber,
+                    string applicantContact,
+                    string? assignedTo,
+                    string? assignedToPhoneNumber,
+                    string? assignedToEmail,
+                    string? assignedToWhatsapp)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update assignment fields
+                entity.FinalReportAssignedTo = assignedTo ?? "";
+                entity.FinalReportAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
+                entity.FinalReportAssignedToEmail = assignedToEmail ?? "";
+                entity.FinalReportAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.UpdatedAt = DateTime.UtcNow;
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found: create new entity with assignment fields
+                var entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    FinalReportAssignedTo = assignedTo ?? "",
+                    FinalReportAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
+                    FinalReportAssignedToEmail = assignedToEmail ?? "",
+                    FinalReportAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
+        public async Task CompleteFinalReportWFAsync(
+            string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update status to Completed
+                entity.Status = "Completed";
+                entity.CompletedAt = DateTime.UtcNow;
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new InvalidOperationException("Workflow not found for completion", ex);
+            }
+        }
 
         public async Task<WorkflowModel?> GetAsync(string valuationId, string vehicleNumber, string applicantContact)
         {

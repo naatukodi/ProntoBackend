@@ -29,6 +29,13 @@ namespace Valuation.Api.Models
         public string ApplicantName { get; set; } = default!;
         public string ApplicantContact { get; set; } = default!;
 
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; }
+        public string? AssignedTo { get; set; }
+        public string? AssignedToPhoneNumber { get; set; }
+        public string? AssignedToEmail { get; set; }
+        public string? AssignedToWhatsapp { get; set; }
+
         // Files
         public IFormFile? RcFile { get; set; }
         public IFormFile? InsuranceFile { get; set; }

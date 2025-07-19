@@ -60,6 +60,26 @@ namespace Valuation.Api.Controllers
             return File(pdfBytes, "application/pdf", fileName);
         }
 
+        [HttpPost("assignment")]
+        public async Task updateAssignmentAsync(
+            Guid id,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromQuery] string? assignedTo = null,
+            [FromQuery] string? assignedToPhoneNumber = null,
+            [FromQuery] string? assignedToEmail = null,
+            [FromQuery] string? assignedToWhatsapp = null)
+        {
+            await _valuationService.updateAssignmentAsync(
+                id.ToString(),
+                vehicleNumber,
+                applicantContact,
+                assignedTo,
+                assignedToPhoneNumber,
+                assignedToEmail,
+                assignedToWhatsapp);
+        }
+
         /// <summary>
         /// GET /api/valuations/{id}/valuationresponse?vehicleNumber=…&applicantContact=…
         /// </summary>

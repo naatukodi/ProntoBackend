@@ -10,3 +10,4 @@ namespace Valuation.Api.Services
             string applicantContact);
     }
 }
+

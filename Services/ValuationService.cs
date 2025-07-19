@@ -6,6 +6,7 @@ using Valuation.Api.Models;
 using System.Text.Json;
 using System.Text;
 using System.Net.Http.Headers;
+using Polly;
 
 namespace Valuation.Api.Services;
 
@@ -20,12 +21,14 @@ public class ValuationService : IValuationService
     private readonly string _basicAuthHeader;
     private readonly string _attestrUrl;
     private readonly string _attestrToken;
+    private readonly IWorkflowTableService _workflowTableService;
 
 
     public ValuationService(
         CosmosClient cosmos,
         BlobServiceClient blobService,
         IConfiguration configuration,
+        IWorkflowTableService workflowTableService,
         HttpClient httpClient)
     {
         _cosmos = cosmos;
@@ -37,6 +40,7 @@ public class ValuationService : IValuationService
         _basicAuthHeader = configuration["BasicAuth:Header"] ?? "";
         _attestrUrl = configuration["Attestr:Url"] ?? "https://api.attestr.com/api/v2/public/checkx/rc";
         _attestrToken = configuration["Attestr:Token"] ?? "";
+        _workflowTableService = workflowTableService;
     }
 
 
@@ -188,6 +192,95 @@ public class ValuationService : IValuationService
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
+        }
+    }
+
+    public async Task PutValuationDocumentAsync(
+        string valuationId,
+        string vehicleNumber,
+        string applicantContact,
+        string status,
+        DateTime? completedAt,
+        string? completedBy)
+    {
+        var pk = GetPk(vehicleNumber, applicantContact);
+        try
+        {
+            var resp = await Container.ReadItemAsync<ValuationDocument>(
+                id: valuationId,
+                partitionKey: pk);
+            var doc = resp.Resource;
+
+            doc.Status = status;
+            doc.CompletedAt = completedAt;
+            doc.CompletedBy = completedBy;
+
+            await Container.UpsertItemAsync(doc, pk);
+
+            // Update the workflow table as well
+            await _workflowTableService.CompleteFinalReportWFAsync(
+                valuationId,
+                vehicleNumber,
+                applicantContact
+            );
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new KeyNotFoundException(
+                $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}' and applicant '{applicantContact}'.");
+
+        }
+    }
+
+    public async Task updateAssignmentAsync(
+        string valuationId, string vehicleNumber, string applicantContact,
+        string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
+    {
+        var pk = GetPk(vehicleNumber, applicantContact);
+        try
+        {
+            var resp = await Container.ReadItemAsync<ValuationDocument>(
+                id: valuationId,
+                partitionKey: pk);
+            var doc = resp.Resource;
+
+            if (doc == null)
+            {
+                doc = new ValuationDocument
+                {
+                    id = valuationId,
+                    CompositeKey = $"{vehicleNumber}|{applicantContact}",
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    CreatedAt = DateTime.UtcNow,
+                    VehicleDetails = new VehicleDetailsDto
+                    {
+                        RegistrationNumber = vehicleNumber
+                    }
+                };
+            }
+
+            doc.AssignedTo = assignedTo;
+            doc.AssignedToPhoneNumber = assignedToPhoneNumber;
+            doc.AssignedToEmail = assignedToEmail;
+            doc.AssignedToWhatsapp = assignedToWhatsapp;
+
+            await Container.UpsertItemAsync(doc, pk);
+            // Update the workflow table as well
+            await _workflowTableService.FinalReportWFUpdateAssignmentAsync(
+                valuationId,
+                vehicleNumber,
+                applicantContact,
+                assignedTo ?? string.Empty,
+                assignedToPhoneNumber ?? string.Empty,
+                assignedToEmail ?? string.Empty,
+                assignedToWhatsapp ?? string.Empty
+            );
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new KeyNotFoundException(
+                $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}' and applicant '{applicantContact}'.");
         }
     }
     public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
@@ -343,8 +436,16 @@ public class ValuationService : IValuationService
             throw new ArgumentException("Registration number is required.", nameof(registrationNumber));
 
         // 1) Fetch existing & RC‐enriched DTO
-        var updatedDto = await GetVehicleDetailsWithRcCheckAsync(
+        // Retry fetching RC-enriched DTO with Polly
+        VehicleDetailsDto? updatedDto = null;
+        var retryPolicy = Polly.Policy
+            .Handle<Exception>()
+            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+        await retryPolicy.ExecuteAsync(async () =>
+        {
+            updatedDto = await GetVehicleDetailsWithRcCheckAsync(
             valuationId, registrationNumber, applicantContact);
+        });
         if (updatedDto == null)
             throw new InvalidOperationException("Could not fetch vehicle details DTO.");
 
@@ -398,7 +499,136 @@ public class ValuationService : IValuationService
 
         // 7) Upsert back into Cosmos
         await Container.UpsertItemAsync(doc, pk);
+
+        // 8) Update the workflow table as well
+        // Retry the workflow update with Polly
+        var policy = Polly.Policy
+            .Handle<Exception>()
+            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+        await policy.ExecuteAsync(async () =>
+        {
+            await _workflowTableService.BackendWFUpdateAssignmentAsync(
+                valuationId,
+                registrationNumber,
+                applicantContact,
+                dto.AssignedTo ?? "",
+                dto.AssignedToPhoneNumber ?? "",
+                dto.AssignedToEmail ?? "",
+                dto.AssignedToWhatsapp ?? ""
+            );
+        });
     }
+
+    public async Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
+    {
+        var databaseName = Environment.GetEnvironmentVariable("Cosmos:DatabaseId") ?? "ValuationsDb";
+        var containerName = Environment.GetEnvironmentVariable("Cosmos:ContainerId") ?? "Valuations";
+        var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
+        var compositeKey = $"{vehicleNumber}|{applicantContact}";
+        var pk = new PartitionKey(compositeKey);
+
+        ValuationDocument doc;
+        try
+        {
+            var resp = await container.ReadItemAsync<ValuationDocument>(valuationId, pk);
+            doc = resp.Resource;
+
+            if (doc.VehicleDetails == null)
+            {
+                doc.VehicleDetails = new VehicleDetailsDto
+                {
+                    RegistrationNumber = vehicleNumber
+                };
+            }
+
+            doc.VehicleDetails.AssignedTo = assignedTo;
+            doc.VehicleDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
+            doc.VehicleDetails.AssignedToEmail = assignedToEmail;
+            doc.VehicleDetails.AssignedToWhatsapp = assignedToWhatsapp;
+            doc.UpdatedAt = DateTime.UtcNow;
+
+            // Ensure CreatedAt is set if not already
+            if (doc.CreatedAt == default)
+                doc.CreatedAt = DateTime.UtcNow;
+
+            await container.UpsertItemAsync(doc, pk);
+
+            // Update the workflow table as well
+            // Retry the workflow update with Polly
+            var policy1 = Polly.Policy
+                .Handle<Exception>()
+                .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
+            await policy1.ExecuteAsync(async () =>
+            {
+                await _workflowTableService.BackendWFUpdateAssignmentAsync(
+                    valuationId,
+                    vehicleNumber,
+                    applicantContact,
+                    assignedTo ?? "",
+                    assignedToPhoneNumber ?? "",
+                    assignedToEmail ?? "",
+                    assignedToWhatsapp ?? ""
+                );
+            });
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // If not found, create a new document
+            doc = new ValuationDocument
+            {
+                id = valuationId,
+                CompositeKey = compositeKey,
+                VehicleNumber = vehicleNumber,
+                ApplicantContact = applicantContact,
+                CreatedAt = DateTime.UtcNow
+            };
+        }
+
+        if (doc.VehicleDetails == null)
+        {
+            doc.VehicleDetails = new VehicleDetailsDto
+            {
+                RegistrationNumber = vehicleNumber,
+                AssignedTo = assignedTo,
+                AssignedToPhoneNumber = assignedToPhoneNumber,
+                AssignedToEmail = assignedToEmail,
+                AssignedToWhatsapp = assignedToWhatsapp
+            };
+        }
+
+        doc.VehicleDetails.AssignedTo = assignedTo;
+        doc.VehicleDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
+        doc.VehicleDetails.AssignedToEmail = assignedToEmail;
+        doc.VehicleDetails.AssignedToWhatsapp = assignedToWhatsapp;
+        doc.VehicleDetails.UpdatedAt = DateTime.UtcNow;
+
+        // Ensure CreatedAt is set if not already
+        if (doc.CreatedAt == default)
+            doc.CreatedAt = DateTime.UtcNow;
+
+        await container.UpsertItemAsync(doc, pk);
+
+        // Update the workflow table as well
+        // Retry the workflow update with Polly
+        var policy = Polly.Policy
+            .Handle<Exception>()
+            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
+        await policy.ExecuteAsync(async () =>
+        {
+            await _workflowTableService.BackendWFUpdateAssignmentAsync(
+                valuationId,
+                vehicleNumber,
+                applicantContact,
+                assignedTo ?? "",
+                assignedToPhoneNumber ?? "",
+                assignedToEmail ?? "",
+                assignedToWhatsapp ?? ""
+            );
+        });
+    }
+
 
     private async Task<string?> UploadIfAsync(IFormFile? file, string reg, string contact)
     {

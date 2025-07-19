@@ -8,5 +8,14 @@ namespace Valuation.Api.Services
         Task UpdateDocumentsAsync(StakeholderUpdateDto dto);
         Task<Stakeholder?> GetAsync(string valuationId, string vehicleNumber, string applicantContact);
         Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact);
+
+        Task UpdateAssignmentAsync(
+            string valuationId,
+            string vehicleNumber,
+            string applicantContact,
+            string? assignedTo,
+            string? assignedToPhoneNumber,
+            string? assignedToEmail,
+            string? assignedToWhatsapp);
     }
 }

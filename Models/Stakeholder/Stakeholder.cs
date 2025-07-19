@@ -18,5 +18,16 @@ namespace Valuation.Api.Models
         public VehicleLocation VehicleLocation { get; set; } = new VehicleLocation();
         public Applicant Applicant { get; set; } = new Applicant();
         public List<Document> Documents { get; set; } = new List<Document>();
+
+        public string? Notes { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; }
+        public string? AssignedTo { get; set; }
+        public string? AssignedToPhoneNumber { get; set; }
+        public string? AssignedToEmail { get; set; }
+        public string? AssignedToWhatsapp { get; set; }
+
+        
     }
 }

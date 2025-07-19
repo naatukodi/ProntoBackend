@@ -34,6 +34,20 @@ public class InspectionController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("assignment")]
+    public async Task<IActionResult> UpdateAssignment(
+        Guid id,
+        [FromQuery] string vehicleNumber,
+        [FromQuery] string applicantContact,
+        [FromQuery] string? assignedTo = null,
+        [FromQuery] string? assignedToPhoneNumber = null,
+        [FromQuery] string? assignedToEmail = null,
+        [FromQuery] string? assignedToWhatsapp = null)
+    {
+        await _svc.UpdateAssignmentAsync(id.ToString(), vehicleNumber, applicantContact, assignedTo, assignedToPhoneNumber, assignedToEmail, assignedToWhatsapp);
+        return NoContent();
+    }
+
     [HttpDelete]
     public async Task<IActionResult> Delete(
         Guid id,

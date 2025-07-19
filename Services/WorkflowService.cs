@@ -78,7 +78,29 @@ public class WorkflowService : IWorkflowService
 
         await _container.UpsertItemAsync(doc, pk);
     }
+    public async Task RejectStepAsync(string id, string veh, string appl, int stepOrder)
+    {
+        var pk = Pk(veh, appl);
+        var doc = await LoadDoc(id, pk);
 
+        var step = doc.Workflow!.FirstOrDefault(s => s.StepOrder == stepOrder)
+                   ?? throw new KeyNotFoundException($"Step {stepOrder} not defined");
+        if (step.Status != "InProgress")
+            throw new InvalidOperationException($"Cannot reject step {stepOrder} which is not InProgress");
+
+        step.Status = "Rejected";
+        step.CompletedAt = DateTime.UtcNow;
+
+        if (stepOrder > 1)
+        {
+            var prev = doc.Workflow?.FirstOrDefault(s => s.StepOrder == stepOrder - 1)
+                       ?? throw new KeyNotFoundException($"Previous step {stepOrder - 1} not defined");
+            prev.Status = "InProgress";
+            prev.StartedAt = DateTime.UtcNow;
+        }
+
+        await _container.UpsertItemAsync(doc, pk);
+    }
     public async Task DeleteAsync(string id, string veh, string appl)
     {
         var pk = Pk(veh, appl);

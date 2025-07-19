@@ -44,6 +44,18 @@ public class WorkflowController : ControllerBase
             valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
         return NoContent();
     }
+    
+    [HttpPost("{stepOrder}/reject")]
+    public async Task<IActionResult> Reject(
+        Guid valuationId,
+        [FromQuery] string vehicleNumber,
+        [FromQuery] string applicantContact,
+        int stepOrder)
+    {
+        await _svc.RejectStepAsync(
+            valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
+        return NoContent();
+    }
 
     [HttpDelete]
     public async Task<IActionResult> Delete(

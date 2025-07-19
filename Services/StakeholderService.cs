@@ -4,6 +4,8 @@ using Azure.Storage.Blobs.Models;
 using Microsoft.Azure.Cosmos;
 using Valuation.Api.Models;
 using System.Net;
+using System.Runtime.CompilerServices;
+using Polly;
 
 namespace Valuation.Api.Services
 {
@@ -194,9 +196,9 @@ namespace Valuation.Api.Services
                 CreatedAt = doc.CreatedAt,
                 RedFlag = doc.RedFlag,
                 Remarks = doc.Remarks,
-                AssignedToPhoneNumber = doc.AssignedToPhoneNumber ?? "",
-                AssignedToEmail = doc.AssignedToEmail ?? "",
-                AssignedToWhatsapp = doc.AssignedToWhatsapp ?? "",
+                StakeholderAssignedToEmail = doc.AssignedToEmail ?? "",
+                StakeholderAssignedToPhoneNumber = doc.AssignedToPhoneNumber ?? "",
+                StakeholderAssignedToWhatsapp = doc.AssignedToWhatsapp ?? "",
                 Name = doc.Stakeholder?.Name ?? "",
                 ValuationType = doc.Stakeholder?.ValuationType ?? ""
             };
@@ -208,5 +210,114 @@ namespace Valuation.Api.Services
             // Could implement separate logic to only upload docs
             return UpdateAsync(dto);
         }
+
+        public async Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
+        {
+            var databaseName = Environment.GetEnvironmentVariable("Cosmos:DatabaseId") ?? "ValuationsDb";
+            var containerName = Environment.GetEnvironmentVariable("Cosmos:ContainerId") ?? "Valuations";
+            var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
+            var compositeKey = $"{vehicleNumber}|{applicantContact}";
+            var pk = new PartitionKey(compositeKey);
+
+            ValuationDocument doc;
+            try
+            {
+                var resp = await container.ReadItemAsync<ValuationDocument>(valuationId, pk);
+                doc = resp.Resource;
+
+                if (doc.Stakeholder == null)
+                {
+                    doc.Stakeholder = new Stakeholder
+                    {
+                        Documents = new List<Document>(),
+                        Applicant = new Applicant()
+                    };
+                }
+
+                doc.Stakeholder.AssignedTo = assignedTo;
+                doc.Stakeholder.AssignedToPhoneNumber = assignedToPhoneNumber;
+                doc.Stakeholder.AssignedToEmail = assignedToEmail;
+                doc.Stakeholder.AssignedToWhatsapp = assignedToWhatsapp;
+                doc.UpdatedAt = DateTime.UtcNow;
+
+                // Ensure CreatedAt is set if not already
+                if (doc.CreatedAt == default)
+                    doc.CreatedAt = DateTime.UtcNow;
+
+                await container.UpsertItemAsync(doc, pk);
+
+                // Update the workflow table as well
+                // Retry the workflow update with Polly
+                var policy1 = Polly.Policy
+                    .Handle<Exception>()
+                    .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
+                await policy1.ExecuteAsync(async () =>
+                {
+                    await _workflowTableService.StakeholderWFUpdateAssignmentAsync(
+                        valuationId,
+                        vehicleNumber,
+                        applicantContact,
+                        assignedTo ?? "",
+                        assignedToPhoneNumber ?? "",
+                        assignedToEmail ?? "",
+                        assignedToWhatsapp ?? ""
+                    );
+                });
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // If not found, create a new document
+                doc = new ValuationDocument
+                {
+                    id = valuationId,
+                    CompositeKey = compositeKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    CreatedAt = DateTime.UtcNow
+                };
+            }
+
+            if (doc.Stakeholder == null)
+            {
+                doc.Stakeholder = new Stakeholder
+                {
+                    Documents = new List<Document>(),
+                    Applicant = new Applicant()
+                };
+            }
+
+            doc.Stakeholder.AssignedTo = assignedTo;
+            doc.Stakeholder.AssignedToPhoneNumber = assignedToPhoneNumber;
+            doc.Stakeholder.AssignedToEmail = assignedToEmail;
+            doc.Stakeholder.AssignedToWhatsapp = assignedToWhatsapp;
+            doc.UpdatedAt = DateTime.UtcNow;
+
+            // Ensure CreatedAt is set if not already
+            if (doc.CreatedAt == default)
+                doc.CreatedAt = DateTime.UtcNow;
+
+            await container.UpsertItemAsync(doc, pk);
+
+            // Update the workflow table as well
+            // Retry the workflow update with Polly
+            var policy = Polly.Policy
+                .Handle<Exception>()
+                .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
+            await policy.ExecuteAsync(async () =>
+            {
+                await _workflowTableService.StakeholderWFUpdateAssignmentAsync(
+                    valuationId,
+                    vehicleNumber,
+                    applicantContact,
+                    assignedTo ?? "",
+                    assignedToPhoneNumber ?? "",
+                    assignedToEmail ?? "",
+                    assignedToWhatsapp ?? ""
+                );
+            });
+        }
     }
+
 }

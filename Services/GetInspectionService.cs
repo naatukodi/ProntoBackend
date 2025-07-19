@@ -3,6 +3,7 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Valuation.Api.Models;
 using System.Net;
+using Polly;
 
 namespace Valuation.Api.Services
 {
@@ -14,15 +15,19 @@ namespace Valuation.Api.Services
         private readonly string _containerId;
         private readonly string _blobContainerName;
 
+        private readonly IWorkflowTableService _workflowTableService;
+
         public GetInspectionService(
             CosmosClient cosmos,
             BlobServiceClient blobService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IWorkflowTableService workflowTableService)
         {
             _cosmos = cosmos;
             _blobService = blobService;
             _dbId = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
             _containerId = configuration["Cosmos:ContainerId"] ?? "Valuations";
+            _workflowTableService = workflowTableService;
             _blobContainerName = configuration["Blob:ContainerName"] ?? "vehicle-documents";
         }
         private Container Container =>
@@ -98,46 +103,177 @@ namespace Valuation.Api.Services
                         photoUrls.Add(u);
 
             // 3) Patch sub‐document
-            doc.InspectionDetails = new InspectionDetails
-            {
-                VehicleInspectedBy = dto.VehicleInspectedBy,
-                DateOfInspection = dto.DateOfInspection,
-                InspectionLocation = dto.InspectionLocation,
-                VehicleMoved = dto.VehicleMoved,
-                EngineStarted = dto.EngineStarted,
-                Odometer = dto.Odometer,
-                VinPlate = dto.VinPlate,
-                BodyType = dto.BodyType,
-                OverallTyreCondition = dto.OverallTyreCondition,
-                OtherAccessoryFitment = dto.OtherAccessoryFitment,
-                WindshieldGlass = dto.WindshieldGlass,
-                RoadWorthyCondition = dto.RoadWorthyCondition,
-                EngineCondition = dto.EngineCondition,
-                SuspensionSystem = dto.SuspensionSystem,
-                SteeringAssy = dto.SteeringAssy,
-                BrakeSystem = dto.BrakeSystem,
-                ChassisCondition = dto.ChassisCondition,
-                BodyCondition = dto.BodyCondition,
-                BatteryCondition = dto.BatteryCondition,
-                PaintWork = dto.PaintWork,
-                ClutchSystem = dto.ClutchSystem,
-                GearBoxAssy = dto.GearBoxAssy,
-                PropellerShaft = dto.PropellerShaft,
-                DifferentialAssy = dto.DifferentialAssy,
-                Cabin = dto.Cabin,
-                Dashboard = dto.Dashboard,
-                Seats = dto.Seats,
-                HeadLamps = dto.HeadLamps,
-                ElectricAssembly = dto.ElectricAssembly,
-                Radiator = dto.Radiator,
-                Intercooler = dto.Intercooler,
-                AllHosePipes = dto.AllHosePipes,
-                Photos = photoUrls
-            };
+            if (doc.InspectionDetails == null)
+                doc.InspectionDetails = new InspectionDetails();
+
+            if (dto.VehicleInspectedBy != null)
+                doc.InspectionDetails.VehicleInspectedBy = dto.VehicleInspectedBy;
+            if (dto.DateOfInspection != null)
+                doc.InspectionDetails.DateOfInspection = dto.DateOfInspection;
+            if (dto.InspectionLocation != null)
+                doc.InspectionDetails.InspectionLocation = dto.InspectionLocation;
+            if (dto.VehicleMoved != null)
+                doc.InspectionDetails.VehicleMoved = dto.VehicleMoved;
+            if (dto.EngineStarted != null)
+                doc.InspectionDetails.EngineStarted = dto.EngineStarted;
+            if (dto.Odometer != null)
+                doc.InspectionDetails.Odometer = dto.Odometer;
+            if (dto.VinPlate != null)
+                doc.InspectionDetails.VinPlate = dto.VinPlate;
+            if (dto.BodyType != null)
+                doc.InspectionDetails.BodyType = dto.BodyType;
+            if (dto.OverallTyreCondition != null)
+                doc.InspectionDetails.OverallTyreCondition = dto.OverallTyreCondition;
+            if (dto.OtherAccessoryFitment != null)
+                doc.InspectionDetails.OtherAccessoryFitment = dto.OtherAccessoryFitment;
+            if (dto.WindshieldGlass != null)
+                doc.InspectionDetails.WindshieldGlass = dto.WindshieldGlass;
+            if (dto.RoadWorthyCondition != null)
+                doc.InspectionDetails.RoadWorthyCondition = dto.RoadWorthyCondition;
+            if (dto.EngineCondition != null)
+                doc.InspectionDetails.EngineCondition = dto.EngineCondition;
+            if (dto.SuspensionSystem != null)
+                doc.InspectionDetails.SuspensionSystem = dto.SuspensionSystem;
+            if (dto.SteeringAssy != null)
+                doc.InspectionDetails.SteeringAssy = dto.SteeringAssy;
+            if (dto.BrakeSystem != null)
+                doc.InspectionDetails.BrakeSystem = dto.BrakeSystem;
+            if (dto.ChassisCondition != null)
+                doc.InspectionDetails.ChassisCondition = dto.ChassisCondition;
+            if (dto.BodyCondition != null)
+                doc.InspectionDetails.BodyCondition = dto.BodyCondition;
+            if (dto.BatteryCondition != null)
+                doc.InspectionDetails.BatteryCondition = dto.BatteryCondition;
+            if (dto.PaintWork != null)
+                doc.InspectionDetails.PaintWork = dto.PaintWork;
+            if (dto.ClutchSystem != null)
+                doc.InspectionDetails.ClutchSystem = dto.ClutchSystem;
+            if (dto.GearBoxAssy != null)
+                doc.InspectionDetails.GearBoxAssy = dto.GearBoxAssy;
+            if (dto.PropellerShaft != null)
+                doc.InspectionDetails.PropellerShaft = dto.PropellerShaft;
+            if (dto.DifferentialAssy != null)
+                doc.InspectionDetails.DifferentialAssy = dto.DifferentialAssy;
+            if (dto.Cabin != null)
+                doc.InspectionDetails.Cabin = dto.Cabin;
+            if (dto.Dashboard != null)
+                doc.InspectionDetails.Dashboard = dto.Dashboard;
+            if (dto.Seats != null)
+                doc.InspectionDetails.Seats = dto.Seats;
+            if (dto.HeadLamps != null)
+                doc.InspectionDetails.HeadLamps = dto.HeadLamps;
+            if (dto.ElectricAssembly != null)
+                doc.InspectionDetails.ElectricAssembly = dto.ElectricAssembly;
+            if (dto.Radiator != null)
+                doc.InspectionDetails.Radiator = dto.Radiator;
+            if (dto.Intercooler != null)
+                doc.InspectionDetails.Intercooler = dto.Intercooler;
+            if (dto.AllHosePipes != null)
+                doc.InspectionDetails.AllHosePipes = dto.AllHosePipes;
+            if (photoUrls.Count > 0)
+                doc.InspectionDetails.Photos = photoUrls;
 
             // 4) Upsert
             await container.UpsertItemAsync(doc, pk);
+
+            // 5) Update the workflow table as well
+            // Retry the workflow update with Polly
+            var policy = Polly.Policy
+                .Handle<Exception>()
+                .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+            await policy.ExecuteAsync(async () =>
+            {
+                await _workflowTableService.AVOWFUpdateAssignmentAsync(
+                    id,
+                    vehicleNumber,
+                    applicantContact,
+
+                    dto.AssignedTo ?? string.Empty,
+                    dto.AssignedToPhoneNumber ?? string.Empty,
+                    dto.AssignedToEmail ?? string.Empty,
+                    dto.AssignedToWhatsapp ?? string.Empty
+                );
+            });
+
         }
+
+        public async Task UpdateAssignmentAsync(
+            string valuationId, string vehicleNumber, string applicantContact,
+            string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
+        {
+            var pk = GetPk(vehicleNumber, applicantContact);
+            try
+            {
+                var resp = await Container.ReadItemAsync<ValuationDocument>(valuationId, pk);
+                var doc = resp.Resource;
+
+                doc.AssignedTo = assignedTo;
+                if (doc.InspectionDetails == null)
+                {
+                    doc.InspectionDetails = new InspectionDetails();
+                }
+                doc.InspectionDetails.AssignedTo = assignedTo;
+                doc.InspectionDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
+                doc.InspectionDetails.AssignedToEmail = assignedToEmail;
+                doc.InspectionDetails.AssignedToWhatsapp = assignedToWhatsapp;
+
+                await Container.UpsertItemAsync(doc, pk);
+
+                // Update the workflow table as well
+                // Retry the workflow update with Polly
+                var policy = Polly.Policy
+                    .Handle<Exception>()
+                    .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+                await policy.ExecuteAsync(async () =>
+                {
+                    await _workflowTableService.AVOWFUpdateAssignmentAsync(
+                        valuationId,
+                        vehicleNumber,
+                        applicantContact,
+                        assignedTo ?? string.Empty,
+                        assignedToPhoneNumber ?? string.Empty,
+                        assignedToEmail ?? string.Empty,
+                        assignedToWhatsapp ?? string.Empty);
+                });
+            }
+            catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                // If not found, create a new document
+                var newDoc = new ValuationDocument
+                {
+                    id = valuationId,
+                    CompositeKey = $"{vehicleNumber}|{applicantContact}",
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    InspectionDetails = new InspectionDetails()
+                };
+
+                newDoc.InspectionDetails.AssignedTo = assignedTo;
+                newDoc.InspectionDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
+                newDoc.InspectionDetails.AssignedToEmail = assignedToEmail;
+                newDoc.InspectionDetails.AssignedToWhatsapp = assignedToWhatsapp;
+
+                await Container.UpsertItemAsync(newDoc, pk);
+
+                // Update the workflow table as well
+                var policy = Polly.Policy
+                    .Handle<Exception>()
+                    .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+                await policy.ExecuteAsync(async () =>
+                {
+                    await _workflowTableService.AVOWFUpdateAssignmentAsync(
+                        valuationId,
+                        vehicleNumber,
+                        applicantContact,
+                        assignedTo ?? string.Empty,
+                        assignedToPhoneNumber ?? string.Empty,
+                        assignedToEmail ?? string.Empty,
+                        assignedToWhatsapp ?? string.Empty);
+                });
+
+            }
+        }
+
         public async Task DeleteInspectionAsync(string id, string vehicleNumber, string applicantContact)
         {
             var pk = GetPk(vehicleNumber, applicantContact);

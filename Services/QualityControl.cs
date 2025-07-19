@@ -7,11 +7,14 @@ namespace Valuation.Api.Services;
 public class QualityControlService : IQualityControlService
 {
     private readonly Container Container;
+    private readonly IWorkflowTableService _workflowTableService;
 
-    public QualityControlService(CosmosClient cosmosClient)
+    public QualityControlService(CosmosClient cosmosClient, IWorkflowTableService workflowTableService)
     {
-        var databaseName = Environment.GetEnvironmentVariable("DatabaseId") ?? "ValuationsDb";
-        var containerName = Environment.GetEnvironmentVariable("ContainerId") ?? "Valuations";
+        _workflowTableService = workflowTableService;
+        // Use environment variables or default values for database and container names
+        var databaseName = Environment.GetEnvironmentVariable("Cosmos:DatabaseId") ?? "ValuationsDb";
+        var containerName = Environment.GetEnvironmentVariable("Cosmos:ContainerId") ?? "Valuations";
         Container = cosmosClient.GetContainer(databaseName, containerName);
     }
     private PartitionKey GetPk(string vehicleNumber, string applicantContact) =>
@@ -52,16 +55,75 @@ public class QualityControlService : IQualityControlService
         var doc = resp.Resource;
 
         // 2) Patch
-        doc.QualityControl = new QualityControl
+        if (doc.QualityControl == null)
         {
-            OverallRating = dto.OverallRating,
-            ValuationAmount = dto.ValuationAmount,
-            ChassisPunch = dto.ChassisPunch,
-            Remarks = dto.Remarks
-        };
+            doc.QualityControl = new QualityControl();
+        }
+
+        if (dto.OverallRating != null)
+            doc.QualityControl.OverallRating = dto.OverallRating;
+
+        if (dto.ValuationAmount != 0)
+            doc.QualityControl.ValuationAmount = dto.ValuationAmount;
+
+        if (dto.ChassisPunch != null)
+            doc.QualityControl.ChassisPunch = dto.ChassisPunch;
+
+        if (dto.Remarks != null)
+            doc.QualityControl.Remarks = dto.Remarks;
 
         // 3) Upsert
         await Container.UpsertItemAsync(doc, pk);
+
+        // 4) update Workflow table
+        await _workflowTableService.QualityControlWFUpdateAssignmentAsync(
+            id,
+            vehicleNumber,
+            applicantContact,
+            dto.AssignedTo ?? string.Empty,
+            dto.AssignedToPhoneNumber ?? string.Empty,
+            dto.AssignedToEmail ?? string.Empty,
+            dto.AssignedToWhatsapp ?? string.Empty
+        );
+    }
+
+    public async Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
+    {
+        var pk = GetPk(vehicleNumber, applicantContact);
+        // 1) Read
+        var resp = await Container.ReadItemAsync<ValuationDocument>(valuationId, pk);
+        var doc = resp.Resource;
+
+        // 2) Patch
+        if (doc.QualityControl == null)
+        {
+            doc.QualityControl = new QualityControl();
+        }
+
+        if (doc.QualityControl.AssignedTo != assignedTo)
+            doc.QualityControl.AssignedTo = assignedTo;
+
+        if (doc.QualityControl.AssignedToPhoneNumber != assignedToPhoneNumber)
+            doc.QualityControl.AssignedToPhoneNumber = assignedToPhoneNumber;
+
+        if (doc.QualityControl.AssignedToEmail != assignedToEmail)
+            doc.QualityControl.AssignedToEmail = assignedToEmail;
+
+        if (doc.QualityControl.AssignedToWhatsapp != assignedToWhatsapp)
+            doc.QualityControl.AssignedToWhatsapp = assignedToWhatsapp;
+
+        // 3) Upsert
+        await Container.UpsertItemAsync(doc, pk);
+        // 4) update Workflow table
+        await _workflowTableService.QualityControlWFUpdateAssignmentAsync(
+            valuationId,
+            vehicleNumber,
+            applicantContact,
+            assignedTo ?? string.Empty,
+            assignedToPhoneNumber ?? string.Empty,
+            assignedToEmail ?? string.Empty,
+            assignedToWhatsapp ?? string.Empty
+        );
     }
 
     public async Task DeleteQualityControlAsync(string id, string vehicleNumber, string applicantContact)

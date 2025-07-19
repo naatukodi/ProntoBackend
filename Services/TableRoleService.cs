@@ -1,4 +1,5 @@
 using Azure.Data.Tables;
+using Azure; // Add this for RequestFailedException
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ public class TableRoleService : IRoleService
 {
     private readonly TableClient _rolesTable;
     private readonly TableClient _userRolesTable;
+    private readonly TableClient _usersTable;
 
     public TableRoleService(IConfiguration config)
     {
@@ -18,9 +20,48 @@ public class TableRoleService : IRoleService
 
         _rolesTable = client.GetTableClient("Roles");
         _userRolesTable = client.GetTableClient("UserRoles");
+        _usersTable = client.GetTableClient("Users");
 
         _rolesTable.CreateIfNotExists();
         _userRolesTable.CreateIfNotExists();
+        _usersTable.CreateIfNotExists();
+    }
+
+    public async Task CreateUserAsync(UserModel user)
+    {
+        var userEntity = new UserEntity
+        {
+            RowKey = user.UserId,
+            Name = user.Name,
+            Email = user.Email
+        };
+
+        await _usersTable.UpsertEntityAsync(userEntity);
+
+        if (!string.IsNullOrWhiteSpace(user.RoleId))
+        {
+            await AssignRoleToUserAsync(user.UserId, user.RoleId);
+        }
+    }
+
+    public async Task<UserModel?> GetUserAsync(string userId)
+    {
+        try
+        {
+            var entity = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var roles = await GetUserRolesAsync(userId);
+            return new UserModel
+            {
+                UserId = userId,
+                Name = entity.Value.Name,
+                Email = entity.Value.Email,
+                RoleId = roles.FirstOrDefault() // assuming single role
+            };
+        }
+        catch (RequestFailedException)
+        {
+            return null;
+        }
     }
 
     public async Task<IEnumerable<RoleModel>> GetAllRolesAsync()

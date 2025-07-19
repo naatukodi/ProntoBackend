@@ -7,4 +7,5 @@ public interface IQualityControlService
     Task<QualityControl?> GetQualityControlAsync(string id, string vehicleNumber, string applicantContact);
     Task UpdateQualityControlAsync(string id, QualityControlDto dto, string vehicleNumber, string applicantContact);
     Task DeleteQualityControlAsync(string id, string vehicleNumber, string applicantContact);
+    Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp);
 }
