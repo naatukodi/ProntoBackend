@@ -9,6 +9,11 @@ public interface IRoleService
     Task CreateOrUpdateRoleAsync(RoleModel role);
     Task DeleteRoleAsync(string roleId);
 
+    // User definitions
+    Task<UserModel?> GetUserAsync(string userId);
+    Task<IEnumerable<UserModel>> GetAllUsersAsync();
+    
+
     // User–role assignments
     Task<IEnumerable<string>> GetUserRolesAsync(string userId);
     Task AssignRoleToUserAsync(string userId, string roleId);

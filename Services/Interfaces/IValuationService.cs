@@ -1,5 +1,5 @@
 using Valuation.Api.Models;
-
+using Microsoft.AspNetCore.Mvc;
 namespace Valuation.Api.Services;
 
 public interface IValuationService
@@ -21,6 +21,12 @@ public interface IValuationService
 
     Task DeleteVehicleDetailsAsync(string valuationId, string vehicleNumber, string applicantContact);
     Task<List<OpenValuationDto>> GetOpenValuationsAsync();
+
+    Task<ActionResult> CompleteValuationDocumentAsync(
+        string valuationId,
+        string vehicleNumber,
+        string applicantContact,
+        CompleteValuationRequestDto request);
 
     Task<VehicleDetailsDto?> GetVehicleDetailsWithRcCheckAsync(string valuationId, string vehicleNumber, string applicantContact);
 

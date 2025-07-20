@@ -33,7 +33,20 @@ public class TableRoleService : IRoleService
         {
             RowKey = user.UserId,
             Name = user.Name,
-            Email = user.Email
+            Email = user.Email,
+            Whatsapp = user.Whatsapp,
+            PhoneNumber = user.PhoneNumber,
+            Description = user.Description,
+            BranchType = user.BranchType,
+            ServiceStatus = user.ServiceStatus,
+            Circle = user.Circle,
+            District = user.District,
+            Division = user.Division,
+            Region = user.Region,
+            Block = user.Block,
+            State = user.State,
+            Country = user.Country,
+            Pincode = user.Pincode
         };
 
         await _usersTable.UpsertEntityAsync(userEntity);
@@ -42,6 +55,36 @@ public class TableRoleService : IRoleService
         {
             await AssignRoleToUserAsync(user.UserId, user.RoleId);
         }
+    }
+
+    public async Task<IEnumerable<UserModel>> GetAllUsersAsync()
+    {
+        var users = new List<UserModel>();
+        await foreach (var entity in _usersTable.QueryAsync<UserEntity>())
+        {
+            var roles = await GetUserRolesAsync(entity.RowKey);
+            users.Add(new UserModel
+            {
+                UserId = entity.RowKey,
+                Name = entity.Name,
+                Email = entity.Email,
+                Whatsapp = entity.Whatsapp,
+                PhoneNumber = entity.PhoneNumber,
+                Description = entity.Description,
+                BranchType = entity.BranchType,
+                ServiceStatus = entity.ServiceStatus,
+                Circle = entity.Circle,
+                District = entity.District,
+                Division = entity.Division,
+                Region = entity.Region,
+                Block = entity.Block,
+                State = entity.State,
+                Country = entity.Country,
+                Pincode = entity.Pincode,
+                RoleId = roles.FirstOrDefault() ?? string.Empty // assuming single role
+            });
+        }
+        return users;
     }
 
     public async Task<UserModel?> GetUserAsync(string userId)
@@ -55,7 +98,7 @@ public class TableRoleService : IRoleService
                 UserId = userId,
                 Name = entity.Value.Name,
                 Email = entity.Value.Email,
-                RoleId = roles.FirstOrDefault() // assuming single role
+                RoleId = roles.FirstOrDefault() ?? string.Empty // assuming single role
             };
         }
         catch (RequestFailedException)

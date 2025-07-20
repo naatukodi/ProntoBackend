@@ -34,4 +34,10 @@ public class ValuationDocument
     public string? AssignedToRole { get; set; }
     public string? RedFlag { get; set; } // Nullable to allow for no red flag
     public string? Remarks { get; set; }
+
+    public string? PaymentStatus { get; set; } // Nullable to allow for no payment status
+    public string? PaymentReference { get; set; } // Nullable to allow for no payment reference
+    public DateTime? PaymentDate { get; set; } // Nullable to allow for no payment date
+    public string? PaymentMethod { get; set; } // Nullable to allow for no payment method
+    public string? PaymentAmount { get; set; } // Nullable to allow for no payment amount
 }

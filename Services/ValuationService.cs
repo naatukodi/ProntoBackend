@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.Azure.Cosmos;
+using Microsoft.AspNetCore.Mvc;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Valuation.Api.Models;
@@ -195,13 +196,9 @@ public class ValuationService : IValuationService
         }
     }
 
-    public async Task PutValuationDocumentAsync(
-        string valuationId,
+    public async Task<ActionResult> CompleteValuationDocumentAsync(string valuationId,
         string vehicleNumber,
-        string applicantContact,
-        string status,
-        DateTime? completedAt,
-        string? completedBy)
+        string applicantContact, CompleteValuationRequestDto request)
     {
         var pk = GetPk(vehicleNumber, applicantContact);
         try
@@ -211,9 +208,15 @@ public class ValuationService : IValuationService
                 partitionKey: pk);
             var doc = resp.Resource;
 
-            doc.Status = status;
-            doc.CompletedAt = completedAt;
-            doc.CompletedBy = completedBy;
+            doc.Status = request.Status;
+            doc.CompletedAt = request.CompletedAt ?? DateTime.UtcNow;
+            doc.CompletedBy = request.CompletedBy;
+
+            doc.PaymentStatus = request.PaymentStatus;
+            doc.PaymentReference = request.PaymentReference;
+            doc.PaymentDate = request.PaymentDate;
+            doc.PaymentMethod = request.PaymentMethod;
+            doc.PaymentAmount = request.PaymentAmount;
 
             await Container.UpsertItemAsync(doc, pk);
 
@@ -223,14 +226,16 @@ public class ValuationService : IValuationService
                 vehicleNumber,
                 applicantContact
             );
+
+            return new OkResult();
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             throw new KeyNotFoundException(
                 $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}' and applicant '{applicantContact}'.");
-
         }
     }
+
 
     public async Task updateAssignmentAsync(
         string valuationId, string vehicleNumber, string applicantContact,

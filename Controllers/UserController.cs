@@ -16,15 +16,26 @@ public class UserController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateUser([FromBody] UserModel model)
     {
+        // Validate required fields
         if (string.IsNullOrEmpty(model.UserId) ||
             string.IsNullOrEmpty(model.Name) ||
             string.IsNullOrEmpty(model.RoleId))
         {
-            return BadRequest("UserId, Name, and RoleId are required");
+            return BadRequest("UserId, Name, and RoleId are required.");
         }
 
         await _roleService.CreateUserAsync(model);
         return Ok("User created and role assigned");
+    }
+
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _roleService.GetAllUsersAsync();
+        if (users == null || !users.Any())
+            return NotFound("No users found.");
+
+        return Ok(users);
     }
 
     [HttpGet("{userId}")]

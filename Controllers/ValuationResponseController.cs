@@ -102,6 +102,22 @@ namespace Valuation.Api.Controllers
             return Ok(resp);
         }
 
+        [HttpPost("complete")]
+        public async Task<IActionResult> CompleteValuationResponseAsync(
+            Guid id,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromBody] CompleteValuationRequestDto request)
+        {
+            var resp = await _valuationService.CompleteValuationDocumentAsync(
+                id.ToString(),
+                vehicleNumber,
+                applicantContact,
+                request);
+
+            return NoContent();
+        }
+
         /// <summary>
         /// PUT /api/valuations/{id}/valuationresponse?vehicleNumber=…&applicantContact=…
         /// </summary>
