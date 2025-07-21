@@ -25,7 +25,7 @@ public class UserController : ControllerBase
         }
 
         await _roleService.CreateUserAsync(model);
-        return Ok("User created and role assigned");
+        return NoContent();
     }
 
     [HttpGet("all")]
