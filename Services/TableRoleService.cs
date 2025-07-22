@@ -98,7 +98,20 @@ public class TableRoleService : IRoleService
                 UserId = userId,
                 Name = entity.Value.Name,
                 Email = entity.Value.Email,
-                RoleId = roles.FirstOrDefault() ?? string.Empty // assuming single role
+                RoleId = roles.FirstOrDefault() ?? string.Empty, // assuming single role
+                Whatsapp = entity.Value.Whatsapp,
+                PhoneNumber = entity.Value.PhoneNumber,
+                Description = entity.Value.Description,
+                BranchType = entity.Value.BranchType,
+                ServiceStatus = entity.Value.ServiceStatus,
+                Circle = entity.Value.Circle,
+                District = entity.Value.District,
+                Division = entity.Value.Division,
+                Region = entity.Value.Region,
+                Block = entity.Value.Block,
+                State = entity.Value.State,
+                Country = entity.Value.Country,
+                Pincode = entity.Value.Pincode
             };
         }
         catch (RequestFailedException)
