@@ -47,4 +47,15 @@ public class UserController : ControllerBase
 
         return Ok(user);
     }
+
+    [HttpGet("roles/{roleId}")]
+    public async Task<IActionResult> GetUsersByRole(string roleId)
+    {
+        var users = await _roleService.GetUsersByRoleAsync(roleId);
+        if (users == null || !users.Any())
+            return NotFound("No users found for this role.");
+
+        return Ok(users);
+    }
+
 }

@@ -60,6 +60,29 @@ namespace Valuation.Api.Services
             if (dto.Status != null) entity.Status = dto.Status;
             if (dto.CompletedAt.HasValue) entity.CompletedAt = dto.CompletedAt;
             if (dto.AssignedTo != null) entity.AssignedTo = dto.AssignedTo;
+            if (dto.AssignedToPhoneNumber != null) entity.AssignedToPhoneNumber = dto.AssignedToPhoneNumber;
+            if (dto.AssignedToEmail != null) entity.AssignedToEmail = dto.AssignedToEmail;
+            if (dto.AssignedToWhatsapp != null) entity.AssignedToWhatsapp = dto.AssignedToWhatsapp;
+            if (dto.StakeholderAssignedTo != null) entity.StakeholderAssignedTo = dto.StakeholderAssignedTo;
+            if (dto.StakeholderAssignedToPhoneNumber != null) entity.StakeholderAssignedToPhoneNumber = dto.StakeholderAssignedToPhoneNumber;
+            if (dto.StakeholderAssignedToEmail != null) entity.StakeholderAssignedToEmail = dto.StakeholderAssignedToEmail;
+            if (dto.StakeholderAssignedToWhatsapp != null) entity.StakeholderAssignedToWhatsapp = dto.StakeholderAssignedToWhatsapp;
+            if (dto.BackEndAssignedTo != null) entity.BackEndAssignedTo = dto.BackEndAssignedTo;
+            if (dto.BackEndAssignedToPhoneNumber != null) entity.BackEndAssignedToPhoneNumber = dto.BackEndAssignedToPhoneNumber;
+            if (dto.BackEndAssignedToEmail != null) entity.BackEndAssignedToEmail = dto.BackEndAssignedToEmail;
+            if (dto.BackEndAssignedToWhatsapp != null) entity.BackEndAssignedToWhatsapp = dto.BackEndAssignedToWhatsapp;
+            if (dto.AVOAssignedTo != null) entity.AVOAssignedTo = dto.AVOAssignedTo;
+            if (dto.AVOAssignedToPhoneNumber != null) entity.AVOAssignedToPhoneNumber = dto.AVOAssignedToPhoneNumber;
+            if (dto.AVOAssignedToEmail != null) entity.AVOAssignedToEmail = dto.AVOAssignedToEmail;
+            if (dto.AVOAssignedToWhatsapp != null) entity.AVOAssignedToWhatsapp = dto.AVOAssignedToWhatsapp;
+            if (dto.QualityControlAssignedTo != null) entity.QualityControlAssignedTo = dto.QualityControlAssignedTo;
+            if (dto.QualityControlAssignedToPhoneNumber != null) entity.QualityControlAssignedToPhoneNumber = dto.QualityControlAssignedToPhoneNumber;
+            if (dto.QualityControlAssignedToEmail != null) entity.QualityControlAssignedToEmail = dto.QualityControlAssignedToEmail;
+            if (dto.QualityControlAssignedToWhatsapp != null) entity.QualityControlAssignedToWhatsapp = dto.QualityControlAssignedToWhatsapp;
+            if (dto.FinalReportAssignedTo != null) entity.FinalReportAssignedTo = dto.FinalReportAssignedTo;
+            if (dto.FinalReportAssignedToPhoneNumber != null) entity.FinalReportAssignedToPhoneNumber = dto.FinalReportAssignedToPhoneNumber;
+            if (dto.FinalReportAssignedToEmail != null) entity.FinalReportAssignedToEmail = dto.FinalReportAssignedToEmail;
+            if (dto.FinalReportAssignedToWhatsapp != null) entity.FinalReportAssignedToWhatsapp = dto.FinalReportAssignedToWhatsapp;
             if (dto.Location != null) entity.Location = dto.Location;
             if (dto.RedFlag != null) entity.RedFlag = dto.RedFlag;
             if (dto.Remarks != null) entity.Remarks = dto.Remarks;
@@ -122,16 +145,16 @@ namespace Valuation.Api.Services
         }
 
         public async Task StakeholderWFUpdateAssignmentAsync(
-                    string valuationId,
-                    string vehicleNumber,
-                    string applicantContact,
-                    string? assignedTo,
-                    string? assignedToPhoneNumber,
-                    string? assignedToEmail,
-                    string? assignedToWhatsapp)
+                    string ValuationId,
+                    string VehicleNumber,
+                    string ApplicantContact,
+                    string? AssignedTo,
+                    string? AssignedToPhoneNumber,
+                    string? AssignedToEmail,
+                    string? AssignedToWhatsapp)
         {
-            var partitionKey = $"{vehicleNumber}|{applicantContact}";
-            var rowKey = valuationId;
+            var partitionKey = $"{VehicleNumber}|{ApplicantContact}";
+            var rowKey = ValuationId;
 
             try
             {
@@ -143,10 +166,10 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update assignment fields
-                entity.StakeholderAssignedTo = assignedTo ?? "";
-                entity.StakeholderAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
-                entity.StakeholderAssignedToEmail = assignedToEmail ?? "";
-                entity.StakeholderAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.StakeholderAssignedTo = AssignedTo ?? "";
+                entity.StakeholderAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                entity.StakeholderAssignedToEmail = AssignedToEmail ?? "";
+                entity.StakeholderAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
                 // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
@@ -158,12 +181,12 @@ namespace Valuation.Api.Services
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
-                    VehicleNumber = vehicleNumber,
-                    ApplicantContact = applicantContact,
-                    StakeholderAssignedTo = assignedTo ?? "",
-                    StakeholderAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
-                    StakeholderAssignedToEmail = assignedToEmail ?? "",
-                    StakeholderAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    VehicleNumber = VehicleNumber,
+                    ApplicantContact = ApplicantContact,
+                    StakeholderAssignedTo = AssignedTo ?? "",
+                    StakeholderAssignedToPhoneNumber = AssignedToPhoneNumber ?? "",
+                    StakeholderAssignedToEmail = AssignedToEmail ?? "",
+                    StakeholderAssignedToWhatsapp = AssignedToWhatsapp ?? "",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -173,16 +196,16 @@ namespace Valuation.Api.Services
         }
 
         public async Task BackendWFUpdateAssignmentAsync(
-                    string valuationId,
-                    string vehicleNumber,
-                    string applicantContact,
-                    string? assignedTo,
-                    string? assignedToPhoneNumber,
-                    string? assignedToEmail,
-                    string? assignedToWhatsapp)
+                    string ValuationId,
+                    string VehicleNumber,
+                    string ApplicantContact,
+                    string? AssignedTo,
+                    string? AssignedToPhoneNumber,
+                    string? AssignedToEmail,
+                    string? AssignedToWhatsapp)
         {
-            var partitionKey = $"{vehicleNumber}|{applicantContact}";
-            var rowKey = valuationId;
+            var partitionKey = $"{VehicleNumber}|{ApplicantContact}";
+            var rowKey = ValuationId;
 
             try
             {
@@ -194,10 +217,10 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update assignment fields
-                entity.BackEndAssignedTo = assignedTo ?? "";
-                entity.BackEndAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
-                entity.BackEndAssignedToEmail = assignedToEmail ?? "";
-                entity.BackEndAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.BackEndAssignedTo = AssignedTo ?? "";
+                entity.BackEndAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                entity.BackEndAssignedToEmail = AssignedToEmail ?? "";
+                entity.BackEndAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
                 // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
@@ -209,12 +232,12 @@ namespace Valuation.Api.Services
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
-                    VehicleNumber = vehicleNumber,
-                    ApplicantContact = applicantContact,
-                    BackEndAssignedTo = assignedTo ?? "",
-                    BackEndAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
-                    BackEndAssignedToEmail = assignedToEmail ?? "",
-                    BackEndAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    VehicleNumber = VehicleNumber,
+                    ApplicantContact = ApplicantContact,
+                    BackEndAssignedTo = AssignedTo ?? "",
+                    BackEndAssignedToPhoneNumber = AssignedToPhoneNumber ?? "",
+                    BackEndAssignedToEmail = AssignedToEmail ?? "",
+                    BackEndAssignedToWhatsapp = AssignedToWhatsapp ?? "",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -224,16 +247,16 @@ namespace Valuation.Api.Services
         }
 
         public async Task AVOWFUpdateAssignmentAsync(
-                    string valuationId,
-                    string vehicleNumber,
-                    string applicantContact,
-                    string? assignedTo,
-                    string? assignedToPhoneNumber,
-                    string? assignedToEmail,
-                    string? assignedToWhatsapp)
+                    string ValuationId,
+                    string VehicleNumber,
+                    string ApplicantContact,
+                    string? AssignedTo,
+                    string? AssignedToPhoneNumber,
+                    string? AssignedToEmail,
+                    string? AssignedToWhatsapp)
         {
-            var partitionKey = $"{vehicleNumber}|{applicantContact}";
-            var rowKey = valuationId;
+            var partitionKey = $"{VehicleNumber}|{ApplicantContact}";
+            var rowKey = ValuationId;
 
             try
             {
@@ -245,10 +268,10 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update assignment fields
-                entity.AVOAssignedTo = assignedTo ?? "";
-                entity.AVOAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
-                entity.AVOAssignedToEmail = assignedToEmail ?? "";
-                entity.AVOAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.AVOAssignedTo = AssignedTo ?? "";
+                entity.AVOAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                entity.AVOAssignedToEmail = AssignedToEmail ?? "";
+                entity.AVOAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
                 // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
@@ -260,12 +283,12 @@ namespace Valuation.Api.Services
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
-                    VehicleNumber = vehicleNumber,
-                    ApplicantContact = applicantContact,
-                    AVOAssignedTo = assignedTo ?? "",
-                    AVOAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
-                    AVOAssignedToEmail = assignedToEmail ?? "",
-                    AVOAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    VehicleNumber = VehicleNumber,
+                    ApplicantContact = ApplicantContact,
+                    AVOAssignedTo = AssignedTo ?? "",
+                    AVOAssignedToPhoneNumber = AssignedToPhoneNumber ?? "",
+                    AVOAssignedToEmail = AssignedToEmail ?? "",
+                    AVOAssignedToWhatsapp = AssignedToWhatsapp ?? "",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -275,16 +298,16 @@ namespace Valuation.Api.Services
         }
 
         public async Task QualityControlWFUpdateAssignmentAsync(
-                    string valuationId,
-                    string vehicleNumber,
-                    string applicantContact,
-                    string? assignedTo,
-                    string? assignedToPhoneNumber,
-                    string? assignedToEmail,
-                    string? assignedToWhatsapp)
+                    string ValuationId,
+                    string VehicleNumber,
+                    string ApplicantContact,
+                    string? AssignedTo,
+                    string? AssignedToPhoneNumber,
+                    string? AssignedToEmail,
+                    string? AssignedToWhatsapp)
         {
-            var partitionKey = $"{vehicleNumber}|{applicantContact}";
-            var rowKey = valuationId;
+            var partitionKey = $"{VehicleNumber}|{ApplicantContact}";
+            var rowKey = ValuationId;
 
             try
             {
@@ -296,10 +319,10 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update assignment fields
-                entity.QualityControlAssignedTo = assignedTo ?? "";
-                entity.QualityControlAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
-                entity.QualityControlAssignedToEmail = assignedToEmail ?? "";
-                entity.QualityControlAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.QualityControlAssignedTo = AssignedTo ?? "";
+                entity.QualityControlAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                entity.QualityControlAssignedToEmail = AssignedToEmail ?? "";
+                entity.QualityControlAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
                 // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
@@ -311,12 +334,12 @@ namespace Valuation.Api.Services
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
-                    VehicleNumber = vehicleNumber,
-                    ApplicantContact = applicantContact,
-                    QualityControlAssignedTo = assignedTo ?? "",
-                    QualityControlAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
-                    QualityControlAssignedToEmail = assignedToEmail ?? "",
-                    QualityControlAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    VehicleNumber = VehicleNumber,
+                    ApplicantContact = ApplicantContact,
+                    QualityControlAssignedTo = AssignedTo ?? "",
+                    QualityControlAssignedToPhoneNumber = AssignedToPhoneNumber ?? "",
+                    QualityControlAssignedToEmail = AssignedToEmail ?? "",
+                    QualityControlAssignedToWhatsapp = AssignedToWhatsapp ?? "",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -326,16 +349,16 @@ namespace Valuation.Api.Services
         }
 
         public async Task FinalReportWFUpdateAssignmentAsync(
-                    string valuationId,
-                    string vehicleNumber,
-                    string applicantContact,
-                    string? assignedTo,
-                    string? assignedToPhoneNumber,
-                    string? assignedToEmail,
-                    string? assignedToWhatsapp)
+                    string ValuationId,
+                    string VehicleNumber,
+                    string ApplicantContact,
+                    string? AssignedTo,
+                    string? AssignedToPhoneNumber,
+                    string? AssignedToEmail,
+                    string? AssignedToWhatsapp)
         {
-            var partitionKey = $"{vehicleNumber}|{applicantContact}";
-            var rowKey = valuationId;
+            var partitionKey = $"{VehicleNumber}|{ApplicantContact}";
+            var rowKey = ValuationId;
 
             try
             {
@@ -347,10 +370,10 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update assignment fields
-                entity.FinalReportAssignedTo = assignedTo ?? "";
-                entity.FinalReportAssignedToPhoneNumber = assignedToPhoneNumber ?? "";
-                entity.FinalReportAssignedToEmail = assignedToEmail ?? "";
-                entity.FinalReportAssignedToWhatsapp = assignedToWhatsapp ?? "";
+                entity.FinalReportAssignedTo = AssignedTo ?? "";
+                entity.FinalReportAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                entity.FinalReportAssignedToEmail = AssignedToEmail ?? "";
+                entity.FinalReportAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
                 // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
@@ -362,12 +385,12 @@ namespace Valuation.Api.Services
                 {
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
-                    VehicleNumber = vehicleNumber,
-                    ApplicantContact = applicantContact,
-                    FinalReportAssignedTo = assignedTo ?? "",
-                    FinalReportAssignedToPhoneNumber = assignedToPhoneNumber ?? "",
-                    FinalReportAssignedToEmail = assignedToEmail ?? "",
-                    FinalReportAssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    VehicleNumber = VehicleNumber,
+                    ApplicantContact = ApplicantContact,
+                    FinalReportAssignedTo = AssignedTo ?? "",
+                    FinalReportAssignedToPhoneNumber = AssignedToPhoneNumber ?? "",
+                    FinalReportAssignedToEmail = AssignedToEmail ?? "",
+                    FinalReportAssignedToWhatsapp = AssignedToWhatsapp ?? "",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };

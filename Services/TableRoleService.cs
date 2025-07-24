@@ -135,6 +135,21 @@ public class TableRoleService : IRoleService
         return roles;
     }
 
+    public async Task<IEnumerable<UserModel>> GetUsersByRoleAsync(string roleId)
+    {
+        var users = new List<UserModel>();
+        await foreach (var userRole in _userRolesTable.QueryAsync<UserRoleEntity>(
+            filter: $"RowKey eq '{roleId}'"))
+        {
+            var user = await GetUserAsync(userRole.PartitionKey);
+            if (user != null)
+            {
+                users.Add(user);
+            }
+        }
+        return users;
+    }
+
     public Task CreateOrUpdateRoleAsync(RoleModel role)
     {
         var entity = new RoleEntity

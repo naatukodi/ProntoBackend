@@ -10,53 +10,53 @@ namespace Valuation.Api.Services
         Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact);
 
         Task StakeholderWFUpdateAssignmentAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact,
-            string assignedTo,
-            string assignedToPhoneNumber,
-            string assignedToEmail,
-            string assignedToWhatsapp);
+            string ValuationId,
+            string VehicleNumber,
+            string ApplicantContact,
+            string AssignedTo,
+            string AssignedToPhoneNumber,
+            string AssignedToEmail,
+            string AssignedToWhatsapp);
         Task BackendWFUpdateAssignmentAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact,
-            string assignedTo,
-            string assignedToPhoneNumber,
-            string assignedToEmail,
-            string assignedToWhatsapp);
+            string ValuationId,
+            string VehicleNumber,
+            string ApplicantContact,
+            string AssignedTo,
+            string AssignedToPhoneNumber,
+            string AssignedToEmail,
+            string AssignedToWhatsapp);
 
         Task AVOWFUpdateAssignmentAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact,
-            string assignedTo,
-            string assignedToPhoneNumber,
-            string assignedToEmail,
-            string assignedToWhatsapp);
+            string ValuationId,
+            string VehicleNumber,
+            string ApplicantContact,
+            string AssignedTo,
+            string AssignedToPhoneNumber,
+            string AssignedToEmail,
+            string AssignedToWhatsapp);
 
         Task QualityControlWFUpdateAssignmentAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact,
-            string assignedTo,
-            string assignedToPhoneNumber,
-            string assignedToEmail,
-            string assignedToWhatsapp);
+            string ValuationId,
+            string VehicleNumber,
+            string ApplicantContact,
+            string AssignedTo,
+            string AssignedToPhoneNumber,
+            string AssignedToEmail,
+            string AssignedToWhatsapp);
 
         Task FinalReportWFUpdateAssignmentAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact,
-            string assignedTo,
-            string assignedToPhoneNumber,
-            string assignedToEmail,
-            string assignedToWhatsapp);
+            string ValuationId,
+            string VehicleNumber,
+            string ApplicantContact,
+            string AssignedTo,
+            string AssignedToPhoneNumber,
+            string AssignedToEmail,
+            string AssignedToWhatsapp);
 
-            Task CompleteFinalReportWFAsync(
-                string valuationId,
-                string vehicleNumber,
-                string applicantContact);
+        Task CompleteFinalReportWFAsync(
+            string ValuationId,
+            string VehicleNumber,
+            string ApplicantContact);
 
     }
 
