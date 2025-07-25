@@ -563,36 +563,6 @@ public class ValuationService : IValuationService
 
             await container.UpsertItemAsync(doc, pk);
 
-            // Update the workflow table as well
-            // Retry the workflow update with Polly
-            var policy1 = Polly.Policy
-                .Handle<Exception>()
-                .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
-
-            await policy1.ExecuteAsync(async () =>
-            {
-                await _workflowTableService.BackendWFUpdateAssignmentAsync(
-                    valuationId,
-                    vehicleNumber,
-                    applicantContact,
-                    assignedTo ?? "",
-                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
-                    Uri.UnescapeDataString(assignedToEmail ?? ""),
-                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
-                );
-
-                await Task.Delay(1000);
-
-                await _workflowTableService.UpdateCurrentWFAssignedToAsync(
-                    valuationId,
-                    vehicleNumber,
-                    applicantContact,
-                    assignedTo ?? "",
-                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
-                    Uri.UnescapeDataString(assignedToEmail ?? ""),
-                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
-                );
-            });
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -619,12 +589,6 @@ public class ValuationService : IValuationService
             };
         }
 
-        doc.VehicleDetails.AssignedTo = assignedTo;
-        doc.VehicleDetails.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
-        doc.VehicleDetails.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
-        doc.VehicleDetails.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
-        doc.VehicleDetails.UpdatedAt = DateTime.UtcNow;
-
         // Ensure CreatedAt is set if not already
         if (doc.CreatedAt == default)
             doc.CreatedAt = DateTime.UtcNow;
@@ -640,6 +604,18 @@ public class ValuationService : IValuationService
         await policy.ExecuteAsync(async () =>
         {
             await _workflowTableService.BackendWFUpdateAssignmentAsync(
+                valuationId,
+                vehicleNumber,
+                applicantContact,
+                assignedTo ?? "",
+                Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                Uri.UnescapeDataString(assignedToEmail ?? ""),
+                Uri.UnescapeDataString(assignedToWhatsapp ?? "")
+            );
+
+            await Task.Delay(1000);
+
+            await _workflowTableService.UpdateCurrentWFAssignedToAsync(
                 valuationId,
                 vehicleNumber,
                 applicantContact,
