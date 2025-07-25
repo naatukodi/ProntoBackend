@@ -547,15 +547,15 @@ public class ValuationService : IValuationService
             }
 
             doc.VehicleDetails.AssignedTo = assignedTo;
-            doc.VehicleDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
-            doc.VehicleDetails.AssignedToEmail = assignedToEmail;
-            doc.VehicleDetails.AssignedToWhatsapp = assignedToWhatsapp;
+            doc.VehicleDetails.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+            doc.VehicleDetails.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+            doc.VehicleDetails.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
             doc.UpdatedAt = DateTime.UtcNow;
 
             doc.AssignedTo = assignedTo;
-            doc.AssignedToPhoneNumber = assignedToPhoneNumber;
-            doc.AssignedToEmail = assignedToEmail;
-            doc.AssignedToWhatsapp = assignedToWhatsapp;
+            doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+            doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+            doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
 
             // Ensure CreatedAt is set if not already
             if (doc.CreatedAt == default)
@@ -576,9 +576,9 @@ public class ValuationService : IValuationService
                     vehicleNumber,
                     applicantContact,
                     assignedTo ?? "",
-                    assignedToPhoneNumber ?? "",
-                    assignedToEmail ?? "",
-                    assignedToWhatsapp ?? ""
+                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                    Uri.UnescapeDataString(assignedToEmail ?? ""),
+                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
                 );
 
                 await Task.Delay(1000);
@@ -588,9 +588,9 @@ public class ValuationService : IValuationService
                     vehicleNumber,
                     applicantContact,
                     assignedTo ?? "",
-                    assignedToPhoneNumber ?? "",
-                    assignedToEmail ?? "",
-                    assignedToWhatsapp ?? ""
+                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                    Uri.UnescapeDataString(assignedToEmail ?? ""),
+                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
                 );
             });
         }
@@ -613,16 +613,16 @@ public class ValuationService : IValuationService
             {
                 RegistrationNumber = vehicleNumber,
                 AssignedTo = assignedTo,
-                AssignedToPhoneNumber = assignedToPhoneNumber,
-                AssignedToEmail = assignedToEmail,
-                AssignedToWhatsapp = assignedToWhatsapp
+                AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? ""),
+                AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "")
             };
         }
 
         doc.VehicleDetails.AssignedTo = assignedTo;
-        doc.VehicleDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
-        doc.VehicleDetails.AssignedToEmail = assignedToEmail;
-        doc.VehicleDetails.AssignedToWhatsapp = assignedToWhatsapp;
+        doc.VehicleDetails.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+        doc.VehicleDetails.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+        doc.VehicleDetails.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
         doc.VehicleDetails.UpdatedAt = DateTime.UtcNow;
 
         // Ensure CreatedAt is set if not already
@@ -644,9 +644,9 @@ public class ValuationService : IValuationService
                 vehicleNumber,
                 applicantContact,
                 assignedTo ?? "",
-                assignedToPhoneNumber ?? "",
-                assignedToEmail ?? "",
-                assignedToWhatsapp ?? ""
+                Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                Uri.UnescapeDataString(assignedToEmail ?? ""),
+                Uri.UnescapeDataString(assignedToWhatsapp ?? "")
             );
         });
     }
