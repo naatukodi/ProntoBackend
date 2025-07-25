@@ -144,6 +144,54 @@ namespace Valuation.Api.Services
             return results;
         }
 
+        public async Task UpdateCurrentWFAssignedToAsync(
+            string valuationId, string vehicleNumber, string applicantContact, string? assignedTo = null,
+            string? assignedToPhoneNumber = null,
+            string? assignedToEmail = null, string? assignedToWhatsapp = null)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                // Fetch existing entity
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                // Update assignment fields
+                entity.AssignedTo = assignedTo ?? entity.AssignedTo;
+                entity.AssignedToPhoneNumber = assignedToPhoneNumber ?? entity.AssignedToPhoneNumber;
+                entity.AssignedToEmail = assignedToEmail ?? entity.AssignedToEmail;
+                entity.AssignedToWhatsapp = assignedToWhatsapp ?? entity.AssignedToWhatsapp;
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                // Upsert (insert or merge)
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found: create new entity with assignment fields
+                var entity = new WorkflowEntity
+                {
+                    PartitionKey = partitionKey,
+                    RowKey = rowKey,
+                    VehicleNumber = vehicleNumber,
+                    ApplicantContact = applicantContact,
+                    AssignedTo = assignedTo ?? "",
+                    AssignedToPhoneNumber = assignedToPhoneNumber ?? "",
+                    AssignedToEmail = assignedToEmail ?? "",
+                    AssignedToWhatsapp = assignedToWhatsapp ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
         public async Task StakeholderWFUpdateAssignmentAsync(
                     string ValuationId,
                     string VehicleNumber,

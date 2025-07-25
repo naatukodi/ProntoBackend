@@ -552,6 +552,11 @@ public class ValuationService : IValuationService
             doc.VehicleDetails.AssignedToWhatsapp = assignedToWhatsapp;
             doc.UpdatedAt = DateTime.UtcNow;
 
+            doc.AssignedTo = assignedTo;
+            doc.AssignedToPhoneNumber = assignedToPhoneNumber;
+            doc.AssignedToEmail = assignedToEmail;
+            doc.AssignedToWhatsapp = assignedToWhatsapp;
+
             // Ensure CreatedAt is set if not already
             if (doc.CreatedAt == default)
                 doc.CreatedAt = DateTime.UtcNow;
@@ -567,6 +572,18 @@ public class ValuationService : IValuationService
             await policy1.ExecuteAsync(async () =>
             {
                 await _workflowTableService.BackendWFUpdateAssignmentAsync(
+                    valuationId,
+                    vehicleNumber,
+                    applicantContact,
+                    assignedTo ?? "",
+                    assignedToPhoneNumber ?? "",
+                    assignedToEmail ?? "",
+                    assignedToWhatsapp ?? ""
+                );
+
+                await Task.Delay(1000);
+
+                await _workflowTableService.UpdateCurrentWFAssignedToAsync(
                     valuationId,
                     vehicleNumber,
                     applicantContact,
