@@ -212,10 +212,15 @@ namespace Valuation.Api.Services
                 {
                     doc.InspectionDetails = new InspectionDetails();
                 }
-                doc.InspectionDetails.AssignedTo = assignedTo;
-                doc.InspectionDetails.AssignedToPhoneNumber = assignedToPhoneNumber;
-                doc.InspectionDetails.AssignedToEmail = assignedToEmail;
-                doc.InspectionDetails.AssignedToWhatsapp = assignedToWhatsapp;
+                doc.InspectionDetails.AssignedTo = Uri.UnescapeDataString(assignedTo ?? "");
+                doc.InspectionDetails.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+                doc.InspectionDetails.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+                doc.InspectionDetails.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
+
+                doc.AssignedTo = Uri.UnescapeDataString(assignedTo ?? "");
+                doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+                doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+                doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
 
                 await Container.UpsertItemAsync(doc, pk);
 
@@ -230,10 +235,22 @@ namespace Valuation.Api.Services
                         valuationId,
                         vehicleNumber,
                         applicantContact,
-                        assignedTo ?? string.Empty,
-                        assignedToPhoneNumber ?? string.Empty,
-                        assignedToEmail ?? string.Empty,
-                        assignedToWhatsapp ?? string.Empty);
+                        Uri.UnescapeDataString(assignedTo ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty));
+
+                    await Task.Delay(1000);
+
+                    await _workflowTableService.UpdateCurrentWFAssignedToAsync(
+                        valuationId,
+                        vehicleNumber,
+                        applicantContact,
+                        Uri.UnescapeDataString(assignedTo ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty)
+                    );
                 });
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -253,6 +270,11 @@ namespace Valuation.Api.Services
                 newDoc.InspectionDetails.AssignedToEmail = assignedToEmail;
                 newDoc.InspectionDetails.AssignedToWhatsapp = assignedToWhatsapp;
 
+                newDoc.AssignedTo = Uri.UnescapeDataString(assignedTo ?? "");
+                newDoc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+                newDoc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+                newDoc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
+
                 await Container.UpsertItemAsync(newDoc, pk);
 
                 // Update the workflow table as well
@@ -269,6 +291,18 @@ namespace Valuation.Api.Services
                         assignedToPhoneNumber ?? string.Empty,
                         assignedToEmail ?? string.Empty,
                         assignedToWhatsapp ?? string.Empty);
+
+                    await Task.Delay(1000);
+
+                    await _workflowTableService.UpdateCurrentWFAssignedToAsync(
+                        valuationId,
+                        vehicleNumber,
+                        applicantContact,
+                        Uri.UnescapeDataString(assignedTo ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
+                        Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty)
+                    );
                 });
 
             }
