@@ -517,6 +517,146 @@ namespace Valuation.Api.Services
             }
         }
 
+        public async Task<UserModel?> GetAssignedToByValuationAsync(
+            string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                var AssignedUser = new UserModel
+                {
+                    Name = entity.AssignedTo ?? string.Empty,
+                    PhoneNumber = entity.AssignedToPhoneNumber ?? string.Empty,
+                    Email = entity.AssignedToEmail ?? string.Empty,
+                    Whatsapp = entity.AssignedToWhatsapp ?? string.Empty
+                };
+
+                if (AssignedUser == null)
+                {
+                    // 1) pick the first workflow step
+                    var workflowStep = entity.Workflow;
+                    if (workflowStep != null)
+                    {
+                        // 2) use its name (e.g. "Stakeholder") as the prefix
+                        var prefix = workflowStep;
+                        // 3) build each property name
+                        string nameProp = $"{prefix}AssignedTo";
+                        string phoneProp = $"{prefix}AssignedToPhoneNumber";
+                        string emailProp = $"{prefix}AssignedToEmail";
+                        string whatsappProp = $"{prefix}AssignedToWhatsapp";
+
+                        // 4) helper to read a string property or return empty
+                        string GetVal(string propName) =>
+                            entity.GetType()
+                                .GetProperty(propName)?
+                                .GetValue(entity) as string
+                            ?? string.Empty;
+
+                        // 5) now construct your UserModel
+                        AssignedUser = new UserModel
+                        {
+                            Name = GetVal(nameProp).Trim(),
+                            PhoneNumber = GetVal(phoneProp),
+                            Email = GetVal(emailProp),
+                            Whatsapp = GetVal(whatsappProp)
+                        };
+                    }
+                }
+
+                return AssignedUser;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found → return null
+                return null;
+            }
+        }
+
+        public async Task<List<WorkflowModel?>> GetByAssignedToPhoneNumberAsync(string phoneNumber)
+        {
+            var results = new List<WorkflowModel?>();
+
+            phoneNumber = Uri.UnescapeDataString(phoneNumber.Trim());
+
+            try
+            {
+                // Query for workflows assigned to the given phone number
+                await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
+                    filter: $"AssignedToPhoneNumber eq '{phoneNumber}'").ConfigureAwait(false))
+                {
+                    results.Add(new WorkflowModel
+                    {
+                        ValuationId = entity.RowKey,
+                        VehicleNumber = entity.VehicleNumber,
+                        ApplicantName = entity.ApplicantName,
+                        ApplicantContact = entity.ApplicantContact,
+                        Workflow = entity.Workflow,
+                        WorkflowStepOrder = entity.WorkflowStepOrder,
+                        Status = entity.Status,
+                        CreatedAt = entity.CreatedAt,
+                        CompletedAt = entity.CompletedAt,
+                        AssignedTo = entity.AssignedTo,
+                        Location = entity.Location,
+                        RedFlag = entity.RedFlag,
+                        Remarks = entity.Remarks,
+                        AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                        AssignedToEmail = entity.AssignedToEmail,
+                        AssignedToWhatsapp = entity.AssignedToWhatsapp,
+                        Name = entity.Name,
+                        ValuationType = entity.ValuationType
+                    });
+                }
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // No records found, return empty list
+            }
+            catch (Exception ex)
+            {
+                // Handle other exceptions as needed
+                throw new InvalidOperationException("Error querying workflows by phone number", ex);
+            }
+
+            return results;
+        }
+
+        public async Task<UserModel?> GetAssignedToByWorkflowAsync(
+            string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
+                    partitionKey: partitionKey,
+                    rowKey: rowKey).ConfigureAwait(false);
+
+                var entity = response.Value;
+
+                return new UserModel
+                {
+                    Name = entity.AssignedTo ?? string.Empty,
+                    PhoneNumber = entity.AssignedToPhoneNumber ?? string.Empty,
+                    Email = entity.AssignedToEmail ?? string.Empty,
+                    Whatsapp = entity.AssignedToWhatsapp ?? string.Empty
+                };
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // Not found → return null
+                return null;
+            }
+        }
+
         public async Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
             var partitionKey = $"{vehicleNumber}|{applicantContact}";

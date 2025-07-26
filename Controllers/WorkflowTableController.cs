@@ -102,6 +102,54 @@ namespace Valuation.Api.Controllers
 
             return Ok(records);
         }
+
+        [HttpGet("assignedto/valuation")]
+        public async Task<IActionResult> GetAssignedToByValuationAsync(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var assignedTo = await _svc.GetAssignedToByValuationAsync(
+                valuationId.ToString(),
+                vehicleNumber,
+                applicantContact);
+
+            if (assignedTo == null)
+                return NotFound();
+
+            return Ok(assignedTo);
+        }
+
+        [HttpGet("assignedto/phone")]
+        public async Task<IActionResult> GetByAssignedToPhoneNumberAsync(
+            string assignedToPhoneNumber)
+        {
+            var records = await _svc.GetByAssignedToPhoneNumberAsync(
+                assignedToPhoneNumber);
+
+
+            if (records == null || records.Count == 0)
+                return NotFound();
+
+            return Ok(records);
+        }
+
+        [HttpGet("assignedto")]
+        public async Task<IActionResult> GetAssignedToByWorkflowAsync(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var assignedTo = await _svc.GetAssignedToByWorkflowAsync(
+                valuationId.ToString(),
+                vehicleNumber,
+                applicantContact);
+
+            if (assignedTo == null)
+                return NotFound();
+
+            return Ok(assignedTo);
+        }
     }
 }
 
