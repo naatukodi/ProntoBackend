@@ -235,9 +235,9 @@ namespace Valuation.Api.Services
                 }
 
                 doc.Stakeholder.AssignedTo = assignedTo;
-                doc.Stakeholder.AssignedToPhoneNumber = assignedToPhoneNumber;
-                doc.Stakeholder.AssignedToEmail = assignedToEmail;
-                doc.Stakeholder.AssignedToWhatsapp = assignedToWhatsapp;
+                doc.Stakeholder.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+                doc.Stakeholder.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+                doc.Stakeholder.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
                 doc.UpdatedAt = DateTime.UtcNow;
 
                 // Ensure CreatedAt is set if not already
@@ -259,9 +259,9 @@ namespace Valuation.Api.Services
                         vehicleNumber,
                         applicantContact,
                         assignedTo ?? "",
-                        assignedToPhoneNumber ?? "",
-                        assignedToEmail ?? "",
-                        assignedToWhatsapp ?? ""
+                        Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                        Uri.UnescapeDataString(assignedToEmail ?? ""),
+                        Uri.UnescapeDataString(assignedToWhatsapp ?? "")
                     );
                 });
             }
@@ -287,10 +287,10 @@ namespace Valuation.Api.Services
                 };
             }
 
-            doc.Stakeholder.AssignedTo = assignedTo;
-            doc.Stakeholder.AssignedToPhoneNumber = assignedToPhoneNumber;
-            doc.Stakeholder.AssignedToEmail = assignedToEmail;
-            doc.Stakeholder.AssignedToWhatsapp = assignedToWhatsapp;
+            doc.AssignedTo = assignedTo;
+            doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
+            doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
+            doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
             doc.UpdatedAt = DateTime.UtcNow;
 
             // Ensure CreatedAt is set if not already
@@ -312,9 +312,21 @@ namespace Valuation.Api.Services
                     vehicleNumber,
                     applicantContact,
                     assignedTo ?? "",
-                    assignedToPhoneNumber ?? "",
-                    assignedToEmail ?? "",
-                    assignedToWhatsapp ?? ""
+                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                    Uri.UnescapeDataString(assignedToEmail ?? ""),
+                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
+                );
+
+                await Task.Delay(1000);
+
+                await _workflowTableService.UpdateCurrentWFAssignedToAsync(
+                    valuationId,
+                    vehicleNumber,
+                    applicantContact,
+                    assignedTo ?? "",
+                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
+                    Uri.UnescapeDataString(assignedToEmail ?? ""),
+                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
                 );
             });
         }

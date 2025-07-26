@@ -85,6 +85,18 @@ public class QualityControlService : IQualityControlService
             dto.AssignedToEmail ?? string.Empty,
             dto.AssignedToWhatsapp ?? string.Empty
         );
+
+        await Task.Delay(1000); // Simulate delay for workflow update
+
+        await _workflowTableService.UpdateCurrentWFAssignedToAsync(
+            id,
+            vehicleNumber,
+            applicantContact,
+            dto.AssignedTo ?? string.Empty,
+            Uri.UnescapeDataString(dto.AssignedToPhoneNumber ?? string.Empty),
+            Uri.UnescapeDataString(dto.AssignedToEmail ?? string.Empty),
+            Uri.UnescapeDataString(dto.AssignedToWhatsapp ?? string.Empty)
+        );
     }
 
     public async Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
@@ -104,13 +116,20 @@ public class QualityControlService : IQualityControlService
             doc.QualityControl.AssignedTo = assignedTo;
 
         if (doc.QualityControl.AssignedToPhoneNumber != assignedToPhoneNumber)
-            doc.QualityControl.AssignedToPhoneNumber = assignedToPhoneNumber;
+            doc.QualityControl.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty);
 
         if (doc.QualityControl.AssignedToEmail != assignedToEmail)
-            doc.QualityControl.AssignedToEmail = assignedToEmail;
+            doc.QualityControl.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? string.Empty);
 
         if (doc.QualityControl.AssignedToWhatsapp != assignedToWhatsapp)
-            doc.QualityControl.AssignedToWhatsapp = assignedToWhatsapp;
+            doc.QualityControl.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty);
+
+        doc.QualityControl.UpdatedAt = DateTime.UtcNow;
+
+        doc.AssignedTo = assignedTo;
+        doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty);
+        doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? string.Empty);
+        doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty);
 
         // 3) Upsert
         await Container.UpsertItemAsync(doc, pk);
@@ -120,9 +139,21 @@ public class QualityControlService : IQualityControlService
             vehicleNumber,
             applicantContact,
             assignedTo ?? string.Empty,
-            assignedToPhoneNumber ?? string.Empty,
-            assignedToEmail ?? string.Empty,
-            assignedToWhatsapp ?? string.Empty
+            Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
+            Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
+            Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty)
+        );
+
+        await Task.Delay(1000); // Simulate delay for workflow update
+
+        await _workflowTableService.UpdateCurrentWFAssignedToAsync(
+            valuationId,
+            vehicleNumber,
+            applicantContact,
+            assignedTo ?? string.Empty,
+            Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
+            Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
+            Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty)
         );
     }
 

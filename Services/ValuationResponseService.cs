@@ -8,14 +8,16 @@ namespace Valuation.Api.Services
     public class ValuationResponseService : IValuationResponseService
     {
         private readonly Container _container;
+        private readonly IWorkflowTableService _workflowTableService;
 
-        public ValuationResponseService(CosmosClient cosmosClient, IConfiguration configuration)
+        public ValuationResponseService(CosmosClient cosmosClient, IConfiguration configuration, IWorkflowTableService workflowTableService)
         {
             // Read database & container from environment variables or appsettings.json
             var databaseName = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
             var containerName = configuration["Cosmos:ContainerId"] ?? "Valuations";
 
             _container = cosmosClient.GetContainer(databaseName, containerName);
+            _workflowTableService = workflowTableService;
         }
 
         private PartitionKey GetPartitionKey(string vehicleNumber, string applicantContact) =>
@@ -92,6 +94,56 @@ namespace Valuation.Api.Services
 
             // 4) Upsert the document (create or replace)
             await _container.UpsertItemAsync(doc, pk);
+        }
+
+        public async Task UpdateAssignmentAsync(
+            string valuationId,
+            string vehicleNumber,
+            string applicantContact,
+            string? assignedTo = null,
+            string? assignedToPhoneNumber = null,
+            string? assignedToEmail = null,
+            string? assignedToWhatsapp = null)
+        {
+            var pk = GetPartitionKey(vehicleNumber, applicantContact);
+
+            // 1) Read existing document
+            var readResp = await _container.ReadItemAsync<ValuationDocument>(
+                id: valuationId,
+                partitionKey: pk);
+            var doc = readResp.Resource;
+
+            // 2) Update assignment fields
+            if (doc.ValuationResponse == null)
+            {
+                doc.ValuationResponse = new ValuationResponse();
+            }
+
+            // Assign values
+            if (doc.AssignedTo != assignedTo)
+                doc.AssignedTo = assignedTo;
+            if (doc.AssignedToPhoneNumber != assignedToPhoneNumber)
+                doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty);
+            if (doc.AssignedToEmail != assignedToEmail)
+                doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? string.Empty);
+            if (doc.AssignedToWhatsapp != assignedToWhatsapp)
+                doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty);
+            doc.UpdatedAt = DateTime.UtcNow;
+
+            // 3) Upsert back to Cosmos
+            await _container.UpsertItemAsync(doc, pk);
+
+            // 4) Update workflow table (if applicable)
+            // This is optional and depends on your workflow logic
+            await _workflowTableService.UpdateCurrentWFAssignedToAsync(
+                valuationId,
+                vehicleNumber,
+                applicantContact,
+                assignedTo ?? string.Empty,
+                Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
+                Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
+                Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty)
+            );
         }
 
         public async Task DeleteValuationResponseAsync(

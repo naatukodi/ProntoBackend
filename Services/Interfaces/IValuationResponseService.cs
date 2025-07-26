@@ -24,6 +24,18 @@ namespace Valuation.Api.Services
             string applicantContact);
 
         /// <summary>
+        /// Updates the assignment fields in the ValuationDocument.
+        /// </summary>
+        Task UpdateAssignmentAsync(
+            string valuationId,
+            string vehicleNumber,
+            string applicantContact,
+            string? assignedTo = null,
+            string? assignedToPhoneNumber = null,
+            string? assignedToEmail = null,
+            string? assignedToWhatsapp = null);
+
+        /// <summary>
         /// Deletes the ValuationResponse sub‐document (if present) from the ValuationDocument.
         /// </summary>
         Task DeleteValuationResponseAsync(
