@@ -57,6 +57,174 @@ public class TableRoleService : IRoleService
         }
     }
 
+    public async Task<List<string>> GetUserStatesAsync(string userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("User ID must be provided", nameof(userId));
+
+        try
+        {
+            var response = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var userEntity = response.Value;
+
+            if (!string.IsNullOrWhiteSpace(userEntity.assignedStates))
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(userEntity.assignedStates) ?? new List<string>();
+            }
+            return new List<string>();
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // User not found
+            return new List<string>();
+        }
+    }
+
+    public async Task<List<string>> GetUserDistrictsAsync(string userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            throw new ArgumentException("User ID must be provided", nameof(userId));
+
+        try
+        {
+            var response = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var userEntity = response.Value;
+
+            if (!string.IsNullOrWhiteSpace(userEntity.assignedDistricts))
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<List<string>>(userEntity.assignedDistricts) ?? new List<string>();
+            }
+            return new List<string>();
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // User not found
+            return new List<string>();
+        }
+    }
+
+    public async Task AppendStateToUserAsync(string userId, string state)
+    {
+        try
+        {
+            var response = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var userEntity = response.Value;
+
+            // Parse existing states if any
+            var existingStates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(userEntity.assignedStates))
+            {
+                existingStates = System.Text.Json.JsonSerializer.Deserialize<List<string>>(userEntity.assignedStates) ?? new List<string>();
+            }
+
+            // Add new state, avoiding duplicates
+            if (!existingStates.Contains(state))
+            {
+                existingStates.Add(state);
+            }
+
+            // Serialize back to JSON
+            userEntity.assignedStates = System.Text.Json.JsonSerializer.Serialize(existingStates);
+
+            await _usersTable.UpdateEntityAsync(userEntity, userEntity.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+        }
+        catch (RequestFailedException)
+        {
+            // Handle not found or other errors as needed
+            throw;
+        }
+    }
+
+    public async Task DeleteStateFromUserAsync(string userId, string state)
+    {
+        try
+        {
+            var response = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var userEntity = response.Value;
+
+            // Parse existing states if any
+            var existingStates = new List<string>();
+            if (!string.IsNullOrWhiteSpace(userEntity.assignedStates))
+            {
+                existingStates = System.Text.Json.JsonSerializer.Deserialize<List<string>>(userEntity.assignedStates) ?? new List<string>();
+            }
+
+            // Remove state if it exists
+            existingStates.Remove(state);
+
+            // Serialize back to JSON
+            userEntity.assignedStates = System.Text.Json.JsonSerializer.Serialize(existingStates);
+
+            await _usersTable.UpdateEntityAsync(userEntity, userEntity.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+        }
+        catch (RequestFailedException)
+        {
+            // Handle not found or other errors as needed
+            throw;
+        }
+    }
+
+    public async Task DeleteDistrictFromUserAsync(string userId, string district)
+    {
+        try
+        {
+            var response = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var userEntity = response.Value;
+
+            // Parse existing districts if any
+            var existingDistricts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(userEntity.assignedDistricts))
+            {
+                existingDistricts = System.Text.Json.JsonSerializer.Deserialize<List<string>>(userEntity.assignedDistricts) ?? new List<string>();
+            }
+
+            // Remove district if it exists
+            existingDistricts.Remove(district);
+
+            // Serialize back to JSON
+            userEntity.assignedDistricts = System.Text.Json.JsonSerializer.Serialize(existingDistricts);
+
+            await _usersTable.UpdateEntityAsync(userEntity, userEntity.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+        }
+        catch (RequestFailedException)
+        {
+            // Handle not found or other errors as needed
+            throw;
+        }
+    }
+
+    public async Task AppendDistrictToUserAsync(string userId, string district)
+    {
+        try
+        {
+            var response = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var userEntity = response.Value;
+
+            // Parse existing districts if any
+            var existingDistricts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(userEntity.assignedDistricts))
+            {
+                existingDistricts = System.Text.Json.JsonSerializer.Deserialize<List<string>>(userEntity.assignedDistricts) ?? new List<string>();
+            }
+
+            // Add new district, avoiding duplicates
+            if (!existingDistricts.Contains(district))
+            {
+                existingDistricts.Add(district);
+            }
+
+            // Serialize back to JSON
+            userEntity.assignedDistricts = System.Text.Json.JsonSerializer.Serialize(existingDistricts);
+
+            await _usersTable.UpdateEntityAsync(userEntity, userEntity.ETag, Azure.Data.Tables.TableUpdateMode.Replace);
+        }
+        catch (RequestFailedException)
+        {
+            // Handle not found or other errors as needed
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<UserModel>> GetAllUsersAsync()
     {
         var users = new List<UserModel>();

@@ -114,6 +114,7 @@ builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>(
 builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 
 builder.Services.AddSingleton<IRoleService, TableRoleService>();
+builder.Services.AddSingleton<TableRoleService>();
 
 // --- 7) MVC Controllers ---
 builder.Services.AddControllers();

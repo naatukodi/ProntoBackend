@@ -28,6 +28,13 @@ namespace Valuation.Api.Models
         public string Country { get; set; } = default!;
         public string Pincode { get; set; } = default!;
 
+        public string? assignedStates { get; set; } // Comma-separated list of state keys
+        public string? assignedDistricts { get; set; } // Comma-separated list of district keys
+
+        // Additional metadata
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; }
+
         // Table‑storage housekeeping
         public ETag ETag { get; set; } = ETag.All;
         public DateTimeOffset? Timestamp { get; set; }

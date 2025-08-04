@@ -9,6 +9,10 @@ namespace Valuation.Api.Services
         Task<List<WorkflowModel?>> GetWorkflowInProgressAsync();
         Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact);
 
+        Task<List<WorkflowModel?>> FilterByStatesAsync(IEnumerable<string> stateKeys);
+
+        Task<List<WorkflowModel?>> FilterByDistrictsAsync(IEnumerable<string> districtKeys);
+        
         Task UpdateCurrentWFAssignedToAsync(
             string valuationId, string vehicleNumber, string applicantContact, string? assignedTo = null,
             string? assignedToPhoneNumber = null, string? assignedToEmail = null, string? assignedToWhatsapp = null);

@@ -144,6 +144,106 @@ namespace Valuation.Api.Services
             return results;
         }
 
+        public async Task<List<WorkflowModel?>> FilterByStatesAsync(IEnumerable<string> stateKeys)
+        {
+            var results = new List<WorkflowModel?>();
+            if (stateKeys == null || !stateKeys.Any())
+            return results;
+
+            // Build OData filter: (State eq 'A' or State eq 'B' or ...)
+            var stateFilter = string.Join(" or ", stateKeys.Select(s => $"State eq '{s.Replace("'", "''")}'"));
+            var filter = $"Status eq 'InProgress' and ({stateFilter})";
+
+            try
+            {
+            await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
+                filter: filter).ConfigureAwait(false))
+            {
+                results.Add(new WorkflowModel
+                {
+                ValuationId = entity.RowKey,
+                VehicleNumber = entity.VehicleNumber,
+                ApplicantName = entity.ApplicantName,
+                ApplicantContact = entity.ApplicantContact,
+                Workflow = entity.Workflow,
+                WorkflowStepOrder = entity.WorkflowStepOrder,
+                Status = entity.Status,
+                CreatedAt = entity.CreatedAt,
+                CompletedAt = entity.CompletedAt,
+                AssignedTo = entity.AssignedTo,
+                Location = entity.Location,
+                RedFlag = entity.RedFlag,
+                Remarks = entity.Remarks,
+                AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                AssignedToEmail = entity.AssignedToEmail,
+                AssignedToWhatsapp = entity.AssignedToWhatsapp,
+                Name = entity.Name,
+                ValuationType = entity.ValuationType
+                });
+            }
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+            // No records found, return empty list
+            }
+            catch (Exception ex)
+            {
+            throw new InvalidOperationException("Error querying workflow by states", ex);
+            }
+
+            return results;
+        }
+
+        public async Task<List<WorkflowModel?>> FilterByDistrictsAsync(IEnumerable<string> districtKeys)
+        {
+            var results = new List<WorkflowModel?>();
+            if (districtKeys == null || !districtKeys.Any())
+                return results;
+
+            // Build OData filter: (District eq 'A' or District eq 'B' or ...)
+            var districtFilter = string.Join(" or ", districtKeys.Select(d => $"District eq '{d.Replace("'", "''")}'"));
+            var filter = $"Status eq 'InProgress' and ({districtFilter})";
+
+            try
+            {
+                await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
+                    filter: filter).ConfigureAwait(false))
+                {
+                    results.Add(new WorkflowModel
+                    {
+                        ValuationId = entity.RowKey,
+                        VehicleNumber = entity.VehicleNumber,
+                        ApplicantName = entity.ApplicantName,
+                        ApplicantContact = entity.ApplicantContact,
+                        Workflow = entity.Workflow,
+                        WorkflowStepOrder = entity.WorkflowStepOrder,
+                        Status = entity.Status,
+                        CreatedAt = entity.CreatedAt,
+                        CompletedAt = entity.CompletedAt,
+                        AssignedTo = entity.AssignedTo,
+                        Location = entity.Location,
+                        RedFlag = entity.RedFlag,
+                        Remarks = entity.Remarks,
+                        AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                        AssignedToEmail = entity.AssignedToEmail,
+                        AssignedToWhatsapp = entity.AssignedToWhatsapp,
+                        Name = entity.Name,
+                        ValuationType = entity.ValuationType
+                    });
+                }
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                // No records found, return empty list
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error querying workflow by districts", ex);
+            }
+
+            return results;
+        }
+
         public async Task UpdateCurrentWFAssignedToAsync(
             string valuationId, string vehicleNumber, string applicantContact, string? assignedTo = null,
             string? assignedToPhoneNumber = null,

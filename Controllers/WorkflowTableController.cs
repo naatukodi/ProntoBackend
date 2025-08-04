@@ -150,6 +150,32 @@ namespace Valuation.Api.Controllers
 
             return Ok(assignedTo);
         }
+
+        [HttpGet("filter/states")]
+        public async Task<IActionResult> FilterByStatesAsync([FromQuery] List<string> stateKeys)
+        {
+            if (stateKeys == null || stateKeys.Count == 0)
+                return BadRequest("State keys must be provided.");
+
+            var results = await _svc.FilterByStatesAsync(stateKeys);
+            if (results == null || results.Count == 0)
+                return NotFound("No workflows found for the specified states.");
+
+            return Ok(results);
+        }
+
+        [HttpGet("filter/districts")]
+        public async Task<IActionResult> FilterByDistrictsAsync([FromQuery] List<string> districtKeys)
+        {
+            if (districtKeys == null || districtKeys.Count == 0)
+                return BadRequest("District keys must be provided.");
+
+            var results = await _svc.FilterByDistrictsAsync(districtKeys);
+            if (results == null || results.Count == 0)
+                return NotFound("No workflows found for the specified districts.");
+
+            return Ok(results);
+        }
     }
 }
 

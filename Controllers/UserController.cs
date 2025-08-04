@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Valuation.Api.Models;
 
@@ -56,6 +57,53 @@ public class UserController : ControllerBase
             return NotFound("No users found for this role.");
 
         return Ok(users);
+    }
+
+    [HttpGet("{userId}/States")]
+    public async Task<IActionResult> GetUserStates(string userId)
+    {
+        var states = await _roleService.GetUserStatesAsync(userId);
+        if (states == null || !states.Any())
+            return NotFound("No states found for this user.");
+
+        return Ok(states);
+    }
+    [HttpGet("{userId}/Districts")]
+    public async Task<IActionResult> GetUserDistricts(string userId)
+    {
+        var districts = await _roleService.GetUserDistrictsAsync(userId);
+        if (districts == null || !districts.Any())
+            return NotFound("No districts found for this user.");
+
+        return Ok(districts);
+    }
+
+    [HttpPost("{userId}/States")]
+    public async Task<IActionResult> AppendStateToUser(string userId, [FromBody] string state)
+    {
+        await _roleService.AppendStateToUserAsync(userId, state);
+        return NoContent();
+    }
+
+    [HttpPost("{userId}/Districts")]
+    public async Task<IActionResult> AppendDistrictToUser(string userId, [FromBody] string district)
+    {
+        await _roleService.AppendDistrictToUserAsync(userId, district);
+        return NoContent();
+    }
+
+    [HttpDelete("{userId}/States/{stateKey}")]
+    public async Task<IActionResult> DeleteStateFromUser(string userId, string stateKey)
+    {
+        await _roleService.DeleteStateFromUserAsync(userId, stateKey);
+        return NoContent();
+    }
+
+    [HttpDelete("{userId}/Districts/{districtKey}")]
+    public async Task<IActionResult> DeleteDistrictFromUser(string userId, string districtKey)
+    {
+        await _roleService.DeleteDistrictFromUserAsync(userId, districtKey);
+        return NoContent();
     }
 
 }

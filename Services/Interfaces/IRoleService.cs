@@ -19,4 +19,14 @@ public interface IRoleService
     Task<IEnumerable<UserModel>> GetUsersByRoleAsync(string roleId);
     Task AssignRoleToUserAsync(string userId, string roleId);
     Task RemoveRoleFromUserAsync(string userId, string roleId);
+
+    // Assign State, Districts to User
+
+    Task<List<string>> GetUserStatesAsync(string userId);
+    Task<List<string>> GetUserDistrictsAsync(string userId);
+    Task AppendStateToUserAsync(string userId, string stateKey);
+    Task AppendDistrictToUserAsync(string userId, string districtKey);
+
+    Task DeleteStateFromUserAsync(string userId, string stateKey);
+    Task DeleteDistrictFromUserAsync(string userId, string districtKey);
 }
