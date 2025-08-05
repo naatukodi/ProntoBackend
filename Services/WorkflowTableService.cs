@@ -84,6 +84,8 @@ namespace Valuation.Api.Services
             if (dto.FinalReportAssignedToEmail != null) entity.FinalReportAssignedToEmail = dto.FinalReportAssignedToEmail;
             if (dto.FinalReportAssignedToWhatsapp != null) entity.FinalReportAssignedToWhatsapp = dto.FinalReportAssignedToWhatsapp;
             if (dto.Location != null) entity.Location = dto.Location;
+            if (dto.State != null) entity.State = dto.State;
+            if (dto.District != null) entity.District = dto.District;
             if (dto.RedFlag != null) entity.RedFlag = dto.RedFlag;
             if (dto.Remarks != null) entity.Remarks = dto.Remarks;
             if (dto.AssignedToPhoneNumber != null) entity.AssignedToPhoneNumber = dto.AssignedToPhoneNumber;
@@ -148,7 +150,7 @@ namespace Valuation.Api.Services
         {
             var results = new List<WorkflowModel?>();
             if (stateKeys == null || !stateKeys.Any())
-            return results;
+                return results;
 
             // Build OData filter: (State eq 'A' or State eq 'B' or ...)
             var stateFilter = string.Join(" or ", stateKeys.Select(s => $"State eq '{s.Replace("'", "''")}'"));
@@ -156,39 +158,39 @@ namespace Valuation.Api.Services
 
             try
             {
-            await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
-                filter: filter).ConfigureAwait(false))
-            {
-                results.Add(new WorkflowModel
+                await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
+                    filter: filter).ConfigureAwait(false))
                 {
-                ValuationId = entity.RowKey,
-                VehicleNumber = entity.VehicleNumber,
-                ApplicantName = entity.ApplicantName,
-                ApplicantContact = entity.ApplicantContact,
-                Workflow = entity.Workflow,
-                WorkflowStepOrder = entity.WorkflowStepOrder,
-                Status = entity.Status,
-                CreatedAt = entity.CreatedAt,
-                CompletedAt = entity.CompletedAt,
-                AssignedTo = entity.AssignedTo,
-                Location = entity.Location,
-                RedFlag = entity.RedFlag,
-                Remarks = entity.Remarks,
-                AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
-                AssignedToEmail = entity.AssignedToEmail,
-                AssignedToWhatsapp = entity.AssignedToWhatsapp,
-                Name = entity.Name,
-                ValuationType = entity.ValuationType
-                });
-            }
+                    results.Add(new WorkflowModel
+                    {
+                        ValuationId = entity.RowKey,
+                        VehicleNumber = entity.VehicleNumber,
+                        ApplicantName = entity.ApplicantName,
+                        ApplicantContact = entity.ApplicantContact,
+                        Workflow = entity.Workflow,
+                        WorkflowStepOrder = entity.WorkflowStepOrder,
+                        Status = entity.Status,
+                        CreatedAt = entity.CreatedAt,
+                        CompletedAt = entity.CompletedAt,
+                        AssignedTo = entity.AssignedTo,
+                        Location = entity.Location,
+                        RedFlag = entity.RedFlag,
+                        Remarks = entity.Remarks,
+                        AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                        AssignedToEmail = entity.AssignedToEmail,
+                        AssignedToWhatsapp = entity.AssignedToWhatsapp,
+                        Name = entity.Name,
+                        ValuationType = entity.ValuationType
+                    });
+                }
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-            // No records found, return empty list
+                // No records found, return empty list
             }
             catch (Exception ex)
             {
-            throw new InvalidOperationException("Error querying workflow by states", ex);
+                throw new InvalidOperationException("Error querying workflow by states", ex);
             }
 
             return results;

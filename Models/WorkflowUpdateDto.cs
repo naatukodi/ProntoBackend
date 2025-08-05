@@ -34,6 +34,9 @@ namespace Valuation.Api.Models
         public string? AssignedTo { get; set; } = default!;
 
         public string? Location { get; set; } = default!;
+
+        public string? State { get; set; } = default!;
+        public string? District { get; set; } = default!;
         public string? AssignedToPhoneNumber { get; set; }
         public string? AssignedToEmail { get; set; }
         public string? AssignedToWhatsapp { get; set; }
