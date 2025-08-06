@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Valuation.Api.Models;
+using Valuation.Api.Services;
 
 // Controllers/UserController.cs
 [ApiController]

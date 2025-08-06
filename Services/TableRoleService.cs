@@ -7,15 +7,19 @@ using System.Linq;
 using System.Threading.Tasks;
 using Valuation.Api.Models;
 
+namespace Valuation.Api.Services;
+
 public class TableRoleService : IRoleService
 {
     private readonly TableClient _rolesTable;
     private readonly TableClient _userRolesTable;
     private readonly TableClient _usersTable;
+    private readonly IStateService _stateService;
 
-    public TableRoleService(IConfiguration config)
+    public TableRoleService(IConfiguration config, IStateService stateService)
     {
         var conn = config.GetConnectionString("TableStorage")!;
+        _stateService = stateService;
         var client = new TableServiceClient(conn);
 
         _rolesTable = client.GetTableClient("Roles");
@@ -152,6 +156,13 @@ public class TableRoleService : IRoleService
             // Remove state if it exists
             existingStates.Remove(state);
 
+            // Remove districts belonging to the removed state from assignedDistricts
+            var districtsToRemove = await _stateService.GetDistrictsByStateAsync(state);
+            foreach (var district in districtsToRemove)
+            {
+                await DeleteDistrictFromUserAsync(userId, district);
+            }
+
             // Serialize back to JSON
             userEntity.assignedStates = System.Text.Json.JsonSerializer.Serialize(existingStates);
 
@@ -249,6 +260,8 @@ public class TableRoleService : IRoleService
                 State = entity.State,
                 Country = entity.Country,
                 Pincode = entity.Pincode,
+                AssignedStates = entity.assignedStates ?? "[]",
+                AssignedDistricts = entity.assignedDistricts ?? "[]",
                 RoleId = roles.FirstOrDefault() ?? string.Empty // assuming single role
             });
         }
