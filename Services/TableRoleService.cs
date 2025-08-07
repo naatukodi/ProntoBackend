@@ -292,7 +292,9 @@ public class TableRoleService : IRoleService
                 Block = entity.Value.Block,
                 State = entity.Value.State,
                 Country = entity.Value.Country,
-                Pincode = entity.Value.Pincode
+                Pincode = entity.Value.Pincode,
+                AssignedDistricts = entity.Value.assignedDistricts ?? "[]",
+                AssignedStates = entity.Value.assignedStates ?? "[]"
             };
         }
         catch (RequestFailedException)
