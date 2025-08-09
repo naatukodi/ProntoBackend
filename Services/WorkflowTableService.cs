@@ -123,6 +123,8 @@ namespace Valuation.Api.Services
                         CompletedAt = entity.CompletedAt,
                         AssignedTo = entity.AssignedTo,
                         Location = entity.Location,
+                        AssignedDistricts = entity.AssignedDistricts,
+                        AssignedStates = entity.AssignedStates,
                         RedFlag = entity.RedFlag,
                         Remarks = entity.Remarks,
                         AssignedToPhoneNumber = entity.AssignedToPhoneNumber,

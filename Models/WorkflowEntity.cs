@@ -23,6 +23,8 @@ namespace Valuation.Api.Models
         public DateTime? UpdatedAt { get; set; }
         public string? AssignedTo { get; set; } = default!;
         public string? Location { get; set; } = default!;
+        public string? AssignedDistricts { get; set; } = default!;
+        public string? AssignedStates { get; set; } = default!;
         public string? State { get; set; } = default!;
         public string? District { get; set; } = default!;
 
