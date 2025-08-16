@@ -126,27 +126,10 @@ public class QualityControlService : IQualityControlService
 
         doc.QualityControl.UpdatedAt = DateTime.UtcNow;
 
-        doc.AssignedTo = assignedTo;
-        doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty);
-        doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? string.Empty);
-        doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty);
-
         // 3) Upsert
         await Container.UpsertItemAsync(doc, pk);
         // 4) update Workflow table
         await _workflowTableService.QualityControlWFUpdateAssignmentAsync(
-            valuationId,
-            vehicleNumber,
-            applicantContact,
-            assignedTo ?? string.Empty,
-            Uri.UnescapeDataString(assignedToPhoneNumber ?? string.Empty),
-            Uri.UnescapeDataString(assignedToEmail ?? string.Empty),
-            Uri.UnescapeDataString(assignedToWhatsapp ?? string.Empty)
-        );
-
-        await Task.Delay(1000); // Simulate delay for workflow update
-
-        await _workflowTableService.UpdateCurrentWFAssignedToAsync(
             valuationId,
             vehicleNumber,
             applicantContact,

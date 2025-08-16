@@ -552,11 +552,6 @@ public class ValuationService : IValuationService
             doc.VehicleDetails.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
             doc.UpdatedAt = DateTime.UtcNow;
 
-            doc.AssignedTo = assignedTo;
-            doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
-            doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
-            doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
-
             // Ensure CreatedAt is set if not already
             if (doc.CreatedAt == default)
                 doc.CreatedAt = DateTime.UtcNow;
@@ -581,11 +576,7 @@ public class ValuationService : IValuationService
         {
             doc.VehicleDetails = new VehicleDetailsDto
             {
-                RegistrationNumber = vehicleNumber,
-                AssignedTo = assignedTo,
-                AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
-                AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? ""),
-                AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "")
+                RegistrationNumber = vehicleNumber
             };
         }
 
@@ -604,18 +595,6 @@ public class ValuationService : IValuationService
         await policy.ExecuteAsync(async () =>
         {
             await _workflowTableService.BackendWFUpdateAssignmentAsync(
-                valuationId,
-                vehicleNumber,
-                applicantContact,
-                assignedTo ?? "",
-                Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
-                Uri.UnescapeDataString(assignedToEmail ?? ""),
-                Uri.UnescapeDataString(assignedToWhatsapp ?? "")
-            );
-
-            await Task.Delay(1000);
-
-            await _workflowTableService.UpdateCurrentWFAssignedToAsync(
                 valuationId,
                 vehicleNumber,
                 applicantContact,

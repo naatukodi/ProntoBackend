@@ -287,12 +287,6 @@ namespace Valuation.Api.Services
                 };
             }
 
-            doc.AssignedTo = assignedTo;
-            doc.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
-            doc.AssignedToEmail = Uri.UnescapeDataString(assignedToEmail ?? "");
-            doc.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
-            doc.UpdatedAt = DateTime.UtcNow;
-
             // Ensure CreatedAt is set if not already
             if (doc.CreatedAt == default)
                 doc.CreatedAt = DateTime.UtcNow;
@@ -308,18 +302,6 @@ namespace Valuation.Api.Services
             await policy.ExecuteAsync(async () =>
             {
                 await _workflowTableService.StakeholderWFUpdateAssignmentAsync(
-                    valuationId,
-                    vehicleNumber,
-                    applicantContact,
-                    assignedTo ?? "",
-                    Uri.UnescapeDataString(assignedToPhoneNumber ?? ""),
-                    Uri.UnescapeDataString(assignedToEmail ?? ""),
-                    Uri.UnescapeDataString(assignedToWhatsapp ?? "")
-                );
-
-                await Task.Delay(1000);
-
-                await _workflowTableService.UpdateCurrentWFAssignedToAsync(
                     valuationId,
                     vehicleNumber,
                     applicantContact,
