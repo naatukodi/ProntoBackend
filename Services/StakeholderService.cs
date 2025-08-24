@@ -190,6 +190,8 @@ namespace Valuation.Api.Services
                 ApplicantName = dto.ApplicantName,
                 ApplicantContact = dto.ApplicantContact,
                 Location = dto.LocationName,
+                State = dto.State,
+                District = dto.District,
                 Workflow = "Stakeholder",
                 WorkflowStepOrder = 1,
                 Status = "InProgress",
