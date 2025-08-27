@@ -7,7 +7,9 @@ namespace Valuation.Api.Services
     public class WorkflowTableService : IWorkflowTableService
     {
         private const string TableName = "Workflows";
+        private const string CompletedTableName = "CompletedWorkflows";
         private readonly TableClient _tableClient;
+        private readonly TableClient _completedTableClient;
 
         public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
@@ -18,9 +20,11 @@ namespace Valuation.Api.Services
             // Create a TableClient (client for the Workflows table)
             var serviceClient = new TableServiceClient(connString);
             _tableClient = serviceClient.GetTableClient(TableName);
+            _completedTableClient = serviceClient.GetTableClient(CompletedTableName);
 
             // Ensure the table exists (synchronous method)
             _tableClient.CreateIfNotExists();
+            _completedTableClient.CreateIfNotExists();
         }
 
         public async Task UpdateAsync(WorkflowUpdateDto dto)
@@ -571,12 +575,31 @@ namespace Valuation.Api.Services
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
 
-                // Upsert (insert or merge)
-                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+                // Upsert (insert or merge) to CompletedWorkflows table
+                await _completedTableClient.CreateIfNotExistsAsync().ConfigureAwait(false);
+
+                // Insert into CompletedWorkflows
+                await _completedTableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace).ConfigureAwait(false);
+
+                // Delete from Workflows table only if it exists
+                try
+                {
+                    // Check if entity exists before attempting to delete
+                    var getResponse = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey).ConfigureAwait(false);
+                    if (getResponse != null && getResponse.Value != null)
+                    {
+                        await _tableClient.DeleteEntityAsync(partitionKey, rowKey).ConfigureAwait(false);
+                    }
+                }
+                catch (RequestFailedException ex) when (ex.Status == 404)
+                {
+                    // Entity does not exist, nothing to delete
+                }
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                throw new InvalidOperationException("Workflow not found for completion", ex);
+                // Workflow not found for completion, nothing to do
+                return;
             }
         }
 
