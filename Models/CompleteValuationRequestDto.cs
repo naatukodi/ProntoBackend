@@ -10,4 +10,7 @@ public class CompleteValuationRequestDto
     public DateTime? PaymentDate { get; set; }
     public string? PaymentMethod { get; set; }
     public string? PaymentAmount { get; set; }
+    public string? CompletedByPhoneNumber { get; set; }
+    public string? CompletedByEmail { get; set; }
+    public string? CompletedByWhatsapp { get; set; }
 }

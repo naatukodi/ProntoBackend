@@ -40,4 +40,7 @@ public class ValuationDocument
     public DateTime? PaymentDate { get; set; } // Nullable to allow for no payment date
     public string? PaymentMethod { get; set; } // Nullable to allow for no payment method
     public string? PaymentAmount { get; set; } // Nullable to allow for no payment amount
+    public string? CompletedByPhoneNumber { get; set; }
+    public string? CompletedByEmail { get; set; }
+    public string? CompletedByWhatsapp { get; set; }
 }
