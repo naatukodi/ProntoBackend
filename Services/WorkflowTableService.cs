@@ -556,7 +556,7 @@ namespace Valuation.Api.Services
         }
 
         public async Task CompleteFinalReportWFAsync(
-            string valuationId, string vehicleNumber, string applicantContact)
+            string valuationId, string vehicleNumber, string applicantContact, AssignmentDto assignment)
         {
             var partitionKey = $"{vehicleNumber}|{applicantContact}";
             var rowKey = valuationId;
@@ -574,6 +574,14 @@ namespace Valuation.Api.Services
                 entity.Status = "Completed";
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
+                entity.FinalReportAssignedTo = assignment.AssignedTo ?? "";
+                entity.FinalReportAssignedToPhoneNumber = assignment.AssignedToPhoneNumber ?? "";
+                entity.FinalReportAssignedToEmail = assignment.AssignedToEmail ?? "";
+                entity.FinalReportAssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
+                entity.AssignedTo = assignment.AssignedTo ?? "";
+                entity.AssignedToPhoneNumber = assignment.AssignedToPhoneNumber ?? "";
+                entity.AssignedToEmail = assignment.AssignedToEmail ?? "";
+                entity.AssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
 
                 // Upsert (insert or merge) to CompletedWorkflows table
                 await _completedTableClient.CreateIfNotExistsAsync().ConfigureAwait(false);
@@ -639,8 +647,41 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found → return null
-                return null;
+                // Not found in Workflows, check CompletedWorkflows
+                try
+                {
+                    var completedResponse = await _completedTableClient.GetEntityAsync<WorkflowEntity>(
+                        partitionKey: partitionKey,
+                        rowKey: rowKey).ConfigureAwait(false);
+
+                    var e = completedResponse.Value;
+                    return new WorkflowModel
+                    {
+                        ValuationId = e.RowKey,
+                        VehicleNumber = e.VehicleNumber,
+                        ApplicantName = e.ApplicantName,
+                        ApplicantContact = e.ApplicantContact,
+                        Workflow = e.Workflow,
+                        WorkflowStepOrder = e.WorkflowStepOrder,
+                        Status = e.Status,
+                        CreatedAt = e.CreatedAt,
+                        CompletedAt = e.CompletedAt,
+                        AssignedTo = e.AssignedTo,
+                        Location = e.Location,
+                        RedFlag = e.RedFlag,
+                        Remarks = e.Remarks,
+                        AssignedToPhoneNumber = e.AssignedToPhoneNumber,
+                        AssignedToEmail = e.AssignedToEmail,
+                        AssignedToWhatsapp = e.AssignedToWhatsapp,
+                        Name = e.Name,
+                        ValuationType = e.ValuationType
+                    };
+                }
+                catch (RequestFailedException ex2) when (ex2.Status == 404)
+                {
+                    // Not found in either table
+                    return null;
+                }
             }
         }
 

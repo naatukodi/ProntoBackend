@@ -12,7 +12,7 @@ namespace Valuation.Api.Services
         Task<List<WorkflowModel?>> FilterByStatesAsync(IEnumerable<string> stateKeys);
 
         Task<List<WorkflowModel?>> FilterByDistrictsAsync(IEnumerable<string> districtKeys);
-        
+
         Task UpdateCurrentWFAssignedToAsync(
             string valuationId, string vehicleNumber, string applicantContact, string? assignedTo = null,
             string? assignedToPhoneNumber = null, string? assignedToEmail = null, string? assignedToWhatsapp = null);
@@ -85,7 +85,8 @@ namespace Valuation.Api.Services
         Task CompleteFinalReportWFAsync(
             string ValuationId,
             string VehicleNumber,
-            string ApplicantContact);
+            string ApplicantContact,
+            AssignmentDto assignment);
 
     }
 

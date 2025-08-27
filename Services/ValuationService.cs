@@ -208,15 +208,29 @@ public class ValuationService : IValuationService
                 partitionKey: pk);
             var doc = resp.Resource;
 
-            doc.Status = request.Status;
-            doc.CompletedAt = request.CompletedAt ?? DateTime.UtcNow;
-            doc.CompletedBy = request.CompletedBy;
+            if (doc.Status != request.Status)
+                doc.Status = request.Status;
+            if (doc.CompletedAt != (request.CompletedAt ?? DateTime.UtcNow))
+                doc.CompletedAt = request.CompletedAt ?? DateTime.UtcNow;
+            if (doc.CompletedBy != request.CompletedBy)
+                doc.CompletedBy = request.CompletedBy;
+            if (doc.CompletedByPhoneNumber != request.CompletedByPhoneNumber)
+                doc.CompletedByPhoneNumber = request.CompletedByPhoneNumber;
+            if (doc.CompletedByEmail != request.CompletedByEmail)
+                doc.CompletedByEmail = request.CompletedByEmail;
+            if (doc.CompletedByWhatsapp != request.CompletedByWhatsapp)
+                doc.CompletedByWhatsapp = request.CompletedByWhatsapp;
 
-            doc.PaymentStatus = request.PaymentStatus;
-            doc.PaymentReference = request.PaymentReference;
-            doc.PaymentDate = request.PaymentDate;
-            doc.PaymentMethod = request.PaymentMethod;
-            doc.PaymentAmount = request.PaymentAmount;
+            if (doc.PaymentStatus != request.PaymentStatus)
+                doc.PaymentStatus = request.PaymentStatus;
+            if (doc.PaymentReference != request.PaymentReference)
+                doc.PaymentReference = request.PaymentReference;
+            if (doc.PaymentDate != request.PaymentDate)
+                doc.PaymentDate = request.PaymentDate;
+            if (doc.PaymentMethod != request.PaymentMethod)
+                doc.PaymentMethod = request.PaymentMethod;
+            if (doc.PaymentAmount != request.PaymentAmount)
+                doc.PaymentAmount = request.PaymentAmount;
 
             await Container.UpsertItemAsync(doc, pk);
 
@@ -224,7 +238,13 @@ public class ValuationService : IValuationService
             await _workflowTableService.CompleteFinalReportWFAsync(
                 valuationId,
                 vehicleNumber,
-                applicantContact
+                applicantContact, new AssignmentDto
+                {
+                    AssignedTo = request.CompletedBy ?? "",
+                    AssignedToPhoneNumber = request.CompletedByPhoneNumber ?? "",
+                    AssignedToEmail = request.CompletedByEmail ?? "",
+                    AssignedToWhatsapp = request.CompletedByWhatsapp ?? ""
+                }
             );
 
             return new OkResult();
