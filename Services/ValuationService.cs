@@ -311,7 +311,8 @@ public class ValuationService : IValuationService
     public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
     {
 
-        var regNumber = registration.Replace(" ", "").ToUpper();
+        //var regNumber = registration.Replace(" ", "").ToUpper();
+        var regNumber = "TN12XX2345"; // Hardcoded for testing
 
         using var client = new HttpClient();
 
