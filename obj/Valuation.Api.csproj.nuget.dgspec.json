@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/Users/tirurao/Working/Valuation.Api/Valuation.Api.csproj": {}
+    "C:\\Users\\ASUS\\Desktop\\ProntoBackend\\Valuation.Api.csproj": {}
   },
   "projects": {
-    "/Users/tirurao/Working/Valuation.Api/Valuation.Api.csproj": {
+    "C:\\Users\\ASUS\\Desktop\\ProntoBackend\\Valuation.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/tirurao/Working/Valuation.Api/Valuation.Api.csproj",
+        "projectUniqueName": "C:\\Users\\ASUS\\Desktop\\ProntoBackend\\Valuation.Api.csproj",
         "projectName": "Valuation.Api",
-        "projectPath": "/Users/tirurao/Working/Valuation.Api/Valuation.Api.csproj",
-        "packagesPath": "/Users/tirurao/.nuget/packages/",
-        "outputPath": "/Users/tirurao/Working/Valuation.Api/obj/",
+        "projectPath": "C:\\Users\\ASUS\\Desktop\\ProntoBackend\\Valuation.Api.csproj",
+        "packagesPath": "C:\\Users\\ASUS\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\ASUS\\Desktop\\ProntoBackend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/Users/tirurao/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\ASUS\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -37,13 +37,16 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        },
-        "SdkAnalysisLevel": "9.0.200"
+        }
       },
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "Azure.Data.Tables": {
+              "target": "Package",
+              "version": "[12.11.0, )"
+            },
             "Azure.Storage.Blobs": {
               "target": "Package",
               "version": "[12.24.0, )"
@@ -56,9 +59,23 @@
               "target": "Package",
               "version": "[3.51.0, )"
             },
+            "Microsoft.EntityFrameworkCore.Design": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
             "Newtonsoft.Json": {
               "target": "Package",
               "version": "[13.0.3, )"
+            },
+            "Polly": {
+              "target": "Package",
+              "version": "[8.6.2, )"
+            },
+            "QuestPDF": {
+              "target": "Package",
+              "version": "[2025.5.0, )"
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
@@ -76,20 +93,6 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[8.0.14, 8.0.14]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Host.osx-arm64",
-              "version": "[8.0.14, 8.0.14]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Ref",
-              "version": "[8.0.14, 8.0.14]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -98,7 +101,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/9.0.202/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.415/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

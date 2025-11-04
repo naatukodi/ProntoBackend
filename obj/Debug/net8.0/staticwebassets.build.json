@@ -1,12 +1,11 @@
 {
   "Version": 1,
-  "Hash": "E6qLwAYl61fjx4c0B8D9jDcBw4ZBxEW5GcI2Cw5xzD4=",
+  "Hash": "/0R4fkD6PCZ2fuQV0WwQz/vkkkYCvRvmkxRcnlADeJQ=",
   "Source": "Valuation.Api",
   "BasePath": "_content/Valuation.Api",
   "Mode": "Default",
   "ManifestType": "Build",
   "ReferencedProjectsConfiguration": [],
   "DiscoveryPatterns": [],
-  "Assets": [],
-  "Endpoints": []
+  "Assets": []
 }

@@ -7,6 +7,7 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using Polly;
 
+
 namespace Valuation.Api.Services
 {
     public class StakeholderService : IStakeholderService
@@ -15,6 +16,7 @@ namespace Valuation.Api.Services
         private readonly BlobServiceClient _blobService;
         private readonly string _blobContainerName;
         private readonly IWorkflowTableService _workflowTableService;
+
 
         public StakeholderService(
             CosmosClient cosmos,
@@ -29,16 +31,19 @@ namespace Valuation.Api.Services
                 ?? throw new InvalidOperationException("Blob:ContainerName not configured");
         }
 
+
         public async Task<Stakeholder?> GetAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
             var databaseName = Environment.GetEnvironmentVariable("Cosmos:Database") ?? "ValuationsDb";
             var containerName = Environment.GetEnvironmentVariable("Cosmos:Container") ?? "Valuations";
+
 
             var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
             var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
             try
             {
                 var resp = await container.ReadItemAsync<ValuationDocument>(valuationId, pk);
+                // Return stakeholder with all properties including Remarks
                 return resp.Resource.Stakeholder ?? new Stakeholder
                 {
                     Name = "",
@@ -47,7 +52,8 @@ namespace Valuation.Api.Services
                     ExecutiveWhatsapp = "",
                     ExecutiveEmail = "",
                     Applicant = new Applicant { Name = "", Contact = "" },
-                    Documents = new List<Document>()
+                    Documents = new List<Document>(),
+                    Remarks = null
                 };
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -60,10 +66,12 @@ namespace Valuation.Api.Services
                     ExecutiveWhatsapp = "",
                     ExecutiveEmail = "",
                     Applicant = new Applicant { Name = "", Contact = "" },
-                    Documents = new List<Document>()
+                    Documents = new List<Document>(),
+                    Remarks = null
                 };
             }
         }
+
 
         public async Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
@@ -81,10 +89,12 @@ namespace Valuation.Api.Services
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { }
         }
 
+
         public async Task UpdateAsync(StakeholderUpdateDto dto)
         {
             var databaseName = Environment.GetEnvironmentVariable("Cosmos:DatabaseId") ?? "ValuationsDb";
             var containerName = Environment.GetEnvironmentVariable("Cosmos:ContainerId") ?? "Valuations";
+
 
             var container = _cosmos.GetDatabase(databaseName).GetContainer(containerName);
             // 1) Compute composite PK
@@ -107,9 +117,11 @@ namespace Valuation.Api.Services
                     ApplicantContact = dto.ApplicantContact
                 };
 
+
                 doc.Status = "Open";
                 doc.CreatedAt = DateTime.UtcNow;
             }
+
 
 
 
@@ -124,6 +136,7 @@ namespace Valuation.Api.Services
                 return client.Uri.ToString();
             }
 
+
             // Initialize workflow if missing
             if (doc.Workflow == null)
             {
@@ -137,7 +150,9 @@ namespace Valuation.Api.Services
             };
             }
 
-            // Map location
+
+            // Map location and ensure Remarks is preserved if not being updated
+            var existingRemarks = doc.Stakeholder?.Remarks;
             doc.Stakeholder = new Stakeholder
             {
                 Name = dto.Name,
@@ -147,6 +162,8 @@ namespace Valuation.Api.Services
                 ExecutiveEmail = dto.ExecutiveEmail,
                 ValuationType = dto.ValuationType,
                 VehicleSegment = dto.VehicleSegment,
+                // Use new Remarks if provided, otherwise preserve existing
+                Remarks = !string.IsNullOrWhiteSpace(dto.Remarks) ? dto.Remarks : existingRemarks,
                 VehicleLocation = new VehicleLocation
                 {
                     Pincode = dto.Pincode,
@@ -157,6 +174,7 @@ namespace Valuation.Api.Services
                     State = dto.State,
                     Country = dto.Country
 
+
                 },
                 Applicant = new Applicant
                 {
@@ -164,6 +182,7 @@ namespace Valuation.Api.Services
                     Contact = dto.ApplicantContact
                 }
             };
+
 
             // Upload documents
             var docs = new List<Document>();
@@ -177,10 +196,13 @@ namespace Valuation.Api.Services
                         docs.Add(new Document { Type = "Other", FilePath = u, UploadedAt = DateTime.UtcNow });
             doc.Stakeholder.Documents = docs;
 
+
             // 5) Ensure CompositeKey is set
             doc.CompositeKey = compositeKey;
 
+
             await container.UpsertItemAsync(doc, pk);
+
 
             // Mirror to Table
             var workflowDto = new WorkflowUpdateDto
@@ -197,7 +219,7 @@ namespace Valuation.Api.Services
                 Status = "InProgress",
                 CreatedAt = doc.CreatedAt,
                 RedFlag = doc.RedFlag,
-                Remarks = doc.Remarks,
+                Remarks = doc.Stakeholder?.Remarks,
                 StakeholderAssignedToEmail = doc.AssignedToEmail ?? "",
                 StakeholderAssignedToPhoneNumber = doc.AssignedToPhoneNumber ?? "",
                 StakeholderAssignedToWhatsapp = doc.AssignedToWhatsapp ?? "",
@@ -207,11 +229,13 @@ namespace Valuation.Api.Services
             await _workflowTableService.UpdateAsync(workflowDto);
         }
 
+
         public Task UpdateDocumentsAsync(StakeholderUpdateDto dto)
         {
             // Could implement separate logic to only upload docs
             return UpdateAsync(dto);
         }
+
 
         public async Task UpdateAssignmentAsync(string valuationId, string vehicleNumber, string applicantContact, string? assignedTo, string? assignedToPhoneNumber, string? assignedToEmail, string? assignedToWhatsapp)
         {
@@ -221,20 +245,24 @@ namespace Valuation.Api.Services
             var compositeKey = $"{vehicleNumber}|{applicantContact}";
             var pk = new PartitionKey(compositeKey);
 
+
             ValuationDocument doc;
             try
             {
                 var resp = await container.ReadItemAsync<ValuationDocument>(valuationId, pk);
                 doc = resp.Resource;
 
+
                 if (doc.Stakeholder == null)
                 {
                     doc.Stakeholder = new Stakeholder
                     {
                         Documents = new List<Document>(),
-                        Applicant = new Applicant()
+                        Applicant = new Applicant(),
+                        Remarks = null
                     };
                 }
+
 
                 doc.Stakeholder.AssignedTo = assignedTo;
                 doc.Stakeholder.AssignedToPhoneNumber = Uri.UnescapeDataString(assignedToPhoneNumber ?? "");
@@ -242,17 +270,21 @@ namespace Valuation.Api.Services
                 doc.Stakeholder.AssignedToWhatsapp = Uri.UnescapeDataString(assignedToWhatsapp ?? "");
                 doc.UpdatedAt = DateTime.UtcNow;
 
+
                 // Ensure CreatedAt is set if not already
                 if (doc.CreatedAt == default)
                     doc.CreatedAt = DateTime.UtcNow;
 
+
                 await container.UpsertItemAsync(doc, pk);
+
 
                 // Update the workflow table as well
                 // Retry the workflow update with Polly
                 var policy1 = Polly.Policy
                     .Handle<Exception>()
                     .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
 
                 await policy1.ExecuteAsync(async () =>
                 {
@@ -280,26 +312,32 @@ namespace Valuation.Api.Services
                 };
             }
 
+
             if (doc.Stakeholder == null)
             {
                 doc.Stakeholder = new Stakeholder
                 {
                     Documents = new List<Document>(),
-                    Applicant = new Applicant()
+                    Applicant = new Applicant(),
+                    Remarks = null
                 };
             }
+
 
             // Ensure CreatedAt is set if not already
             if (doc.CreatedAt == default)
                 doc.CreatedAt = DateTime.UtcNow;
 
+
             await container.UpsertItemAsync(doc, pk);
+
 
             // Update the workflow table as well
             // Retry the workflow update with Polly
             var policy = Polly.Policy
                 .Handle<Exception>()
                 .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+
 
             await policy.ExecuteAsync(async () =>
             {
@@ -315,5 +353,6 @@ namespace Valuation.Api.Services
             });
         }
     }
+
 
 }
