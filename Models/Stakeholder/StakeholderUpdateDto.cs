@@ -35,6 +35,8 @@ namespace Valuation.Api.Models
         public string? AssignedToPhoneNumber { get; set; }
         public string? AssignedToEmail { get; set; }
         public string? AssignedToWhatsapp { get; set; }
+        public string? Remarks { get; set; }
+
 
         // Files
         public IFormFile? RcFile { get; set; }

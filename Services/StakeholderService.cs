@@ -147,6 +147,7 @@ namespace Valuation.Api.Services
                 ExecutiveEmail = dto.ExecutiveEmail,
                 ValuationType = dto.ValuationType,
                 VehicleSegment = dto.VehicleSegment,
+                Remarks = dto.Remarks,
                 VehicleLocation = new VehicleLocation
                 {
                     Pincode = dto.Pincode,
