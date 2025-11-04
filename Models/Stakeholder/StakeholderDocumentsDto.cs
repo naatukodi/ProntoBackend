@@ -15,8 +15,5 @@ namespace Valuation.Api.Models
         public IFormFile InsuranceFile { get; set; } = default!;
 
         public IFormFileCollection? OtherFiles { get; set; }
-
-        // New Remarks field added
-        public string? Remarks { get; set; }
     }
 }
