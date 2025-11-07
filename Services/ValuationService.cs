@@ -100,7 +100,8 @@ public class ValuationService : IValuationService
                 StencilTrace = null,          // not used in GET
                 ChassisNoPhoto = null,        // not used in GET
                 StencilTraceUrl = doc.VehicleDetails.StencilTraceUrl,
-                ChassisNoPhotoUrl = doc.VehicleDetails.ChassisNoPhotoUrl
+                ChassisNoPhotoUrl = doc.VehicleDetails.ChassisNoPhotoUrl,
+                Remarks = doc.VehicleDetails.Remarks
             };
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -136,7 +137,8 @@ public class ValuationService : IValuationService
                 FitnessNo = null,
                 FitnessValidTo = null,
                 BacklistStatus = false,
-                RcStatus = false
+                RcStatus = false,
+                Remarks = null
             };
         }
     }
@@ -421,6 +423,9 @@ public class ValuationService : IValuationService
         dto.InsurancePolicyNo = api.InsurancePolicyNumber ?? dto.InsurancePolicyNo;
         if (DateTime.TryParse(api.InsuranceUpto, out var insUpto))
             dto.InsuranceValidUpTo = insUpto;
+        // PRESERVE remarks so user edits are not lost
+        if (string.IsNullOrWhiteSpace(dto.Remarks))
+        dto.Remarks = dto.Remarks;
     }
 
     public async Task<List<OpenValuationDto>> GetOpenValuationsAsync()
@@ -460,6 +465,9 @@ public class ValuationService : IValuationService
     {
         if (string.IsNullOrWhiteSpace(registrationNumber))
             throw new ArgumentException("Registration number is required.", nameof(registrationNumber));
+        
+        //  PRESERVE remarks BEFORE any RC enrichment
+        var preservedRemarks = dto.Remarks;
 
         // 1) Fetch existing & RC‐enriched DTO
         // Retry fetching RC-enriched DTO with Polly
@@ -484,6 +492,9 @@ public class ValuationService : IValuationService
                 prop.SetValue(dto, updatedValue);
             }
         }
+
+        //  RESTORE remarks after all updates
+        dto.Remarks = preservedRemarks;
 
         // 2) Compute your partition key
         var pk = GetPk(registrationNumber, applicantContact);

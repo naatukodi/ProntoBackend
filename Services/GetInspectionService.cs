@@ -172,6 +172,9 @@ namespace Valuation.Api.Services
                 doc.InspectionDetails.AllHosePipes = dto.AllHosePipes;
             if (photoUrls.Count > 0)
                 doc.InspectionDetails.Photos = photoUrls;
+            if (dto.Remarks != null)
+                doc.InspectionDetails.Remarks = dto.Remarks;
+
 
             // 4) Upsert
             await container.UpsertItemAsync(doc, pk);
