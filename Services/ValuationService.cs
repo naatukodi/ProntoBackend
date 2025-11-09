@@ -233,6 +233,8 @@ public class ValuationService : IValuationService
                 doc.PaymentMethod = request.PaymentMethod;
             if (doc.PaymentAmount != request.PaymentAmount)
                 doc.PaymentAmount = request.PaymentAmount;
+            if (doc.Remarks != request.Remarks)
+                doc.Remarks = request.Remarks;
 
             await Container.UpsertItemAsync(doc, pk);
 
