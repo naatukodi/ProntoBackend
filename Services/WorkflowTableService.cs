@@ -571,7 +571,7 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update status to Completed
-                entity.Status = "Completed";
+                entity.Status = "Status";
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
                 entity.FinalReportAssignedTo = assignment.AssignedTo ?? "";
