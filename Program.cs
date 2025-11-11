@@ -12,6 +12,22 @@ var builder = WebApplication.CreateBuilder(args);
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 QuestPDF.Settings.EnableDebugging = true;
 
+// --- 0.5) ✅ ADD CORS CONFIGURATION HERE (BEFORE builder.Build())
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+    {
+        policy.WithOrigins(
+            "http://localhost:4200",      // Angular dev server
+            "http://localhost:3000",      // Alternative port
+            "http://127.0.0.1:4200"       // Localhost alias
+        )
+        .AllowAnyMethod()
+        .AllowAnyHeader()
+        .AllowCredentials();
+    });
+});
+
 // --- 1) Swagger/OpenAPI ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -60,18 +76,15 @@ await dbRes.Database.CreateContainerIfNotExistsAsync(new ContainerProperties
 builder.Services.AddSingleton(_ => cosmosClient);
 
 // --- 4) Table Storage: Workflow (prontovalutions) + States (prontoblobs) tables ---
-// Workflow table in the 'prontovalutions' storage account
 var workflowConn   = builder.Configuration.GetConnectionString("TableStorage")
                          ?? throw new InvalidOperationException("TableStorage connection missing.");
 var workflowTable  = builder.Configuration["TableStorage:TableName"] ?? "Workflow";
 
-// States table lives in the 'prontoblobs' storage account (reuse the blob connection string)
 var blobConn       = builder.Configuration["Blob:ConnectionString"]
                          ?? throw new InvalidOperationException("Missing Blob:ConnectionString");
 var statesTable    = builder.Configuration.GetConnectionString("StatesTableName")
                          ?? throw new InvalidOperationException("StatesTableName missing.");
 
-// ServiceClient for workflow
 var workflowTableSvc = new TableServiceClient(workflowConn);
 await workflowTableSvc.CreateTableIfNotExistsAsync(workflowTable);
 builder.Services.AddSingleton(workflowTableSvc);
@@ -79,13 +92,12 @@ builder.Services.AddSingleton(sp =>
     sp.GetRequiredService<TableServiceClient>()
       .GetTableClient(workflowTable));
 
-// ServiceClient for states (in the blob/storage account)
 var statesTableSvc = new TableServiceClient(blobConn);
 await statesTableSvc.CreateTableIfNotExistsAsync(statesTable);
 builder.Services.AddSingleton(statesTableSvc);
 builder.Services.AddScoped<IStateService>(sp =>
     new StatesService(
-        sp.GetRequiredService<TableServiceClient>()        // Note: this resolves the statesTableSvc
+        sp.GetRequiredService<TableServiceClient>()
           .GetTableClient(statesTable)
     ));
 
@@ -116,12 +128,18 @@ builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 builder.Services.AddScoped<IRoleService, TableRoleService>();
 builder.Services.AddScoped<TableRoleService>();
 
+// ✅ CommonNoteService is already registered
+builder.Services.AddScoped<ICommonNoteService, CommonNoteService>();
+
 // --- 7) MVC Controllers ---
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
 // --- 8) Middleware pipeline ---
+// ✅ ADD CORS MIDDLEWARE HERE (BEFORE UseRouting)
+app.UseCors("AllowAngular");
+
 app.UseRouting();
 
 app.UseSwagger();

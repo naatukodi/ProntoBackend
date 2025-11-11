@@ -102,7 +102,7 @@ namespace Valuation.Api.Services
                 doc = new ValuationDocument
                 {
                     id = dto.ValuationId,
-                    CompositeKey = pk.ToString(),
+                    CompositeKey = compositeKey,
                     VehicleNumber = dto.VehicleNumber,
                     ApplicantContact = dto.ApplicantContact
                 };
