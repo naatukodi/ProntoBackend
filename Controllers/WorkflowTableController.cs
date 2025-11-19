@@ -73,6 +73,22 @@ namespace Valuation.Api.Controllers
 
             return NoContent();
         }
+
+        [HttpPost("addhistory")]
+        public async Task<IActionResult> AddHistory(
+            [FromBody] LeadHistoryDto dto)
+        {
+            await _svc.AddHistoryAsync(dto);
+            return NoContent();
+        }
+
+        [HttpGet("gethistory")]
+        public async Task<IActionResult> GetHistory(
+            Guid valuationId)
+        {
+            await _svc.GetHistoryAsync(valuationId.ToString());
+            return NoContent();
+        }
     }
 
     [ApiController]

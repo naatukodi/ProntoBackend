@@ -10,6 +10,8 @@ namespace Valuation.Api.Services
         private const string CompletedTableName = "CompletedWorkflows";
         private readonly TableClient _tableClient;
         private readonly TableClient _completedTableClient;
+        private const string LeadHistoryTableName = "LeadHistory";
+        private readonly TableClient _leadHistoryTableClient;
 
         public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
@@ -22,9 +24,63 @@ namespace Valuation.Api.Services
             _tableClient = serviceClient.GetTableClient(TableName);
             _completedTableClient = serviceClient.GetTableClient(CompletedTableName);
 
+            _leadHistoryTableClient = serviceClient.GetTableClient(LeadHistoryTableName);
+
             // Ensure the table exists (synchronous method)
             _tableClient.CreateIfNotExists();
             _completedTableClient.CreateIfNotExists();
+            _leadHistoryTableClient.CreateIfNotExists();
+        }
+
+        public async Task AddHistoryAsync(LeadHistoryDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.ValuationId))
+                throw new ArgumentException("ValuationId is required.", nameof(dto.ValuationId));
+
+            string partitionKey = dto.ValuationId;
+
+            // RowKey sorted automatically by time (important for history logs)
+            string rowKey = DateTime.UtcNow.Ticks.ToString("D20");
+
+            var entity = new LeadHistoryEntity
+            {
+                PartitionKey = partitionKey,
+                RowKey = rowKey,
+
+                DateTime = DateTime.UtcNow,
+                FirstUpdate = dto.FirstUpdate,
+                Action = dto.Action,
+                StatusChange = dto.StatusChange,
+                Remarks = dto.Remarks,
+                PreviousStatus = dto.PreviousStatus,
+                CurrentStatus = dto.CurrentStatus,
+                TotalTat = dto.TotalTat
+            };
+
+            await _leadHistoryTableClient.AddEntityAsync(entity).ConfigureAwait(false);
+        }
+
+        public async Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId)
+        {
+            var results = new List<LeadHistoryDto>();
+
+            await foreach (var entity in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                filter: $"PartitionKey eq '{valuationId.Replace("'", "''")}'").ConfigureAwait(false))
+            {
+                results.Add(new LeadHistoryDto
+                {
+                    ValuationId = entity.PartitionKey,
+                    FirstUpdate = entity.FirstUpdate,
+                    Action = entity.Action,
+                    StatusChange = entity.StatusChange,
+                    Remarks = entity.Remarks,
+                    PreviousStatus = entity.PreviousStatus,
+                    CurrentStatus = entity.CurrentStatus,
+                    TotalTat = entity.TotalTat
+                });
+            }
+
+            return results;
         }
 
         public async Task UpdateAsync(WorkflowUpdateDto dto)
