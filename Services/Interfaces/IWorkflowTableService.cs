@@ -88,6 +88,10 @@ namespace Valuation.Api.Services
             string ApplicantContact,
             AssignmentDto assignment);
 
+        Task AddHistoryAsync(LeadHistoryDto dto);
+
+        Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId);
+
     }
 
 
