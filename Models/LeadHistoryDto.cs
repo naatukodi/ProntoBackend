@@ -5,6 +5,7 @@ public class LeadHistoryDto
     public string ValuationId { get; set; } = default!;
 
     public bool FirstUpdate { get; set; }
+    public DateTime? FirstDateTime { get; set; }
     public string? Action { get; set; }
     public bool StatusChange { get; set; }
     public string? Remarks { get; set; }

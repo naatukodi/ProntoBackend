@@ -42,13 +42,18 @@ namespace Valuation.Api.Services
             // RowKey sorted automatically by time (important for history logs)
             string rowKey = DateTime.UtcNow.Ticks.ToString("D20");
 
+            // Check existing history to determine if this is the first update
+            var history = await GetHistoryAsync(dto.ValuationId).ConfigureAwait(false);
+            bool isFirstUpdate = history == null || !history.Any();
+
             var entity = new LeadHistoryEntity
             {
                 PartitionKey = partitionKey,
                 RowKey = rowKey,
 
                 DateTime = DateTime.UtcNow,
-                FirstUpdate = dto.FirstUpdate,
+                FirstUpdate = isFirstUpdate ? true : dto.FirstUpdate,
+                FirstDateTime = isFirstUpdate ? DateTime.UtcNow : dto.FirstDateTime,
                 Action = dto.Action,
                 StatusChange = dto.StatusChange,
                 Remarks = dto.Remarks,
@@ -71,6 +76,7 @@ namespace Valuation.Api.Services
                 {
                     ValuationId = entity.PartitionKey,
                     FirstUpdate = entity.FirstUpdate,
+                    FirstDateTime = entity.FirstDateTime,
                     Action = entity.Action,
                     StatusChange = entity.StatusChange,
                     Remarks = entity.Remarks,

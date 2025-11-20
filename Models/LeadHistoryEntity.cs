@@ -15,6 +15,7 @@ public class LeadHistoryEntity : ITableEntity
     // Lead history fields
     public DateTime DateTime { get; set; }
     public bool FirstUpdate { get; set; }
+    public DateTime? FirstDateTime { get; set; }
     public string? Action { get; set; }
     public bool StatusChange { get; set; }
     public string? Remarks { get; set; }
