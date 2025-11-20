@@ -11,6 +11,8 @@ public class LeadHistoryDto
     public string? Remarks { get; set; }
     public string? PreviousStatus { get; set; }
     public string? CurrentStatus { get; set; }
+    public DateTime StatusChangedDateTime { get; set; }
+    public int CurrentTat { get; set; }
+    public int TotalTat { get; set; }
 
-    public TimeSpan TotalTat { get; set; }
 }

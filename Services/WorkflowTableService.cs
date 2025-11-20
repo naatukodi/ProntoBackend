@@ -46,6 +46,21 @@ namespace Valuation.Api.Services
             var history = await GetHistoryAsync(dto.ValuationId).ConfigureAwait(false);
             bool isFirstUpdate = history == null || !history.Any();
 
+            var firstDateTime = isFirstUpdate
+                ? DateTime.UtcNow
+                : dto.FirstDateTime ?? DateTime.UtcNow;
+
+            var totalTat = (int)Math.Max(0, Math.Floor((DateTime.UtcNow - firstDateTime).TotalDays));
+
+            // Support both DateTime and DateTime? on the DTO: treat default(DateTime) / null as "not set"
+            var statusChangeDateTime = dto.StatusChangedDateTime is DateTime dt && dt != default(DateTime)
+                ? dt.ToUniversalTime()
+                : (DateTime?)null;
+
+            int currentTat = statusChangeDateTime.HasValue
+                ? (int)Math.Max(0, Math.Floor((statusChangeDateTime.Value - firstDateTime.ToUniversalTime()).TotalDays))
+                : 0;
+
             var entity = new LeadHistoryEntity
             {
                 PartitionKey = partitionKey,
@@ -53,13 +68,15 @@ namespace Valuation.Api.Services
 
                 DateTime = DateTime.UtcNow,
                 FirstUpdate = isFirstUpdate ? true : dto.FirstUpdate,
-                FirstDateTime = isFirstUpdate ? DateTime.UtcNow : dto.FirstDateTime,
+                FirstDateTime = firstDateTime,
                 Action = dto.Action,
                 StatusChange = dto.StatusChange,
+                StatusChangedDateTime = dto.StatusChangedDateTime,
                 Remarks = dto.Remarks,
                 PreviousStatus = dto.PreviousStatus,
                 CurrentStatus = dto.CurrentStatus,
-                TotalTat = dto.TotalTat
+                TotalTat = totalTat,
+                CurrentTat = currentTat
             };
 
             await _leadHistoryTableClient.AddEntityAsync(entity).ConfigureAwait(false);
