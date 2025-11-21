@@ -57,13 +57,13 @@ namespace Valuation.Api.Controllers
 
         [HttpPost("assignment")]
         public async Task<IActionResult> UpdateAssignment(
-        Guid valuationId,
-        [FromQuery] string vehicleNumber,
-        [FromQuery] string applicantContact,
-        [FromQuery] string? assignedTo = null,
-        [FromQuery] string? assignedToPhoneNumber = null,
-        [FromQuery] string? assignedToEmail = null,
-        [FromQuery] string? assignedToWhatsapp = null)
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromQuery] string? assignedTo = null,
+            [FromQuery] string? assignedToPhoneNumber = null,
+            [FromQuery] string? assignedToEmail = null,
+            [FromQuery] string? assignedToWhatsapp = null)
         {
             await _svc.UpdateAssignmentAsync(valuationId.ToString(), vehicleNumber, applicantContact, assignedTo, assignedToPhoneNumber, assignedToEmail, assignedToWhatsapp);
             return NoContent();
@@ -81,7 +81,7 @@ namespace Valuation.Api.Controllers
         }
     }
 
-    // New controller for /api/valuations/open
+    // New controller for /api/valuations routes (open valuations and duplicate check)
     [ApiController]
     [Route("api/valuations")]
     public class ValuationsController : ControllerBase
@@ -94,8 +94,51 @@ namespace Valuation.Api.Controllers
         public async Task<ActionResult<IEnumerable<OpenValuationDto>>> GetAllOpen()
         {
             var openValuations = await _svc.GetOpenValuationsAsync();
-            if (openValuations == null || !openValuations.Any()) return NotFound();
+            if (openValuations == null || !openValuations.Any()) 
+                return NotFound();
             return Ok(openValuations);
+        }
+
+        /// <summary>
+        /// Check if vehicle number, engine number, or chassis number already exists in the system
+        /// Used before registering a new case to prevent duplicates
+        /// </summary>
+        /// <param name="vehicleNumber">Vehicle registration number</param>
+        /// <param name="engineNumber">Engine number</param>
+        /// <param name="chassisNumber">Chassis number (VIN)</param>
+        /// <returns>Duplicate check response with existing records</returns>
+        [HttpGet("check-duplicate")]
+        public async Task<ActionResult<VehicleDuplicateCheckResponse>> CheckDuplicateVehicle(
+            [FromQuery] string? vehicleNumber = null,
+            [FromQuery] string? engineNumber = null,
+            [FromQuery] string? chassisNumber = null)
+        {
+            try
+            {
+                // Validate at least one parameter is provided
+                if (string.IsNullOrWhiteSpace(vehicleNumber) &&
+                    string.IsNullOrWhiteSpace(engineNumber) &&
+                    string.IsNullOrWhiteSpace(chassisNumber))
+                {
+                    return BadRequest(new
+                    {
+                        message = "At least one parameter (vehicleNumber, engineNumber, or chassisNumber) must be provided"
+                    });
+                }
+
+                var response = await _svc.CheckDuplicateVehicleAsync(
+                    vehicleNumber, engineNumber, chassisNumber);
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "An error occurred while checking for duplicates",
+                    error = ex.Message
+                });
+            }
         }
     }
 }
