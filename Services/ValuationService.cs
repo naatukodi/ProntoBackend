@@ -670,4 +670,224 @@ public class ValuationService : IValuationService
             // nothing to delete
         }
     }
+    public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
+    string? vehicleNumber,
+    string? engineNumber,
+    string? chassisNumber)
+    {
+        var response = new VehicleDuplicateCheckResponse
+        {
+            IsVehicleNumberExists = false,
+            IsEngineNumberExists = false,
+            IsChassisNumberExists = false,
+            ExistingRecords = new List<ExistingVehicleRecord>(),
+            Messages = new List<string>()
+        };
+
+        // Validate at least one parameter
+        if (string.IsNullOrWhiteSpace(vehicleNumber) &&
+            string.IsNullOrWhiteSpace(engineNumber) &&
+            string.IsNullOrWhiteSpace(chassisNumber))
+        {
+            return response;
+        }
+
+        try
+        {
+            // Dictionary to track records by ValuationId and accumulate matched fields
+            var recordsDict = new Dictionary<string, ExistingVehicleRecord>();
+
+            // Check Vehicle Number
+            if (!string.IsNullOrWhiteSpace(vehicleNumber))
+            {
+                var vehicleQuery = new QueryDefinition(@"
+                    SELECT 
+                        c.id,
+                        c.VehicleNumber,
+                        c.VehicleDetails.EngineNumber,
+                        c.VehicleDetails.ChassisNumber,
+                        c.Status,
+                        c.CreatedAt
+                    FROM c
+                    WHERE UPPER(c.VehicleNumber) = @vehicleNumber
+                ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
+
+                using var vehicleIterator = Container.GetItemQueryIterator<dynamic>(vehicleQuery);
+                
+                while (vehicleIterator.HasMoreResults)
+                {
+                    var batch = await vehicleIterator.ReadNextAsync();
+                    foreach (var item in batch)
+                    {
+                        string valId = item.id;
+                        if (!recordsDict.ContainsKey(valId))
+                        {
+                            recordsDict[valId] = new ExistingVehicleRecord
+                            {
+                                ValuationId = valId,
+                                VehicleNumber = item.VehicleNumber,
+                                EngineNumber = item.EngineNumber,
+                                ChassisNumber = item.ChassisNumber,
+                                Status = item.Status ?? "Unknown",
+                                CreatedDate = item.CreatedAt,
+                                MatchedField = "Vehicle Number"
+                            };
+                        }
+                        else
+                        {
+                            // Append matched field
+                            recordsDict[valId].MatchedField += ", Vehicle Number";
+                        }
+                    }
+                }
+
+                if (recordsDict.Any())
+                {
+                    response.IsVehicleNumberExists = true;
+                }
+            }
+
+            // Check Engine Number
+            if (!string.IsNullOrWhiteSpace(engineNumber))
+            {
+                var engineQuery = new QueryDefinition(@"
+                    SELECT 
+                        c.id,
+                        c.VehicleNumber,
+                        c.VehicleDetails.EngineNumber,
+                        c.VehicleDetails.ChassisNumber,
+                        c.Status,
+                        c.CreatedAt
+                    FROM c
+                    WHERE UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
+                ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
+
+                using var engineIterator = Container.GetItemQueryIterator<dynamic>(engineQuery);
+                
+                while (engineIterator.HasMoreResults)
+                {
+                    var batch = await engineIterator.ReadNextAsync();
+                    foreach (var item in batch)
+                    {
+                        string valId = item.id;
+                        if (!recordsDict.ContainsKey(valId))
+                        {
+                            recordsDict[valId] = new ExistingVehicleRecord
+                            {
+                                ValuationId = valId,
+                                VehicleNumber = item.VehicleNumber,
+                                EngineNumber = item.EngineNumber,
+                                ChassisNumber = item.ChassisNumber,
+                                Status = item.Status ?? "Unknown",
+                                CreatedDate = item.CreatedAt,
+                                MatchedField = "Engine Number"
+                            };
+                        }
+                        else
+                        {
+                            // Append matched field if not already there
+                            if (!recordsDict[valId].MatchedField.Contains("Engine Number"))
+                            {
+                                recordsDict[valId].MatchedField += ", Engine Number";
+                            }
+                        }
+                    }
+                }
+
+                if (recordsDict.Any(r => r.Value.MatchedField.Contains("Engine Number")))
+                {
+                    response.IsEngineNumberExists = true;
+                }
+            }
+
+            // Check Chassis Number
+            if (!string.IsNullOrWhiteSpace(chassisNumber))
+            {
+                var chassisQuery = new QueryDefinition(@"
+                    SELECT 
+                        c.id,
+                        c.VehicleNumber,
+                        c.VehicleDetails.EngineNumber,
+                        c.VehicleDetails.ChassisNumber,
+                        c.Status,
+                        c.CreatedAt
+                    FROM c
+                    WHERE UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
+                ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
+
+                using var chassisIterator = Container.GetItemQueryIterator<dynamic>(chassisQuery);
+                
+                while (chassisIterator.HasMoreResults)
+                {
+                    var batch = await chassisIterator.ReadNextAsync();
+                    foreach (var item in batch)
+                    {
+                        string valId = item.id;
+                        if (!recordsDict.ContainsKey(valId))
+                        {
+                            recordsDict[valId] = new ExistingVehicleRecord
+                            {
+                                ValuationId = valId,
+                                VehicleNumber = item.VehicleNumber,
+                                EngineNumber = item.EngineNumber,
+                                ChassisNumber = item.ChassisNumber,
+                                Status = item.Status ?? "Unknown",
+                                CreatedDate = item.CreatedAt,
+                                MatchedField = "Chassis Number"
+                            };
+                        }
+                        else
+                        {
+                            // Append matched field if not already there
+                            if (!recordsDict[valId].MatchedField.Contains("Chassis Number"))
+                            {
+                                recordsDict[valId].MatchedField += ", Chassis Number";
+                            }
+                        }
+                    }
+                }
+
+                if (recordsDict.Any(r => r.Value.MatchedField.Contains("Chassis Number")))
+                {
+                    response.IsChassisNumberExists = true;
+                }
+            }
+
+            // Convert dictionary to list
+            response.ExistingRecords = recordsDict.Values.ToList();
+
+            // Build messages
+            if (response.IsVehicleNumberExists)
+            {
+                var count = response.ExistingRecords.Count(r => r.MatchedField.Contains("Vehicle Number"));
+                response.Messages.Add($"Vehicle number '{vehicleNumber}' found in {count} existing record(s)");
+            }
+
+            if (response.IsEngineNumberExists)
+            {
+                var count = response.ExistingRecords.Count(r => r.MatchedField.Contains("Engine Number"));
+                response.Messages.Add($"Engine number '{engineNumber}' found in {count} existing record(s)");
+            }
+
+            if (response.IsChassisNumberExists)
+            {
+                var count = response.ExistingRecords.Count(r => r.MatchedField.Contains("Chassis Number"));
+                response.Messages.Add($"Chassis number '{chassisNumber}' found in {count} existing record(s)");
+            }
+
+            response.IsDuplicate = response.IsVehicleNumberExists ||
+                                response.IsEngineNumberExists ||
+                                response.IsChassisNumberExists;
+
+            response.TotalDuplicatesFound = response.ExistingRecords.Count;
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error checking duplicates: {ex.Message}");
+            throw;
+        }
+    }
+
 }
