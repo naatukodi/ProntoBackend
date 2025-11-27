@@ -86,8 +86,8 @@ namespace Valuation.Api.Controllers
         public async Task<IActionResult> GetHistory(
             Guid valuationId)
         {
-            await _svc.GetHistoryAsync(valuationId.ToString());
-            return NoContent();
+            var results = await _svc.GetHistoryAsync(valuationId.ToString());
+            return Ok(results);
         }
     }
 
