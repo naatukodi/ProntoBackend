@@ -66,13 +66,17 @@ namespace Valuation.Api.Services
                 PartitionKey = partitionKey,
                 RowKey = rowKey,
 
-                DateTime = DateTime.UtcNow,
+                DateTime = dto.DateTime == default ? DateTime.UtcNow : dto.DateTime,  // ← CHANGED
                 FirstUpdate = isFirstUpdate ? true : dto.FirstUpdate,
                 FirstDateTime = firstDateTime,
                 Action = dto.Action,
+                Remarks = dto.Remarks,
+                PerformedByUserId = dto.PerformedByUserId,                           // ← ADDED
+                PerformedByUserName = dto.PerformedByUserName,                       // ← ADDED
+                StatusFrom = dto.StatusFrom,                                         // ← ADDED
+                StatusTo = dto.StatusTo,                                             // ← ADDED
                 StatusChange = dto.StatusChange,
                 StatusChangedDateTime = dto.StatusChangedDateTime,
-                Remarks = dto.Remarks,
                 PreviousStatus = dto.PreviousStatus,
                 CurrentStatus = dto.CurrentStatus,
                 TotalTat = totalTat,
@@ -81,6 +85,7 @@ namespace Valuation.Api.Services
 
             await _leadHistoryTableClient.AddEntityAsync(entity).ConfigureAwait(false);
         }
+
 
         public async Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId)
         {
@@ -92,19 +97,28 @@ namespace Valuation.Api.Services
                 results.Add(new LeadHistoryDto
                 {
                     ValuationId = entity.PartitionKey,
-                    FirstUpdate = entity.FirstUpdate,
-                    FirstDateTime = entity.FirstDateTime,
+                    DateTime = entity.DateTime,                        // ← ADDED
                     Action = entity.Action,
-                    StatusChange = entity.StatusChange,
                     Remarks = entity.Remarks,
+                    PerformedByUserId = entity.PerformedByUserId,     // ← ADDED
+                    PerformedByUserName = entity.PerformedByUserName, // ← ADDED
+                    StatusFrom = entity.StatusFrom,                   // ← ADDED
+                    StatusTo = entity.StatusTo,                       // ← ADDED
+                    CurrentTat = entity.CurrentTat,                   // ← ADDED
+                    TotalTat = entity.TotalTat,
+                    FirstDateTime = entity.FirstDateTime,
+                    FirstUpdate = entity.FirstUpdate,
+                    StatusChange = entity.StatusChange,
+                    StatusChangedDateTime = entity.StatusChangedDateTime,
                     PreviousStatus = entity.PreviousStatus,
-                    CurrentStatus = entity.CurrentStatus,
-                    TotalTat = entity.TotalTat
+                    CurrentStatus = entity.CurrentStatus
                 });
             }
 
-            return results;
+            // Sort by DateTime descending (newest first)
+            return results.OrderByDescending(x => x.DateTime).ToList();
         }
+
 
         public async Task UpdateAsync(WorkflowUpdateDto dto)
         {
@@ -650,7 +664,7 @@ namespace Valuation.Api.Services
                 var entity = response.Value;
 
                 // Update status to Completed
-                entity.Status = "Completed";
+                entity.Status = "Status";
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
                 entity.FinalReportAssignedTo = assignment.AssignedTo ?? "";
