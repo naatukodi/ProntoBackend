@@ -3,10 +3,11 @@ namespace Valuation.Api.Models
 {
     /// <summary>
     /// Contains up to 19 optional IFormFile properties (one for each required / optional photo).
+    /// Plus 1 mandatory video field for vehicle video.
     /// </summary>
     public class VehiclePhotosDto
     {
-        public string ValuationId { get; set; } = null!;     // GUID as string
+        public string ValuationId { get; set; } = null!;
         public string VehicleNumber { get; set; } = null!;
         public string ApplicantContact { get; set; } = null!;
 
@@ -36,5 +37,8 @@ namespace Valuation.Api.Models
         public IFormFile? SelfieWithVehicle { get; set; }
         public IFormFile? Underbody { get; set; }       // optional
         public IFormFile? TiresAndRims { get; set; }
+
+        // ✅ 5) Video (MANDATORY)
+        public IFormFile? VehicleVideo { get; set; }
     }
 }
