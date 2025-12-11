@@ -5,6 +5,8 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using Valuation.Api.Repositories;
 using Valuation.Api.Services;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 QuestPDF.Settings.EnableDebugging = true;
 
-// --- 0.5) ✅ ADD CORS CONFIGURATION HERE (BEFORE builder.Build())
+// --- 0.5) ✅ CORS CONFIGURATION (Define Policy)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
@@ -127,9 +129,21 @@ builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 
 builder.Services.AddScoped<IRoleService, TableRoleService>();
 builder.Services.AddScoped<TableRoleService>();
-
-// ✅ CommonNoteService is already registered
 builder.Services.AddScoped<ICommonNoteService, CommonNoteService>();
+
+// ✅ VIDEO UPLOAD CONFIGURATION
+// Configure request size limit for file uploads (100MB max)
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 100 * 1024 * 1024; // 100MB
+});
+
+// Configure Kestrel server size limits
+builder.Services.Configure<KestrelServerOptions>(options =>
+{
+    options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100MB
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(2);
+});
 
 // --- 7) MVC Controllers ---
 builder.Services.AddControllers();
@@ -137,11 +151,14 @@ builder.Services.AddControllers();
 var app = builder.Build();
 
 // --- 8) Middleware pipeline ---
-// ✅ ADD CORS MIDDLEWARE HERE (BEFORE UseRouting)
-app.UseCors("AllowAngular");
 
+// 1. Routing (Must be FIRST for CORS to work correctly)
 app.UseRouting();
 
+// 2. ✅ CORS MIDDLEWARE (Must be AFTER UseRouting and BEFORE UseAuthorization)
+app.UseCors("AllowAngular");
+
+// 3. Swagger
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -149,8 +166,28 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty;
 });
 
+// 4. Auth
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 5. Custom Video Upload Middleware (Increases limit for specific path)
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/api/valuations") &&
+               context.Request.Path.Value.Contains("/photos"),
+    appBuilder =>
+    {
+        appBuilder.Use(async (context, next) =>
+        {
+            var feature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (feature != null)
+            {
+                feature.MaxRequestBodySize = 100 * 1024 * 1024; // 100MB
+            }
+            await next.Invoke();
+        });
+    });
+
+// 6. Map Controllers
 app.MapControllers();
+
 app.Run();

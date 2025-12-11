@@ -10,6 +10,8 @@ namespace Valuation.Api.Services
         private const string CompletedTableName = "CompletedWorkflows";
         private readonly TableClient _tableClient;
         private readonly TableClient _completedTableClient;
+        private const string LeadHistoryTableName = "LeadHistory";
+        private readonly TableClient _leadHistoryTableClient;
 
         public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
@@ -22,10 +24,101 @@ namespace Valuation.Api.Services
             _tableClient = serviceClient.GetTableClient(TableName);
             _completedTableClient = serviceClient.GetTableClient(CompletedTableName);
 
+            _leadHistoryTableClient = serviceClient.GetTableClient(LeadHistoryTableName);
+
             // Ensure the table exists (synchronous method)
             _tableClient.CreateIfNotExists();
             _completedTableClient.CreateIfNotExists();
+            _leadHistoryTableClient.CreateIfNotExists();
         }
+
+        public async Task AddHistoryAsync(LeadHistoryDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.ValuationId))
+                throw new ArgumentException("ValuationId is required.", nameof(dto.ValuationId));
+
+            string partitionKey = dto.ValuationId;
+
+            // RowKey sorted automatically by time (important for history logs)
+            string rowKey = DateTime.UtcNow.Ticks.ToString("D20");
+
+            // Check existing history to determine if this is the first update
+            var history = await GetHistoryAsync(dto.ValuationId).ConfigureAwait(false);
+            bool isFirstUpdate = history == null || !history.Any();
+
+            var firstDateTime = isFirstUpdate
+                ? DateTime.UtcNow
+                : dto.FirstDateTime ?? DateTime.UtcNow;
+
+            var totalTat = (int)Math.Max(0, Math.Floor((DateTime.UtcNow - firstDateTime).TotalDays));
+
+            // Support both DateTime and DateTime? on the DTO: treat default(DateTime) / null as "not set"
+            var statusChangeDateTime = dto.StatusChangedDateTime is DateTime dt && dt != default(DateTime)
+                ? dt.ToUniversalTime()
+                : (DateTime?)null;
+
+            int currentTat = statusChangeDateTime.HasValue
+                ? (int)Math.Max(0, Math.Floor((statusChangeDateTime.Value - firstDateTime.ToUniversalTime()).TotalDays))
+                : 0;
+
+            var entity = new LeadHistoryEntity
+            {
+                PartitionKey = partitionKey,
+                RowKey = rowKey,
+
+                DateTime = dto.DateTime == default ? DateTime.UtcNow : dto.DateTime,  // ← CHANGED
+                FirstUpdate = isFirstUpdate ? true : dto.FirstUpdate,
+                FirstDateTime = firstDateTime,
+                Action = dto.Action,
+                Remarks = dto.Remarks,
+                PerformedByUserId = dto.PerformedByUserId,                           // ← ADDED
+                PerformedByUserName = dto.PerformedByUserName,                       // ← ADDED
+                StatusFrom = dto.StatusFrom,                                         // ← ADDED
+                StatusTo = dto.StatusTo,                                             // ← ADDED
+                StatusChange = dto.StatusChange,
+                StatusChangedDateTime = dto.StatusChangedDateTime,
+                PreviousStatus = dto.PreviousStatus,
+                CurrentStatus = dto.CurrentStatus,
+                TotalTat = totalTat,
+                CurrentTat = currentTat
+            };
+
+            await _leadHistoryTableClient.AddEntityAsync(entity).ConfigureAwait(false);
+        }
+
+
+        public async Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId)
+        {
+            var results = new List<LeadHistoryDto>();
+
+            await foreach (var entity in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                filter: $"PartitionKey eq '{valuationId.Replace("'", "''")}'").ConfigureAwait(false))
+            {
+                results.Add(new LeadHistoryDto
+                {
+                    ValuationId = entity.PartitionKey,
+                    DateTime = entity.DateTime,                        // ← ADDED
+                    Action = entity.Action,
+                    Remarks = entity.Remarks,
+                    PerformedByUserId = entity.PerformedByUserId,     // ← ADDED
+                    PerformedByUserName = entity.PerformedByUserName, // ← ADDED
+                    StatusFrom = entity.StatusFrom,                   // ← ADDED
+                    StatusTo = entity.StatusTo,                       // ← ADDED
+                    CurrentTat = entity.CurrentTat,                   // ← ADDED
+                    TotalTat = entity.TotalTat,
+                    FirstDateTime = entity.FirstDateTime,
+                    FirstUpdate = entity.FirstUpdate,
+                    StatusChange = entity.StatusChange,
+                    StatusChangedDateTime = entity.StatusChangedDateTime,
+                    PreviousStatus = entity.PreviousStatus,
+                    CurrentStatus = entity.CurrentStatus
+                });
+            }
+
+            // Sort by DateTime descending (newest first)
+            return results.OrderByDescending(x => x.DateTime).ToList();
+        }
+
 
         public async Task UpdateAsync(WorkflowUpdateDto dto)
         {

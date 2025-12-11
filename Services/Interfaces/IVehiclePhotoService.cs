@@ -20,5 +20,13 @@ namespace Valuation.Api.Services
         /// Deletes all photo URLs and (optionally) the blobs for a given valuationId/key if needed.
         /// </summary>
         Task DeletePhotosAsync(string valuationId, string vehicleNumber, string applicantContact);
+
+        /// <summary>
+        /// ✅ Get all video URLs from database
+        /// </summary>
+        Task<Dictionary<string, string>?> GetVideoUrlsAsync(
+            string valuationId,
+            string vehicleNumber,
+            string applicantContact);
     }
 }

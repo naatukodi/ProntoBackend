@@ -73,6 +73,34 @@ namespace Valuation.Api.Controllers
 
             return NoContent();
         }
+
+        [HttpPost("addhistory")]
+        public async Task<IActionResult> AddHistory(
+            [FromBody] LeadHistoryDto dto)
+        {
+            // Validate input
+            if (dto == null)
+                return BadRequest("History data cannot be null");
+
+            // Add to database
+            await _svc.AddHistoryAsync(dto);
+            
+            // ✅ Return 200 OK with success response
+            return Ok(new 
+            { 
+                success = true, 
+                message = "History entry added successfully",
+                timestamp = DateTime.UtcNow
+            });
+        }
+
+        [HttpGet("gethistory")]
+        public async Task<IActionResult> GetHistory(
+            Guid valuationId)
+        {
+            var results = await _svc.GetHistoryAsync(valuationId.ToString());
+            return Ok(results);
+        }
     }
 
     [ApiController]
