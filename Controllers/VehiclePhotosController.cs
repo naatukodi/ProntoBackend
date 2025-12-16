@@ -203,5 +203,41 @@ namespace Valuation.Api.Controllers
                 applicantContact);
             return NoContent();
         }
+
+        // =================================================================================
+        // ✅ NEW ENDPOINTS FOR EDITABLE METADATA
+        // =================================================================================
+
+        /// <summary>
+        /// PUT /api/valuations/{valuationId}/photos/{photoType}/metadata
+        /// Updates the Date/Location text for a specific photo without re-uploading the image.
+        /// </summary>
+        [HttpPut("{photoType}/metadata")]
+        public async Task<IActionResult> UpdateMetadata(
+            Guid valuationId,
+            string photoType,
+            [FromBody] PhotoMetadataUpdateDto input)
+        {
+            try
+            {
+                var result = await _photoService.UpdatePhotoMetadataAsync(valuationId.ToString(), photoType, input);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// GET /api/valuations/{valuationId}/photos/metadata
+        /// Retrieves the dictionary of metadata for all photos in this valuation.
+        /// </summary>
+        [HttpGet("metadata")]
+        public async Task<IActionResult> GetMetadata(Guid valuationId)
+        {
+            var result = await _photoService.GetPhotoMetadataAsync(valuationId.ToString());
+            return Ok(result);
+        }
     }
 }

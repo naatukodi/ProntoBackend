@@ -44,4 +44,5 @@ public class ValuationDocument
     public string? CompletedByPhoneNumber { get; set; }
     public string? CompletedByEmail { get; set; }
     public string? CompletedByWhatsapp { get; set; }
+    public Dictionary<string, PhotoMetadata> PhotoMetadata { get; set; } = new Dictionary<string, PhotoMetadata>();
 }

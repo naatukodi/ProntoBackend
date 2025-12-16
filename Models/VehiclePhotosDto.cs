@@ -41,4 +41,18 @@ namespace Valuation.Api.Models
         // ✅ 5) Video (MANDATORY)
         public IFormFile? VehicleVideo { get; set; }
     }
+
+    // ✅ ADDED: Models for Photo Metadata (Date, Time, Location)
+    public class PhotoMetadata
+    {
+        public DateTime? CapturedDate { get; set; }
+        public string? LocationText { get; set; }
+    }
+
+    // ✅ ADDED: DTO for updating metadata from the API
+    public class PhotoMetadataUpdateDto
+    {
+        public DateTime? CapturedDate { get; set; }
+        public string? LocationText { get; set; }
+    }
 }

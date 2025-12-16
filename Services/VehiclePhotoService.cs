@@ -384,5 +384,65 @@ namespace Valuation.Api.Services
                 // Nothing to do if document not found
             }
         }
+
+        // =========================================================================
+        // ✅ NEW METHODS FOR METADATA EDITING
+        // =========================================================================
+
+        /// <summary>
+        /// ✅ Updates ONLY the metadata (Date/Location) for a specific photo type
+        /// </summary>
+        public async Task<PhotoMetadata> UpdatePhotoMetadataAsync(string valuationId, string photoType, PhotoMetadataUpdateDto input)
+        {
+            var database = _cosmosClient.GetDatabase(_databaseName);
+            var container = database.GetContainer(_containerName);
+
+            // 1. Find document using just ID (Cross-partition query if necessary)
+            // Ideally, we should pass vehicleNumber & contact to build partition key,
+            // but for editing specific metadata, querying by ID is acceptable if PK is unknown.
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
+                .WithParameter("@id", valuationId);
+
+            var iterator = container.GetItemQueryIterator<ValuationDocument>(query);
+            var doc = (await iterator.ReadNextAsync()).FirstOrDefault();
+
+            if (doc == null) throw new Exception("Valuation not found");
+
+            // 2. Initialize Dictionary if null
+            if (doc.PhotoMetadata == null) 
+                doc.PhotoMetadata = new Dictionary<string, PhotoMetadata>();
+
+            // 3. Ensure entry exists for this photo type
+            if (!doc.PhotoMetadata.ContainsKey(photoType))
+            {
+                doc.PhotoMetadata[photoType] = new PhotoMetadata();
+            }
+
+            // 4. Update the values
+            doc.PhotoMetadata[photoType].CapturedDate = input.CapturedDate;
+            doc.PhotoMetadata[photoType].LocationText = input.LocationText;
+
+            // 5. Save back to DB (We must use PartitionKey for Upsert)
+            await container.UpsertItemAsync(doc, new PartitionKey(doc.CompositeKey));
+
+            return doc.PhotoMetadata[photoType];
+        }
+
+        /// <summary>
+        /// ✅ Retrieves the metadata dictionary for the frontend
+        /// </summary>
+        public async Task<Dictionary<string, PhotoMetadata>> GetPhotoMetadataAsync(string valuationId)
+        {
+            var database = _cosmosClient.GetDatabase(_databaseName);
+            var container = database.GetContainer(_containerName);
+
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
+                .WithParameter("@id", valuationId);
+
+            var iterator = container.GetItemQueryIterator<ValuationDocument>(query);
+            var doc = (await iterator.ReadNextAsync()).FirstOrDefault();
+
+            return doc?.PhotoMetadata ?? new Dictionary<string, PhotoMetadata>();
+        }
     }
 }

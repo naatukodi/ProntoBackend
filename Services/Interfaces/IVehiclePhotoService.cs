@@ -1,5 +1,7 @@
 // src/Valuation.Api/Services/IVehiclePhotoService.cs
 using Valuation.Api.Models;
+using System.Collections.Generic; // Required for Dictionary
+using System.Threading.Tasks;     // Required for Task
 
 namespace Valuation.Api.Services
 {
@@ -28,5 +30,19 @@ namespace Valuation.Api.Services
             string valuationId,
             string vehicleNumber,
             string applicantContact);
+
+        // =========================================================================
+        // ✅ NEW METHODS FOR METADATA (Resolve CS1061 Error)
+        // =========================================================================
+
+        /// <summary>
+        /// Updates the Date/Time and Location text for a specific photo type.
+        /// </summary>
+        Task<PhotoMetadata> UpdatePhotoMetadataAsync(string valuationId, string photoType, PhotoMetadataUpdateDto input);
+
+        /// <summary>
+        /// Retrieves the dictionary of photo metadata (Dates/Locations).
+        /// </summary>
+        Task<Dictionary<string, PhotoMetadata>> GetPhotoMetadataAsync(string valuationId);
     }
 }
