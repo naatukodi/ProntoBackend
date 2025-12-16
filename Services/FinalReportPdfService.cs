@@ -2,6 +2,7 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using Valuation.Api.Models;  // ← adjust to your actual models namespace
 using QuestPDF.Companion;
+using SkiaSharp; // ✅ REQUIRED FOR WATERMARKING
 
 namespace Valuation.Api.Services
 {
@@ -19,19 +20,108 @@ namespace Valuation.Api.Services
             _httpClient = httpClient;
         }
 
+        /// <summary>
+        /// ✅ Helper method to draw a semi-transparent black bar with text (Date | Location)
+        /// on the bottom of the image.
+        /// </summary>
+        private byte[] AddWatermark(byte[] imageBytes, DateTime? date, string location)
+        {
+            // If no metadata is provided, return the original image
+            if (date == null && string.IsNullOrEmpty(location)) return imageBytes;
+
+            try
+            {
+                using var bitmap = SKBitmap.Decode(imageBytes);
+                if (bitmap == null) return imageBytes; // Return original if decode fails
+
+                using var canvas = new SKCanvas(bitmap);
+
+                // 1. Draw Semi-Transparent Black Bar at Bottom
+                int barHeight = (int)(bitmap.Height * 0.08); // Bar is 8% of image height
+                if (barHeight < 40) barHeight = 40; // Enforce minimum height
+
+                var footerRect = new SKRect(0, bitmap.Height - barHeight, bitmap.Width, bitmap.Height);
+                var barPaint = new SKPaint
+                {
+                    Color = new SKColor(0, 0, 0, 160), // Black with ~60% Opacity
+                    Style = SKPaintStyle.Fill
+                };
+                canvas.DrawRect(footerRect, barPaint);
+
+                // 2. Prepare Text
+                var textPaint = new SKPaint
+                {
+                    Color = SKColors.White,
+                    IsAntialias = true,
+                    Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold),
+                    TextSize = (float)(barHeight * 0.5) // Text size is half of bar height
+                };
+
+                // Format: "15-Dec-2025 14:30 | Kakinada, AP"
+                string dateStr = date.HasValue ? date.Value.ToString("dd-MMM-yyyy HH:mm") : "";
+                string locStr = !string.IsNullOrEmpty(location) ? location : "";
+                
+                // Construct string joining non-empty parts
+                string watermarkText = $"{dateStr} | {locStr}".Trim('|', ' ');
+
+                // 3. Draw Text (Centered vertically in the bar, Left aligned with padding)
+                float x = 20; 
+                float y = bitmap.Height - (barHeight / 2) + (textPaint.TextSize / 2.5f);
+                
+                canvas.DrawText(watermarkText, x, y, textPaint);
+
+                // 4. Encode back to bytes
+                using var image = SKImage.FromBitmap(bitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Jpeg, 80); // 80% Quality
+                return data.ToArray();
+            }
+            catch
+            {
+                // If any error occurs (e.g. font missing, corrupt image), return original
+                return imageBytes;
+            }
+        }
+
         [Obsolete]
         public async Task<byte[]> GeneratePdfAsync(ValuationDocument report)
         {
-            // 1) Download all photos into memory so we can embed thumbnails
+            // 1) Download all photos into memory AND apply Watermarks
             var photoStreams = new Dictionary<string, byte[]>();
+            
             foreach (var kvp in report.PhotoUrls)
             {
                 if (string.IsNullOrEmpty(kvp.Value))
                     continue;
 
-                var response = await _httpClient.GetAsync(kvp.Value);
-                response.EnsureSuccessStatusCode();
-                photoStreams[kvp.Key] = await response.Content.ReadAsByteArrayAsync();
+                try 
+                {
+                    var response = await _httpClient.GetAsync(kvp.Value);
+                    response.EnsureSuccessStatusCode();
+                    var rawBytes = await response.Content.ReadAsByteArrayAsync();
+
+                    // ✅ CHECK METADATA & APPLY WATERMARK
+                    DateTime? docDate = null;
+                    string docLoc = null;
+
+                    // Check if metadata exists for this specific photo key (e.g., "FrontLeftSide")
+                    if (report.PhotoMetadata != null && report.PhotoMetadata.ContainsKey(kvp.Key))
+                    {
+                        var meta = report.PhotoMetadata[kvp.Key];
+                        docDate = meta.CapturedDate;
+                        docLoc = meta.LocationText;
+                    }
+
+                    // Process the image (Overlay text on image)
+                    var finalBytes = AddWatermark(rawBytes, docDate, docLoc);
+
+                    // Store processed image
+                    photoStreams[kvp.Key] = finalBytes;
+                }
+                catch
+                {
+                    // If download fails, skip image
+                    continue;
+                }
             }
 
             // 2) Build the PDF document instance
