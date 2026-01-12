@@ -16,7 +16,7 @@ namespace Valuation.Api.Controllers
         }
 
         /// <summary>
-        /// GET: api/valuations/{valuationId}/workflow
+        /// GET: api/valuations/{valuationId}/workflow/Table
         ///   → retrieve the workflow record by (valuationId, vehicleNumber, applicantContact)
         ///   Query parameters: ?vehicleNumber=…&applicantContact=…
         /// </summary>
@@ -38,7 +38,7 @@ namespace Valuation.Api.Controllers
         }
 
         /// <summary>
-        /// PUT: api/valuations/{valuationId}/workflow
+        /// PUT: api/valuations/{valuationId}/workflow/Table
         ///   → Upsert (create or update) a workflow row.
         ///   The client sends everything except ValuationId (it comes from route).
         ///   JSON body should match WorkflowUpdateDto.
@@ -56,7 +56,7 @@ namespace Valuation.Api.Controllers
         }
 
         /// <summary>
-        /// DELETE: api/valuations/{valuationId}/workflow
+        /// DELETE: api/valuations/{valuationId}/workflow/Table
         ///   → Delete the workflow record.
         ///   Query parameters: ?vehicleNumber=…&applicantContact=…
         /// </summary>
@@ -74,6 +74,47 @@ namespace Valuation.Api.Controllers
             return NoContent();
         }
 
+        // =================================================================
+        // 👇👇 NEW REJECTION ENDPOINT 👇👇
+        // POST: api/valuations/{id}/workflow/reject
+        // =================================================================
+        [HttpPost("reject")]
+        public async Task<IActionResult> RejectWorkflow(
+            Guid valuationId,
+            [FromBody] WorkflowRejectDto request)
+        {
+            // 1. Basic Validation
+            if (request == null) return BadRequest("Invalid request data.");
+
+            // Ensure the URL ID matches the Body ID
+            if (valuationId.ToString() != request.ValuationId)
+            {
+                return BadRequest("Valuation ID mismatch between URL and Body.");
+            }
+
+            try
+            {
+                // 2. Call the new Service Logic
+                await _svc.RejectWorkflowStepAsync(request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Case rejected and reassigned successfully."
+                });
+            }
+            catch (Exception ex)
+            {
+                // 3. Return error so Frontend knows if "User Unavailable" or other issues occurred
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+        // =================================================================
+
         [HttpPost("addhistory")]
         public async Task<IActionResult> AddHistory(
             [FromBody] LeadHistoryDto dto)
@@ -84,11 +125,11 @@ namespace Valuation.Api.Controllers
 
             // Add to database
             await _svc.AddHistoryAsync(dto);
-            
+
             // ✅ Return 200 OK with success response
-            return Ok(new 
-            { 
-                success = true, 
+            return Ok(new
+            {
+                success = true,
                 message = "History entry added successfully",
                 timestamp = DateTime.UtcNow
             });
@@ -116,8 +157,6 @@ namespace Valuation.Api.Controllers
 
         /// <summary>
         /// GET: api/workflows/open
-        ///   → Retrieve all open workflow records.
-        /// </summary>
         ///   → Retrieve all open workflow records.
         /// </summary>
         [HttpGet]
@@ -206,4 +245,3 @@ namespace Valuation.Api.Controllers
         }
     }
 }
-

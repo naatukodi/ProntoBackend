@@ -92,6 +92,8 @@ namespace Valuation.Api.Services
 
         Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId);
 
+        Task RejectWorkflowStepAsync(WorkflowRejectDto rejectDto);
+
     }
 
 
