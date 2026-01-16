@@ -35,7 +35,7 @@ namespace Valuation.Api.Services
         }
 
         // ==============================================================================
-        //  REJECT WORKFLOW STEP (Clean String Version)
+        //  REJECT WORKFLOW STEP (Updated for Visibility)
         // ==============================================================================
         public async Task RejectWorkflowStepAsync(WorkflowRejectDto rejectDto)
         {
@@ -60,7 +60,7 @@ namespace Valuation.Api.Services
 
             // Normalize step name
             string currentStepNormalized = rejectDto.CurrentStep;
-            if (currentStepNormalized.Equals("QC", StringComparison.OrdinalIgnoreCase)) 
+            if (currentStepNormalized.Equals("QC", StringComparison.OrdinalIgnoreCase))
                 currentStepNormalized = "QualityControl";
 
             // =========================================================
@@ -102,7 +102,7 @@ namespace Valuation.Api.Services
                 if (string.IsNullOrEmpty(rejectDto.TargetRejectedStep))
                     throw new ArgumentException("Target step (AVO or Backend) is required.");
 
-                nextStep = rejectDto.TargetRejectedStep; 
+                nextStep = rejectDto.TargetRejectedStep;
 
                 if (!string.IsNullOrEmpty(rejectDto.OverrideAssigneeId))
                 {
@@ -139,22 +139,22 @@ namespace Valuation.Api.Services
             // ---------------------------------------------------------
             else if (currentStepNormalized == "AVO")
             {
-                nextStep = "Backend"; 
+                nextStep = "Backend";
 
-                if (!string.IsNullOrEmpty(rejectDto.OverrideAssigneeId))
-                {
-                    nextAssigneeId = rejectDto.OverrideAssigneeId;
-                }
-                else if (!string.IsNullOrEmpty(entity.BackEndAssignedToPhoneNumber))
+                // REMOVED: Check for rejectDto.OverrideAssigneeId
+                // We now strictly look for the previous Backend user
+
+                if (!string.IsNullOrEmpty(entity.BackEndAssignedToPhoneNumber))
                 {
                     nextAssigneeId = entity.BackEndAssignedToPhoneNumber;
                 }
                 else
                 {
+                    // Fallback: Look in history for who sent it to AVO
                     var historyList = new List<LeadHistoryEntity>();
                     await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(h =>
                         h.PartitionKey == rejectDto.ValuationId &&
-                        h.StatusTo == "AVO" && 
+                        h.StatusTo == "AVO" &&
                         (h.StatusFrom == "Backend" || h.StatusFrom == "BackEnd")))
                     {
                         historyList.Add(h);
@@ -164,12 +164,8 @@ namespace Valuation.Api.Services
                     if (lastAction != null && !string.IsNullOrEmpty(lastAction.PerformedByUserId))
                         nextAssigneeId = lastAction.PerformedByUserId;
                     else
-                        throw new Exception("No history found for Backend. Please provide 'overrideAssigneeId' manually.");
+                        throw new Exception("No history found for Backend assignee. Cannot revert automatically.");
                 }
-            }
-            else
-            {
-                throw new InvalidOperationException($"Rejection from step '{rejectDto.CurrentStep}' is not supported.");
             }
 
             // =========================================================
@@ -197,17 +193,18 @@ namespace Valuation.Api.Services
             if (nextUser == null) throw new Exception("Target user details could not be resolved.");
 
             // =========================================================
-            // 4. UPDATE WORKFLOW ENTITY (Reset to simple string logic)
+            // 4. UPDATE WORKFLOW ENTITY 
             // =========================================================
-            
-            entity.Status = "InProgress"; 
-            entity.RedFlag = "true"; 
-            entity.Remarks = rejectDto.RejectReason;
 
-            // ✅ FIX 1: Set Workflow to simple Step Name (fixes display issue)
-            entity.Workflow = nextStep; 
+            entity.Status = "InProgress";
+            entity.RedFlag = "true";
 
-            // ✅ FIX 2: Correctly calculate and set Step Order (fixes status colors)
+            // ✅ FIX: Format remarks so Angular UI detects it as a Rejection Banner
+            entity.Remarks = $"REJECTED by {rejectDto.CurrentStep}: {rejectDto.RejectReason}";
+
+            entity.Workflow = nextStep;
+
+            // Correctly calculate Step Order
             int targetOrder = 0;
             if (nextStep == "Stakeholder") targetOrder = 1;
             else if (nextStep == "Backend" || nextStep == "BackEnd") targetOrder = 2;
@@ -217,13 +214,13 @@ namespace Valuation.Api.Services
 
             if (targetOrder > 0) entity.WorkflowStepOrder = targetOrder;
 
-            // Assignments
+            // Update Current Assignments
             entity.AssignedTo = nextUser.Name;
             entity.AssignedToPhoneNumber = nextUser.PhoneNumber;
             entity.AssignedToEmail = nextUser.Email;
             entity.AssignedToWhatsapp = nextUser.Whatsapp;
 
-            // Role Assignments
+            // Update Specific Role Assignments (Preserve history of who owns what step)
             if (nextStep == "AVO")
             {
                 entity.AVOAssignedTo = nextUser.Name;
@@ -259,19 +256,19 @@ namespace Valuation.Api.Services
                 Action = "Rejected",
                 StatusFrom = rejectDto.CurrentStep,
                 StatusTo = nextStep,
-                Remarks = rejectDto.RejectReason,
+                Remarks = $"REJECTED: {rejectDto.RejectReason}", // Also clear in history
                 PerformedByUserId = rejectDto.CurrentUserId,
                 PerformedByUserName = rejectDto.CurrentUserName,
                 CurrentStatus = "Rejected",
                 StatusChange = true,
-                StatusChangedDateTime = DateTime.UtcNow 
+                StatusChangedDateTime = DateTime.UtcNow
             };
 
             await AddHistoryAsync(historyDto);
         }
 
         // ==============================================================================
-        // EXISTING METHODS (Preserved)
+        // EXISTING METHODS 
         // ==============================================================================
 
         public async Task AddHistoryAsync(LeadHistoryDto dto)
@@ -291,7 +288,6 @@ namespace Valuation.Api.Services
 
             var totalTat = (int)Math.Max(0, Math.Floor((DateTime.UtcNow - firstDateTime).TotalDays));
 
-            // Force UTC
             var statusChangeDateTime = dto.StatusChangedDateTime is DateTime dt && dt != default(DateTime)
                 ? DateTime.SpecifyKind(dt, DateTimeKind.Utc)
                 : (DateTime?)null;
