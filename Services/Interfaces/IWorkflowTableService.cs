@@ -103,5 +103,12 @@ namespace Valuation.Api.Services
 
         // ✅ This is the critical new method for the Reject feature
         Task RejectWorkflowStepAsync(WorkflowRejectDto rejectDto);
+
+        // =================================================================
+        // ⚠️ MISSING METHODS ADDED BELOW
+        // =================================================================
+        Task StartWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
+
+        Task CompleteWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
     }
 }

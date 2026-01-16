@@ -1105,5 +1105,64 @@ namespace Valuation.Api.Services
             {
             }
         }
+
+        // ==============================================================================
+        //  ⚠️ START & COMPLETE METHODS ADDED BELOW
+        // ==============================================================================
+
+        public async Task StartWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                var entity = response.Value;
+
+                // 1. Update Status
+                entity.Status = "InProgress";
+                entity.WorkflowStepOrder = stepOrder;
+
+                // 2. Map Step Order to Name (Keep consistent with your frontend)
+                if (stepOrder == 1) entity.Workflow = "Stakeholder";
+                else if (stepOrder == 2) entity.Workflow = "Backend";
+                else if (stepOrder == 3) entity.Workflow = "AVO";
+                else if (stepOrder == 4) entity.Workflow = "QualityControl";
+                else if (stepOrder == 5) entity.Workflow = "FinalReport";
+
+                // 3. Clear RedFlag (Important: removes the 'Rejected' banner)
+                entity.RedFlag = "false"; 
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation record not found.");
+            }
+        }
+
+        public async Task CompleteWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                var entity = response.Value;
+
+                // 1. For now, we update the timestamp to show activity.
+                // If you have logic to auto-move to the next step, add it here.
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation record not found.");
+            }
+        }
     }
 }
