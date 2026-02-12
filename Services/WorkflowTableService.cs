@@ -35,7 +35,7 @@ namespace Valuation.Api.Services
         }
 
         // ==============================================================================
-        //  RETURN WORKFLOW STEP (Renamed from Reject)
+        //  RETURN WORKFLOW STEP
         // ==============================================================================
         public async Task ReturnWorkflowStepAsync(WorkflowReturnDto returnDto)
         {
@@ -186,15 +186,15 @@ namespace Valuation.Api.Services
             // 4. UPDATE WORKFLOW ENTITY 
             // =========================================================
 
-            entity.Status = "Returned"; // Changed from InProgress or Rejected to Returned
+            entity.Status = "Returned";
             entity.RedFlag = "true";
 
-            // UPDATED REMARKS: "RETURNED by..."
+            // UPDATED REMARKS
             entity.Remarks = $"RETURNED by {returnDto.CurrentStep}: {returnDto.ReturnReason}";
 
             entity.Workflow = nextStep;
 
-            // Step Order Logic (Unchanged)
+            // Step Order Logic
             int targetOrder = 0;
             if (nextStep == "Stakeholder") targetOrder = 1;
             else if (nextStep == "Backend" || nextStep == "BackEnd") targetOrder = 2;
@@ -243,23 +243,19 @@ namespace Valuation.Api.Services
             {
                 ValuationId = returnDto.ValuationId,
                 DateTime = DateTime.UtcNow,
-                Action = "Returned", // Changed from Rejected
+                Action = "Returned",
                 StatusFrom = returnDto.CurrentStep,
                 StatusTo = nextStep,
-                Remarks = $"RETURNED: {returnDto.ReturnReason}", // Changed
+                Remarks = $"RETURNED: {returnDto.ReturnReason}",
                 PerformedByUserId = returnDto.CurrentUserId,
                 PerformedByUserName = returnDto.CurrentUserName,
-                CurrentStatus = "Returned", // Changed
+                CurrentStatus = "Returned",
                 StatusChange = true,
                 StatusChangedDateTime = DateTime.UtcNow
             };
 
             await AddHistoryAsync(historyDto);
         }
-
-        // ==============================================================================
-        // EXISTING METHODS 
-        // ==============================================================================
 
         public async Task AddHistoryAsync(LeadHistoryDto dto)
         {
@@ -419,7 +415,7 @@ namespace Valuation.Api.Services
 
             try
             {
-                // ✅ This single query now fetches InProgress, Rejected, AND Returned cases.
+                // ✅ UPDATED: Include 'Returned' so they are fetched
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: $"Status eq 'InProgress' or Status eq 'Rejected' or Status eq 'Returned'").ConfigureAwait(false))
                 {
@@ -450,7 +446,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Table not found, return empty list
             }
             catch (Exception ex)
             {
@@ -467,7 +462,9 @@ namespace Valuation.Api.Services
                 return results;
 
             var stateFilter = string.Join(" or ", stateKeys.Select(s => $"State eq '{s.Replace("'", "''")}'"));
-            var filter = $"Status eq 'InProgress' and ({stateFilter})";
+            
+            // ✅ UPDATED: Added 'Returned' so AVO/QC/Admin dashboards see them
+            var filter = $"(Status eq 'InProgress' or Status eq 'Returned') and ({stateFilter})";
 
             try
             {
@@ -515,7 +512,9 @@ namespace Valuation.Api.Services
                 return results;
 
             var districtFilter = string.Join(" or ", districtKeys.Select(d => $"District eq '{d.Replace("'", "''")}'"));
-            var filter = $"Status eq 'InProgress' and ({districtFilter})";
+            
+            // ✅ UPDATED: Added 'Returned' so AVO/QC/Admin dashboards see them
+            var filter = $"(Status eq 'InProgress' or Status eq 'Returned') and ({districtFilter})";
 
             try
             {
@@ -1135,6 +1134,9 @@ namespace Valuation.Api.Services
             }
         }
 
+        // ==============================================================================
+        //  ✅ FIX 3: CompleteWorkflowStepAsync (Un-stuck the case)
+        // ==============================================================================
         public async Task CompleteWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder)
         {
             var partitionKey = $"{vehicleNumber}|{applicantContact}";
@@ -1145,8 +1147,10 @@ namespace Valuation.Api.Services
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
                 var entity = response.Value;
 
-                // 1. For now, we update the timestamp to show activity.
-                // If you have logic to auto-move to the next step, add it here.
+                // ✅ CHANGED: Reset Status and RedFlag when completing a step
+                // This ensures if it was "Returned", it goes back to "InProgress"
+                entity.Status = "InProgress";
+                entity.RedFlag = "false";
                 entity.UpdatedAt = DateTime.UtcNow;
 
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
