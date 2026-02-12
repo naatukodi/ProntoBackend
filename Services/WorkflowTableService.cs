@@ -35,12 +35,12 @@ namespace Valuation.Api.Services
         }
 
         // ==============================================================================
-        //  REJECT WORKFLOW STEP (Updated for Visibility)
+        //  RETURN WORKFLOW STEP (Renamed from Reject)
         // ==============================================================================
-        public async Task RejectWorkflowStepAsync(WorkflowRejectDto rejectDto)
+        public async Task ReturnWorkflowStepAsync(WorkflowReturnDto returnDto)
         {
-            var partitionKey = $"{rejectDto.VehicleNumber}|{rejectDto.ApplicantContact}";
-            var rowKey = rejectDto.ValuationId;
+            var partitionKey = $"{returnDto.VehicleNumber}|{returnDto.ApplicantContact}";
+            var rowKey = returnDto.ValuationId;
 
             // 1. Fetch Current Workflow Entity
             WorkflowEntity entity;
@@ -59,7 +59,7 @@ namespace Valuation.Api.Services
             UserEntity? nextUser = null;
 
             // Normalize step name
-            string currentStepNormalized = rejectDto.CurrentStep;
+            string currentStepNormalized = returnDto.CurrentStep;
             if (currentStepNormalized.Equals("QC", StringComparison.OrdinalIgnoreCase))
                 currentStepNormalized = "QualityControl";
 
@@ -67,9 +67,7 @@ namespace Valuation.Api.Services
             // DETERMINE NEXT STEP & ASSIGNEE
             // =========================================================
 
-            // ---------------------------------------------------------
             // SCENARIO A: Final Report -> Back to QualityControl
-            // ---------------------------------------------------------
             if (currentStepNormalized == "FinalReport")
             {
                 nextStep = "QualityControl";
@@ -82,7 +80,7 @@ namespace Valuation.Api.Services
                 {
                     var historyList = new List<LeadHistoryEntity>();
                     await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
-                        h => h.PartitionKey == rejectDto.ValuationId && h.StatusTo == "FinalReport"))
+                        h => h.PartitionKey == returnDto.ValuationId && h.StatusTo == "FinalReport"))
                     {
                         historyList.Add(h);
                     }
@@ -94,19 +92,17 @@ namespace Valuation.Api.Services
                         throw new Exception("Could not find the original QC user. Check data integrity.");
                 }
             }
-            // ---------------------------------------------------------
             // SCENARIO B: QualityControl -> Back to AVO or Backend
-            // ---------------------------------------------------------
             else if (currentStepNormalized == "QualityControl")
             {
-                if (string.IsNullOrEmpty(rejectDto.TargetRejectedStep))
+                if (string.IsNullOrEmpty(returnDto.TargetReturnStep))
                     throw new ArgumentException("Target step (AVO or Backend) is required.");
 
-                nextStep = rejectDto.TargetRejectedStep;
+                nextStep = returnDto.TargetReturnStep;
 
-                if (!string.IsNullOrEmpty(rejectDto.OverrideAssigneeId))
+                if (!string.IsNullOrEmpty(returnDto.OverrideAssigneeId))
                 {
-                    nextAssigneeId = rejectDto.OverrideAssigneeId;
+                    nextAssigneeId = returnDto.OverrideAssigneeId;
                 }
                 else if (nextStep == "AVO" && !string.IsNullOrEmpty(entity.AVOAssignedToPhoneNumber))
                 {
@@ -120,7 +116,7 @@ namespace Valuation.Api.Services
                 {
                     var historyList = new List<LeadHistoryEntity>();
                     await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(h =>
-                        h.PartitionKey == rejectDto.ValuationId &&
+                        h.PartitionKey == returnDto.ValuationId &&
                         (h.StatusTo == "QualityControl" || h.StatusTo == "QC") &&
                         h.StatusFrom == nextStep))
                     {
@@ -134,15 +130,10 @@ namespace Valuation.Api.Services
                         throw new Exception($"No history found for {nextStep}. Please provide 'overrideAssigneeId' manually.");
                 }
             }
-            // ---------------------------------------------------------
             // SCENARIO C: AVO -> Back to Backend
-            // ---------------------------------------------------------
             else if (currentStepNormalized == "AVO")
             {
                 nextStep = "Backend";
-
-                // REMOVED: Check for rejectDto.OverrideAssigneeId
-                // We now strictly look for the previous Backend user
 
                 if (!string.IsNullOrEmpty(entity.BackEndAssignedToPhoneNumber))
                 {
@@ -150,10 +141,9 @@ namespace Valuation.Api.Services
                 }
                 else
                 {
-                    // Fallback: Look in history for who sent it to AVO
                     var historyList = new List<LeadHistoryEntity>();
                     await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(h =>
-                        h.PartitionKey == rejectDto.ValuationId &&
+                        h.PartitionKey == returnDto.ValuationId &&
                         h.StatusTo == "AVO" &&
                         (h.StatusFrom == "Backend" || h.StatusFrom == "BackEnd")))
                     {
@@ -196,15 +186,15 @@ namespace Valuation.Api.Services
             // 4. UPDATE WORKFLOW ENTITY 
             // =========================================================
 
-            entity.Status = "InProgress";
+            entity.Status = "Returned"; // Changed from InProgress or Rejected to Returned
             entity.RedFlag = "true";
 
-            // ✅ FIX: Format remarks so Angular UI detects it as a Rejection Banner
-            entity.Remarks = $"REJECTED by {rejectDto.CurrentStep}: {rejectDto.RejectReason}";
+            // UPDATED REMARKS: "RETURNED by..."
+            entity.Remarks = $"RETURNED by {returnDto.CurrentStep}: {returnDto.ReturnReason}";
 
             entity.Workflow = nextStep;
 
-            // Correctly calculate Step Order
+            // Step Order Logic (Unchanged)
             int targetOrder = 0;
             if (nextStep == "Stakeholder") targetOrder = 1;
             else if (nextStep == "Backend" || nextStep == "BackEnd") targetOrder = 2;
@@ -220,7 +210,7 @@ namespace Valuation.Api.Services
             entity.AssignedToEmail = nextUser.Email;
             entity.AssignedToWhatsapp = nextUser.Whatsapp;
 
-            // Update Specific Role Assignments (Preserve history of who owns what step)
+            // Update Specific Role Assignments (Preserve history)
             if (nextStep == "AVO")
             {
                 entity.AVOAssignedTo = nextUser.Name;
@@ -251,15 +241,15 @@ namespace Valuation.Api.Services
             // =========================================================
             var historyDto = new LeadHistoryDto
             {
-                ValuationId = rejectDto.ValuationId,
+                ValuationId = returnDto.ValuationId,
                 DateTime = DateTime.UtcNow,
-                Action = "Rejected",
-                StatusFrom = rejectDto.CurrentStep,
+                Action = "Returned", // Changed from Rejected
+                StatusFrom = returnDto.CurrentStep,
                 StatusTo = nextStep,
-                Remarks = $"REJECTED: {rejectDto.RejectReason}", // Also clear in history
-                PerformedByUserId = rejectDto.CurrentUserId,
-                PerformedByUserName = rejectDto.CurrentUserName,
-                CurrentStatus = "Rejected",
+                Remarks = $"RETURNED: {returnDto.ReturnReason}", // Changed
+                PerformedByUserId = returnDto.CurrentUserId,
+                PerformedByUserName = returnDto.CurrentUserName,
+                CurrentStatus = "Returned", // Changed
                 StatusChange = true,
                 StatusChangedDateTime = DateTime.UtcNow
             };
@@ -429,8 +419,9 @@ namespace Valuation.Api.Services
 
             try
             {
+                // ✅ This single query now fetches InProgress, Rejected, AND Returned cases.
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
-                    filter: $"Status eq 'InProgress' or Status eq 'Rejected'").ConfigureAwait(false))
+                    filter: $"Status eq 'InProgress' or Status eq 'Rejected' or Status eq 'Returned'").ConfigureAwait(false))
                 {
                     results.Add(new WorkflowModel
                     {
@@ -459,6 +450,7 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                // Table not found, return empty list
             }
             catch (Exception ex)
             {

@@ -102,7 +102,7 @@ namespace Valuation.Api.Services
         Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId);
 
         // ✅ This is the critical new method for the Reject feature
-        Task RejectWorkflowStepAsync(WorkflowRejectDto rejectDto);
+        Task ReturnWorkflowStepAsync(WorkflowReturnDto returnDto);
 
         // =================================================================
         // ⚠️ MISSING METHODS ADDED BELOW

@@ -75,13 +75,51 @@ namespace Valuation.Api.Controllers
         }
 
         // =================================================================
-        // 👇👇 NEW REJECTION ENDPOINT 👇👇
+        // 👇👇 OLD REJECTION ENDPOINT (Kept for reference) 👇👇
         // POST: api/valuations/{id}/workflow/reject
         // =================================================================
+        /*
         [HttpPost("reject")]
         public async Task<IActionResult> RejectWorkflow(
             Guid valuationId,
             [FromBody] WorkflowRejectDto request)
+        {
+            if (request == null) return BadRequest("Invalid request data.");
+
+            if (valuationId.ToString() != request.ValuationId)
+            {
+                return BadRequest("Valuation ID mismatch between URL and Body.");
+            }
+
+            try
+            {
+                await _svc.RejectWorkflowStepAsync(request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Case rejected and reassigned successfully."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+        */
+
+        // =================================================================
+        // 👇👇 NEW RETURN ENDPOINT (Renamed from Reject) 👇👇
+        // POST: api/valuations/{id}/workflow/return
+        // =================================================================
+        [HttpPost("return")]
+        public async Task<IActionResult> ReturnWorkflow(
+            Guid valuationId,
+            [FromBody] WorkflowReturnDto request) // Updated parameter type
         {
             // 1. Basic Validation
             if (request == null) return BadRequest("Invalid request data.");
@@ -94,18 +132,18 @@ namespace Valuation.Api.Controllers
 
             try
             {
-                // 2. Call the new Service Logic
-                await _svc.RejectWorkflowStepAsync(request);
+                // 2. Call the new Service Logic (Renamed method)
+                await _svc.ReturnWorkflowStepAsync(request);
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Case rejected and reassigned successfully."
+                    message = "Case returned and reassigned successfully."
                 });
             }
             catch (Exception ex)
             {
-                // 3. Return error so Frontend knows if "User Unavailable" or other issues occurred
+                // 3. Return error
                 return BadRequest(new
                 {
                     success = false,
@@ -119,14 +157,11 @@ namespace Valuation.Api.Controllers
         public async Task<IActionResult> AddHistory(
             [FromBody] LeadHistoryDto dto)
         {
-            // Validate input
             if (dto == null)
                 return BadRequest("History data cannot be null");
 
-            // Add to database
             await _svc.AddHistoryAsync(dto);
 
-            // ✅ Return 200 OK with success response
             return Ok(new
             {
                 success = true,
@@ -144,6 +179,9 @@ namespace Valuation.Api.Controllers
         }
     }
 
+    // =====================================================================
+    // OPEN WORKFLOWS CONTROLLER (UNCHANGED)
+    // =====================================================================
     [ApiController]
     [Route("api/valuations/workflows/open")]
     public class OpenWorkflowsController : ControllerBase
@@ -193,7 +231,6 @@ namespace Valuation.Api.Controllers
         {
             var records = await _svc.GetByAssignedToPhoneNumberAsync(
                 assignedToPhoneNumber);
-
 
             if (records == null || records.Count == 0)
                 return NotFound();
