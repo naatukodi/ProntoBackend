@@ -362,6 +362,9 @@ namespace Valuation.Api.Services
                 };
             }
 
+            // ✅ Capture previous status BEFORE modifying
+            var previousStatus = entity.Status;
+
             if (dto.VehicleNumber != null) entity.VehicleNumber = dto.VehicleNumber;
             if (dto.ApplicantName != null) entity.ApplicantName = dto.ApplicantName;
             if (dto.ApplicantContact != null) entity.ApplicantContact = dto.ApplicantContact;
@@ -403,6 +406,15 @@ namespace Valuation.Api.Services
             if (dto.AssignedToWhatsapp != null) entity.AssignedToWhatsapp = dto.AssignedToWhatsapp;
             if (dto.Name != null) entity.Name = dto.Name;
             if (dto.ValuationType != null) entity.ValuationType = dto.ValuationType;
+
+            // ================================
+            // ✅ UNIVERSAL RETURN FIX
+            // ================================
+            if (previousStatus == "Returned" && dto.Status == null)
+            {
+                entity.Status = "InProgress";
+                entity.RedFlag = "false";
+            }
 
             entity.UpdatedAt = DateTime.UtcNow;
 
