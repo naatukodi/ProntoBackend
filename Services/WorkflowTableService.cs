@@ -1019,7 +1019,7 @@ namespace Valuation.Api.Services
             try
             {
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
-                    filter: $"AssignedToPhoneNumber eq '{phoneNumber}'").ConfigureAwait(false))
+                    filter: $"AssignedToPhoneNumber eq '{phoneNumber}' and (Status eq 'InProgress' or Status eq 'Returned')").ConfigureAwait(false))
                 {
                     results.Add(new WorkflowModel
                     {

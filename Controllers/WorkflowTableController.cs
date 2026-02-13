@@ -232,10 +232,11 @@ namespace Valuation.Api.Controllers
             var records = await _svc.GetByAssignedToPhoneNumberAsync(
                 assignedToPhoneNumber);
 
-            if (records == null || records.Count == 0)
-                return NotFound();
+            //if (records == null || records.Count == 0)
+                //return NotFound();
 
-            return Ok(records);
+            return Ok(records ?? new List<WorkflowModel>());
+
         }
 
         [HttpGet("assignedto")]
