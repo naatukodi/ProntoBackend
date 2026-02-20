@@ -1172,5 +1172,34 @@ namespace Valuation.Api.Services
                 throw new Exception("Valuation record not found.");
             }
         }
+
+        public async Task SavePaymentAsync(PaymentDto dto)
+        {
+            var partitionKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
+            var rowKey = dto.ValuationId;
+
+            WorkflowEntity entity;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                entity = response.Value;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation not found.");
+            }
+
+            entity.PaymentStatus = dto.PaymentStatus;
+            entity.PaymentMethod = dto.PaymentMethod;
+            entity.PaymentReference = dto.PaymentReference;
+            entity.PaymentDate = dto.PaymentDate;
+            entity.PaymentAmount = dto.PaymentAmount;
+            entity.UpdatedAt = DateTime.UtcNow;
+            entity.PaymentNotes = dto.PaymentNotes;
+
+            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
+        }
+
     }
 }
