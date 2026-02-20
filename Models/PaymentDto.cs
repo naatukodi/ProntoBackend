@@ -10,7 +10,7 @@ namespace Valuation.Api.Models
         public string PaymentMethod { get; set; } = default!;
         public string PaymentReference { get; set; } = default!;
         public DateTime? PaymentDate { get; set; }
-        public decimal PaymentAmount { get; set; }
+        public decimal? PaymentAmount { get; set; }
         public string? PaymentNotes { get; set; }
     }
 }

@@ -103,6 +103,9 @@ namespace Valuation.Api.Services
 
         Task SavePaymentAsync(PaymentDto dto);
 
+        Task<PaymentDto?> GetPaymentAsync(string valuationId);
+
+
 
         // ✅ This is the critical new method for the Reject feature
         Task ReturnWorkflowStepAsync(WorkflowReturnDto returnDto);

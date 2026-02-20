@@ -1203,23 +1203,24 @@ namespace Valuation.Api.Services
 
         public async Task<PaymentDto?> GetPaymentAsync(string valuationId)
         {
-            var entity = await _paymentTableClient.GetEntityIfExistsAsync<PaymentEntity>("Payment", valuationId);
-
-            if (!entity.HasValue)
-                return null;
-
-            var e = entity.Value;
-
-            return new PaymentDto
+            await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
+                filter: $"RowKey eq '{valuationId}'"))
             {
-                ValuationId = e.RowKey,
-                PaymentStatus = e.PaymentStatus,
-                PaymentReference = e.PaymentReference,
-                PaymentMethod = e.PaymentMethod,
-                PaymentDate = e.PaymentDate,
-                PaymentAmount = e.PaymentAmount,
-                PaymentNotes = e.PaymentNotes
-            };
+                return new PaymentDto
+                {
+                    ValuationId = entity.RowKey,
+                    VehicleNumber = entity.VehicleNumber,
+                    ApplicantContact = entity.ApplicantContact,
+                    PaymentStatus = entity.PaymentStatus,
+                    PaymentReference = entity.PaymentReference,
+                    PaymentMethod = entity.PaymentMethod,
+                    PaymentDate = entity.PaymentDate,
+                    PaymentAmount = entity.PaymentAmount,
+                    PaymentNotes = entity.PaymentNotes
+                };
+            }
+
+            return null;
         }
 
 

@@ -25,13 +25,12 @@ namespace Valuation.Api.Controllers
         [HttpGet("{valuationId}")]
         public async Task<IActionResult> GetPayment(string valuationId)
         {
-            var payment = await _workflowTableService.GetPaymentAsync(valuationId);
+            var payment = await _workflowService.GetPaymentAsync(valuationId);
 
             if (payment == null)
                 return NotFound();
 
             return Ok(payment);
         }
-
     }
 }
