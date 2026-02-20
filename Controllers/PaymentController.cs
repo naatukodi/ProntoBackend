@@ -21,5 +21,17 @@ namespace Valuation.Api.Controllers
             await _workflowService.SavePaymentAsync(dto);
             return Ok(new { message = "Payment saved successfully." });
         }
+
+        [HttpGet("{valuationId}")]
+        public async Task<IActionResult> GetPayment(string valuationId)
+        {
+            var payment = await _workflowTableService.GetPaymentAsync(valuationId);
+
+            if (payment == null)
+                return NotFound();
+
+            return Ok(payment);
+        }
+
     }
 }

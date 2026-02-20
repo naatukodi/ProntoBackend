@@ -1201,5 +1201,27 @@ namespace Valuation.Api.Services
             await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
         }
 
+        public async Task<PaymentDto?> GetPaymentAsync(string valuationId)
+        {
+            var entity = await _paymentTableClient.GetEntityIfExistsAsync<PaymentEntity>("Payment", valuationId);
+
+            if (!entity.HasValue)
+                return null;
+
+            var e = entity.Value;
+
+            return new PaymentDto
+            {
+                ValuationId = e.RowKey,
+                PaymentStatus = e.PaymentStatus,
+                PaymentReference = e.PaymentReference,
+                PaymentMethod = e.PaymentMethod,
+                PaymentDate = e.PaymentDate,
+                PaymentAmount = e.PaymentAmount,
+                PaymentNotes = e.PaymentNotes
+            };
+        }
+
+
     }
 }
