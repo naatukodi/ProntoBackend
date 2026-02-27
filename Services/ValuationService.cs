@@ -24,7 +24,6 @@ public class ValuationService : IValuationService
     private readonly string _attestrToken;
     private readonly IWorkflowTableService _workflowTableService;
 
-
     public ValuationService(
         CosmosClient cosmos,
         BlobServiceClient blobService,
@@ -43,8 +42,6 @@ public class ValuationService : IValuationService
         _attestrToken = configuration["Attestr:Token"] ?? "";
         _workflowTableService = workflowTableService;
     }
-
-
 
     private Container Container =>
         _cosmos.GetDatabase(_dbId).GetContainer(_containerId);
@@ -310,6 +307,7 @@ public class ValuationService : IValuationService
                 $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}' and applicant '{applicantContact}'.");
         }
     }
+
     public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
     {
 
@@ -639,7 +637,6 @@ public class ValuationService : IValuationService
         });
     }
 
-
     private async Task<string?> UploadIfAsync(IFormFile? file, string reg, string contact)
     {
         if (file == null) return null;
@@ -653,6 +650,7 @@ public class ValuationService : IValuationService
         await blobClient.UploadAsync(stream, headers);
         return blobClient.Uri.ToString();
     }
+
     public async Task DeleteVehicleDetailsAsync(
         string valuationId, string vehicleNumber, string applicantContact)
     {
@@ -670,23 +668,39 @@ public class ValuationService : IValuationService
         }
     }
 
+    // ✅ NEW DTO CLASS: Prevents crashing when Cosmos DB returns missing properties
+    private class DuplicateQueryResult
+    {
+        public string id { get; set; }
+        public string? VehicleNumber { get; set; }
+        public string? EngineNumber { get; set; }
+        public string? ChassisNumber { get; set; }
+        public string? Status { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public string? Company { get; set; }
+        public double? ValuationAmount { get; set; } 
+    }
+
     public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
         string? vehicleNumber,
         string? engineNumber,
         string? chassisNumber)
     {
+        // ✅ CATCH FRONTEND BUG: Stop Angular from searching for literal "undefined"
+        string? CleanStr(string? val) =>
+            string.IsNullOrWhiteSpace(val) || val == "undefined" || val == "null" ? null : val;
+
+        vehicleNumber = CleanStr(vehicleNumber);
+        engineNumber = CleanStr(engineNumber);
+        chassisNumber = CleanStr(chassisNumber);
+
         var response = new VehicleDuplicateCheckResponse
         {
-            IsVehicleNumberExists = false,
-            IsEngineNumberExists = false,
-            IsChassisNumberExists = false,
             ExistingRecords = new List<ExistingVehicleRecord>(),
             Messages = new List<string>()
         };
 
-        if (string.IsNullOrWhiteSpace(vehicleNumber) &&
-            string.IsNullOrWhiteSpace(engineNumber) &&
-            string.IsNullOrWhiteSpace(chassisNumber))
+        if (vehicleNumber == null && engineNumber == null && chassisNumber == null)
         {
             return response;
         }
@@ -695,9 +709,10 @@ public class ValuationService : IValuationService
         {
             var recordsDict = new Dictionary<string, ExistingVehicleRecord>();
 
+            // ✅ SAFE ITERATOR: Uses DuplicateQueryResult instead of <dynamic>
             async Task ExecuteQuery(QueryDefinition query, string matchedField)
             {
-                using var iterator = Container.GetItemQueryIterator<dynamic>(query);
+                using var iterator = Container.GetItemQueryIterator<DuplicateQueryResult>(query);
 
                 while (iterator.HasMoreResults)
                 {
@@ -709,34 +724,6 @@ public class ValuationService : IValuationService
 
                         if (!recordsDict.ContainsKey(valId))
                         {
-                            // ✅ SAFE DECIMAL CONVERSION
-                            decimal? valuationAmount = null;
-                            if (item.ValuationAmount != null)
-                            {
-                                try
-                                {
-                                    valuationAmount = Convert.ToDecimal(item.ValuationAmount);
-                                }
-                                catch
-                                {
-                                    valuationAmount = null;
-                                }
-                            }
-
-                            // ✅ SAFE DATETIME CONVERSION
-                            DateTime createdDate = DateTime.MinValue;
-                            if (item.CreatedAt != null)
-                            {
-                                try
-                                {
-                                    createdDate = Convert.ToDateTime(item.CreatedAt);
-                                }
-                                catch
-                                {
-                                    createdDate = DateTime.MinValue;
-                                }
-                            }
-
                             recordsDict[valId] = new ExistingVehicleRecord
                             {
                                 ValuationId = valId,
@@ -744,11 +731,10 @@ public class ValuationService : IValuationService
                                 EngineNumber = item.EngineNumber,
                                 ChassisNumber = item.ChassisNumber,
                                 Status = item.Status ?? "Unknown",
-                                CreatedDate = createdDate,
+                                CreatedDate = item.CreatedAt ?? DateTime.MinValue,
                                 MatchedField = matchedField,
-                                // ✅ SAFE STRING CONVERSION
-                                Company = item.Company != null ? item.Company.ToString() : null,
-                                ValuationAmount = valuationAmount
+                                Company = item.Company,
+                                ValuationAmount = item.ValuationAmount.HasValue ? (decimal)item.ValuationAmount.Value : null
                             };
                         }
                         else
@@ -762,11 +748,22 @@ public class ValuationService : IValuationService
                 }
             }
 
+            // ================= SAFE VALUATION EXPRESSION =================
+            string valuationExpression = @"
+                IIF(
+                    IS_DEFINED(c.FinalValuationAmount),
+                    c.FinalValuationAmount,
+                    IIF(
+                        IS_DEFINED(c.ValuationResponse) AND IS_DEFINED(c.ValuationResponse.MidRange),
+                        c.ValuationResponse.MidRange,
+                        null
+                    )
+                ) AS ValuationAmount";
+
             // ================= VEHICLE NUMBER =================
-            // ✅ PROPER ALIASING AND COALESCE DEFAULT
-            if (!string.IsNullOrWhiteSpace(vehicleNumber))
+            if (vehicleNumber != null)
             {
-                var vehicleQuery = new QueryDefinition(@"
+                var vehicleQuery = new QueryDefinition($@"
                     SELECT 
                         c.id,
                         c.VehicleNumber,
@@ -775,23 +772,19 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
+                        {valuationExpression}
                     FROM c
-                    WHERE IS_NULL(c.DeletedAt)
+                    WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND UPPER(c.VehicleNumber) = @vehicleNumber
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
 
                 await ExecuteQuery(vehicleQuery, "Vehicle Number");
-
-                response.IsVehicleNumberExists =
-                    recordsDict.Values.Any(r => r.MatchedField.Contains("Vehicle Number"));
             }
 
             // ================= ENGINE NUMBER =================
-            // ✅ PROPER ALIASING AND COALESCE DEFAULT
-            if (!string.IsNullOrWhiteSpace(engineNumber))
+            if (engineNumber != null)
             {
-                var engineQuery = new QueryDefinition(@"
+                var engineQuery = new QueryDefinition($@"
                     SELECT 
                         c.id,
                         c.VehicleNumber,
@@ -800,24 +793,20 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
+                        {valuationExpression}
                     FROM c
-                    WHERE IS_NULL(c.DeletedAt)
+                    WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.EngineNumber)
                     AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
 
                 await ExecuteQuery(engineQuery, "Engine Number");
-
-                response.IsEngineNumberExists =
-                    recordsDict.Values.Any(r => r.MatchedField.Contains("Engine Number"));
             }
 
             // ================= CHASSIS NUMBER =================
-            // ✅ PROPER ALIASING AND COALESCE DEFAULT
-            if (!string.IsNullOrWhiteSpace(chassisNumber))
+            if (chassisNumber != null)
             {
-                var chassisQuery = new QueryDefinition(@"
+                var chassisQuery = new QueryDefinition($@"
                     SELECT 
                         c.id,
                         c.VehicleNumber,
@@ -826,50 +815,36 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
+                        {valuationExpression}
                     FROM c
-                    WHERE IS_NULL(c.DeletedAt)
+                    WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
                     AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
 
                 await ExecuteQuery(chassisQuery, "Chassis Number");
-
-                response.IsChassisNumberExists =
-                    recordsDict.Values.Any(r => r.MatchedField.Contains("Chassis Number"));
             }
 
             response.ExistingRecords = recordsDict.Values.ToList();
+            response.TotalDuplicatesFound = response.ExistingRecords.Count;
 
-            // ================= MESSAGES =================
-            if (response.IsVehicleNumberExists)
-            {
-                response.Messages.Add(
-                    $"Vehicle number '{vehicleNumber}' found in {response.ExistingRecords.Count(r => r.MatchedField.Contains("Vehicle Number"))} existing record(s)");
-            }
+            response.IsVehicleNumberExists =
+                response.ExistingRecords.Any(r => r.MatchedField.Contains("Vehicle Number"));
 
-            if (response.IsEngineNumberExists)
-            {
-                response.Messages.Add(
-                    $"Engine number '{engineNumber}' found in {response.ExistingRecords.Count(r => r.MatchedField.Contains("Engine Number"))} existing record(s)");
-            }
+            response.IsEngineNumberExists =
+                response.ExistingRecords.Any(r => r.MatchedField.Contains("Engine Number"));
 
-            if (response.IsChassisNumberExists)
-            {
-                response.Messages.Add(
-                    $"Chassis number '{chassisNumber}' found in {response.ExistingRecords.Count(r => r.MatchedField.Contains("Chassis Number"))} existing record(s)");
-            }
+            response.IsChassisNumberExists =
+                response.ExistingRecords.Any(r => r.MatchedField.Contains("Chassis Number"));
 
             response.IsDuplicate =
                 response.IsVehicleNumberExists ||
                 response.IsEngineNumberExists ||
                 response.IsChassisNumberExists;
 
-            response.TotalDuplicatesFound = response.ExistingRecords.Count;
-
-            // ================= AVERAGE CALCULATION =================
+            // ================= AVERAGE =================
             var amounts = response.ExistingRecords
-                .Where(r => r.ValuationAmount.HasValue && r.ValuationAmount.Value > 0) // Ignore the '0' defaults if they throw off the average
+                .Where(r => r.ValuationAmount.HasValue && r.ValuationAmount.Value > 0)
                 .Select(r => r.ValuationAmount!.Value)
                 .ToList();
 
