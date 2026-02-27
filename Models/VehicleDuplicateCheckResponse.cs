@@ -11,6 +11,8 @@ namespace Valuation.Api.Models
         public int TotalDuplicatesFound { get; set; }
         public List<ExistingVehicleRecord> ExistingRecords { get; set; } = new List<ExistingVehicleRecord>();
         public List<string> Messages { get; set; } = new List<string>();
+        // NEW
+        public decimal? AverageValuationAmount { get; set; }
     }
 
     public class ExistingVehicleRecord
@@ -22,5 +24,8 @@ namespace Valuation.Api.Models
         public string Status { get; set; } = string.Empty;
         public DateTime CreatedDate { get; set; }
         public string MatchedField { get; set; } = string.Empty;
+        // NEW FIELDS
+        public string? Company { get; set; }
+        public decimal? ValuationAmount { get; set; }
     }
 }

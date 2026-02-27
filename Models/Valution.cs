@@ -45,4 +45,6 @@ public class ValuationDocument
     public string? CompletedByEmail { get; set; }
     public string? CompletedByWhatsapp { get; set; }
     public Dictionary<string, PhotoMetadata> PhotoMetadata { get; set; } = new Dictionary<string, PhotoMetadata>();
+    // ✅ NEW
+    public decimal? FinalValuationAmount { get; set; }
 }
