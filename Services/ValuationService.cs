@@ -800,10 +800,11 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         c.Stakeholder.Name AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
+                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange) AS ValuationAmount
                     FROM c
-                    WHERE UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
-                    AND IS_NULL(c.DeletedAt)
+                    WHERE IS_NULL(c.DeletedAt)
+                    AND IS_DEFINED(c.VehicleDetails.EngineNumber)
+                    AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
 
                 await ExecuteQuery(engineQuery, "Engine Number");
@@ -825,10 +826,11 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         c.Stakeholder.Name AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
+                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange) AS ValuationAmount
                     FROM c
-                    WHERE UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
-                    AND IS_NULL(c.DeletedAt)
+                    WHERE IS_NULL(c.DeletedAt)
+                    AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
+                    AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
 
                 await ExecuteQuery(chassisQuery, "Chassis Number");
