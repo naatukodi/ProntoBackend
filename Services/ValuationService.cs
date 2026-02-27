@@ -774,11 +774,11 @@ public class ValuationService : IValuationService
                         c.VehicleDetails.ChassisNumber AS ChassisNumber,
                         c.Status,
                         c.CreatedAt,
-                        c.Stakeholder.Name AS Company,
+                        IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
                         COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
                     FROM c
-                    WHERE UPPER(c.VehicleNumber) = @vehicleNumber
-                    AND IS_NULL(c.DeletedAt)
+                    WHERE IS_NULL(c.DeletedAt)
+                    AND UPPER(c.VehicleNumber) = @vehicleNumber
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
 
                 await ExecuteQuery(vehicleQuery, "Vehicle Number");
@@ -799,8 +799,8 @@ public class ValuationService : IValuationService
                         c.VehicleDetails.ChassisNumber AS ChassisNumber,
                         c.Status,
                         c.CreatedAt,
-                        c.Stakeholder.Name AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange) AS ValuationAmount
+                        IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
                     FROM c
                     WHERE IS_NULL(c.DeletedAt)
                     AND IS_DEFINED(c.VehicleDetails.EngineNumber)
@@ -825,8 +825,8 @@ public class ValuationService : IValuationService
                         c.VehicleDetails.ChassisNumber AS ChassisNumber,
                         c.Status,
                         c.CreatedAt,
-                        c.Stakeholder.Name AS Company,
-                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange) AS ValuationAmount
+                        IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        COALESCE(c.FinalValuationAmount, c.ValuationResponse.MidRange, 0) AS ValuationAmount
                     FROM c
                     WHERE IS_NULL(c.DeletedAt)
                     AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
