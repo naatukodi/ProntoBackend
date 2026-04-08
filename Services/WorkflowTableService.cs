@@ -1,6 +1,7 @@
 using Azure;
 using Azure.Data.Tables;
 using Valuation.Api.Models;
+// No System.Text.Json needed if we aren't parsing the column
 
 namespace Valuation.Api.Services
 {
@@ -8,28 +9,252 @@ namespace Valuation.Api.Services
     {
         private const string TableName = "Workflows";
         private const string CompletedTableName = "CompletedWorkflows";
+        private const string LeadHistoryTableName = "LeadHistory";
+        private const string UserTableName = "Users";
+
         private readonly TableClient _tableClient;
         private readonly TableClient _completedTableClient;
-        private const string LeadHistoryTableName = "LeadHistory";
         private readonly TableClient _leadHistoryTableClient;
+        private readonly TableClient _userTableClient;
 
         public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
-            // Read connection string from appsettings.json
             var connString = configuration.GetConnectionString("TableStorage")
                              ?? throw new InvalidOperationException("TableStorage connection string not configured.");
 
-            // Create a TableClient (client for the Workflows table)
             var serviceClient = new TableServiceClient(connString);
             _tableClient = serviceClient.GetTableClient(TableName);
             _completedTableClient = serviceClient.GetTableClient(CompletedTableName);
-
             _leadHistoryTableClient = serviceClient.GetTableClient(LeadHistoryTableName);
+            _userTableClient = serviceClient.GetTableClient(UserTableName);
 
-            // Ensure the table exists (synchronous method)
             _tableClient.CreateIfNotExists();
             _completedTableClient.CreateIfNotExists();
             _leadHistoryTableClient.CreateIfNotExists();
+            _userTableClient.CreateIfNotExists();
+        }
+
+        // ==============================================================================
+        //  RETURN WORKFLOW STEP
+        // ==============================================================================
+        public async Task ReturnWorkflowStepAsync(WorkflowReturnDto returnDto)
+        {
+            var partitionKey = $"{returnDto.VehicleNumber}|{returnDto.ApplicantContact}";
+            var rowKey = returnDto.ValuationId;
+
+            // 1. Fetch Current Workflow Entity
+            WorkflowEntity entity;
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                entity = response.Value;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation not found.");
+            }
+
+            string nextStep = "";
+            string nextAssigneeId = "";
+            UserEntity? nextUser = null;
+
+            // Normalize step name
+            string currentStepNormalized = returnDto.CurrentStep;
+            if (currentStepNormalized.Equals("QC", StringComparison.OrdinalIgnoreCase))
+                currentStepNormalized = "QualityControl";
+
+            // =========================================================
+            // DETERMINE NEXT STEP & ASSIGNEE
+            // =========================================================
+
+            // SCENARIO A: Final Report -> Back to QualityControl
+            if (currentStepNormalized == "FinalReport")
+            {
+                nextStep = "QualityControl";
+
+                if (!string.IsNullOrEmpty(entity.QualityControlAssignedToPhoneNumber))
+                {
+                    nextAssigneeId = entity.QualityControlAssignedToPhoneNumber;
+                }
+                else
+                {
+                    var historyList = new List<LeadHistoryEntity>();
+                    await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                        h => h.PartitionKey == returnDto.ValuationId && h.StatusTo == "FinalReport"))
+                    {
+                        historyList.Add(h);
+                    }
+                    var history = historyList.OrderByDescending(h => h.DateTime).FirstOrDefault();
+
+                    if (history != null && !string.IsNullOrEmpty(history.PerformedByUserId))
+                        nextAssigneeId = history.PerformedByUserId;
+                    else
+                        throw new Exception("Could not find the original QC user. Check data integrity.");
+                }
+            }
+            // SCENARIO B: QualityControl -> Back to AVO or Backend
+            else if (currentStepNormalized == "QualityControl")
+            {
+                if (string.IsNullOrEmpty(returnDto.TargetReturnStep))
+                    throw new ArgumentException("Target step (AVO or Backend) is required.");
+
+                nextStep = returnDto.TargetReturnStep;
+
+                if (!string.IsNullOrEmpty(returnDto.OverrideAssigneeId))
+                {
+                    nextAssigneeId = returnDto.OverrideAssigneeId;
+                }
+                else if (nextStep == "AVO" && !string.IsNullOrEmpty(entity.AVOAssignedToPhoneNumber))
+                {
+                    nextAssigneeId = entity.AVOAssignedToPhoneNumber;
+                }
+                else if ((nextStep == "Backend" || nextStep == "BackEnd") && !string.IsNullOrEmpty(entity.BackEndAssignedToPhoneNumber))
+                {
+                    nextAssigneeId = entity.BackEndAssignedToPhoneNumber;
+                }
+                else
+                {
+                    var historyList = new List<LeadHistoryEntity>();
+                    await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(h =>
+                        h.PartitionKey == returnDto.ValuationId &&
+                        (h.StatusTo == "QualityControl" || h.StatusTo == "QC") &&
+                        h.StatusFrom == nextStep))
+                    {
+                        historyList.Add(h);
+                    }
+                    var lastAction = historyList.OrderByDescending(x => x.DateTime).FirstOrDefault();
+
+                    if (lastAction != null && !string.IsNullOrEmpty(lastAction.PerformedByUserId))
+                        nextAssigneeId = lastAction.PerformedByUserId;
+                    else
+                        throw new Exception($"No history found for {nextStep}. Please provide 'overrideAssigneeId' manually.");
+                }
+            }
+            // SCENARIO C: AVO -> Back to Backend
+            else if (currentStepNormalized == "AVO")
+            {
+                nextStep = "Backend";
+
+                if (!string.IsNullOrEmpty(entity.BackEndAssignedToPhoneNumber))
+                {
+                    nextAssigneeId = entity.BackEndAssignedToPhoneNumber;
+                }
+                else
+                {
+                    var historyList = new List<LeadHistoryEntity>();
+                    await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(h =>
+                        h.PartitionKey == returnDto.ValuationId &&
+                        h.StatusTo == "AVO" &&
+                        (h.StatusFrom == "Backend" || h.StatusFrom == "BackEnd")))
+                    {
+                        historyList.Add(h);
+                    }
+                    var lastAction = historyList.OrderByDescending(x => x.DateTime).FirstOrDefault();
+
+                    if (lastAction != null && !string.IsNullOrEmpty(lastAction.PerformedByUserId))
+                        nextAssigneeId = lastAction.PerformedByUserId;
+                    else
+                        throw new Exception("No history found for Backend assignee. Cannot revert automatically.");
+                }
+            }
+
+            // =========================================================
+            // 3. FETCH USER
+            // =========================================================
+            if (nextUser == null && !string.IsNullOrEmpty(nextAssigneeId))
+            {
+                try
+                {
+                    var userResponse = await _userTableClient.GetEntityAsync<UserEntity>("Users", nextAssigneeId);
+                    nextUser = userResponse.Value;
+
+                    bool isServiceable = nextUser.ServiceStatus == "Serviceable" || nextUser.ServiceStatus == "Servicable";
+                    if (!isServiceable)
+                    {
+                        throw new Exception($"The user ({nextUser.Name}) is currently '{nextUser.ServiceStatus}'. Please select a different user.");
+                    }
+                }
+                catch (RequestFailedException ex) when (ex.Status == 404)
+                {
+                    throw new Exception($"User ID ({nextAssigneeId}) not found. Please provide valid 'overrideAssigneeId'.");
+                }
+            }
+
+            if (nextUser == null) throw new Exception("Target user details could not be resolved.");
+
+            // =========================================================
+            // 4. UPDATE WORKFLOW ENTITY 
+            // =========================================================
+
+            entity.Status = "Returned";
+            entity.RedFlag = "true";
+
+            // UPDATED REMARKS
+            entity.Remarks = $"RETURNED by {returnDto.CurrentStep}: {returnDto.ReturnReason}";
+
+            entity.Workflow = nextStep;
+
+            // Step Order Logic
+            int targetOrder = 0;
+            if (nextStep == "Stakeholder") targetOrder = 1;
+            else if (nextStep == "Backend" || nextStep == "BackEnd") targetOrder = 2;
+            else if (nextStep == "AVO") targetOrder = 3;
+            else if (nextStep == "QualityControl" || nextStep == "QC") targetOrder = 4;
+            else if (nextStep == "FinalReport") targetOrder = 5;
+
+            if (targetOrder > 0) entity.WorkflowStepOrder = targetOrder;
+
+            // Update Current Assignments
+            entity.AssignedTo = nextUser.Name;
+            entity.AssignedToPhoneNumber = nextUser.PhoneNumber;
+            entity.AssignedToEmail = nextUser.Email;
+            entity.AssignedToWhatsapp = nextUser.Whatsapp;
+
+            // Update Specific Role Assignments (Preserve history)
+            if (nextStep == "AVO")
+            {
+                entity.AVOAssignedTo = nextUser.Name;
+                entity.AVOAssignedToPhoneNumber = nextUser.PhoneNumber;
+                entity.AVOAssignedToEmail = nextUser.Email;
+                entity.AVOAssignedToWhatsapp = nextUser.Whatsapp;
+            }
+            else if (nextStep == "Backend" || nextStep == "BackEnd")
+            {
+                entity.BackEndAssignedTo = nextUser.Name;
+                entity.BackEndAssignedToPhoneNumber = nextUser.PhoneNumber;
+                entity.BackEndAssignedToEmail = nextUser.Email;
+                entity.BackEndAssignedToWhatsapp = nextUser.Whatsapp;
+            }
+            else if (nextStep == "QualityControl" || nextStep == "QC")
+            {
+                entity.QualityControlAssignedTo = nextUser.Name;
+                entity.QualityControlAssignedToPhoneNumber = nextUser.PhoneNumber;
+                entity.QualityControlAssignedToEmail = nextUser.Email;
+                entity.QualityControlAssignedToWhatsapp = nextUser.Whatsapp;
+            }
+
+            entity.UpdatedAt = DateTime.UtcNow;
+            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace);
+
+            // =========================================================
+            // 5. HISTORY
+            // =========================================================
+            var historyDto = new LeadHistoryDto
+            {
+                ValuationId = returnDto.ValuationId,
+                DateTime = DateTime.UtcNow,
+                Action = "Returned",
+                StatusFrom = returnDto.CurrentStep,
+                StatusTo = nextStep,
+                Remarks = $"RETURNED: {returnDto.ReturnReason}",
+                PerformedByUserId = returnDto.CurrentUserId,
+                PerformedByUserName = returnDto.CurrentUserName,
+                CurrentStatus = "Returned",
+                StatusChange = true,
+                StatusChangedDateTime = DateTime.UtcNow
+            };
+
+            await AddHistoryAsync(historyDto);
         }
 
         public async Task AddHistoryAsync(LeadHistoryDto dto)
@@ -38,11 +263,8 @@ namespace Valuation.Api.Services
                 throw new ArgumentException("ValuationId is required.", nameof(dto.ValuationId));
 
             string partitionKey = dto.ValuationId;
-
-            // RowKey sorted automatically by time (important for history logs)
             string rowKey = DateTime.UtcNow.Ticks.ToString("D20");
 
-            // Check existing history to determine if this is the first update
             var history = await GetHistoryAsync(dto.ValuationId).ConfigureAwait(false);
             bool isFirstUpdate = history == null || !history.Any();
 
@@ -52,9 +274,8 @@ namespace Valuation.Api.Services
 
             var totalTat = (int)Math.Max(0, Math.Floor((DateTime.UtcNow - firstDateTime).TotalDays));
 
-            // Support both DateTime and DateTime? on the DTO: treat default(DateTime) / null as "not set"
             var statusChangeDateTime = dto.StatusChangedDateTime is DateTime dt && dt != default(DateTime)
-                ? dt.ToUniversalTime()
+                ? DateTime.SpecifyKind(dt, DateTimeKind.Utc)
                 : (DateTime?)null;
 
             int currentTat = statusChangeDateTime.HasValue
@@ -65,18 +286,17 @@ namespace Valuation.Api.Services
             {
                 PartitionKey = partitionKey,
                 RowKey = rowKey,
-
-                DateTime = dto.DateTime == default ? DateTime.UtcNow : dto.DateTime,  // ← CHANGED
+                DateTime = dto.DateTime == default ? DateTime.UtcNow : DateTime.SpecifyKind(dto.DateTime, DateTimeKind.Utc),
                 FirstUpdate = isFirstUpdate ? true : dto.FirstUpdate,
-                FirstDateTime = firstDateTime,
+                FirstDateTime = DateTime.SpecifyKind(firstDateTime, DateTimeKind.Utc),
                 Action = dto.Action,
                 Remarks = dto.Remarks,
-                PerformedByUserId = dto.PerformedByUserId,                           // ← ADDED
-                PerformedByUserName = dto.PerformedByUserName,                       // ← ADDED
-                StatusFrom = dto.StatusFrom,                                         // ← ADDED
-                StatusTo = dto.StatusTo,                                             // ← ADDED
+                PerformedByUserId = dto.PerformedByUserId,
+                PerformedByUserName = dto.PerformedByUserName,
+                StatusFrom = dto.StatusFrom,
+                StatusTo = dto.StatusTo,
                 StatusChange = dto.StatusChange,
-                StatusChangedDateTime = dto.StatusChangedDateTime,
+                StatusChangedDateTime = statusChangeDateTime ?? DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc),
                 PreviousStatus = dto.PreviousStatus,
                 CurrentStatus = dto.CurrentStatus,
                 TotalTat = totalTat,
@@ -85,7 +305,6 @@ namespace Valuation.Api.Services
 
             await _leadHistoryTableClient.AddEntityAsync(entity).ConfigureAwait(false);
         }
-
 
         public async Task<List<LeadHistoryDto>> GetHistoryAsync(string valuationId)
         {
@@ -97,14 +316,14 @@ namespace Valuation.Api.Services
                 results.Add(new LeadHistoryDto
                 {
                     ValuationId = entity.PartitionKey,
-                    DateTime = entity.DateTime,                        // ← ADDED
+                    DateTime = entity.DateTime,
                     Action = entity.Action,
                     Remarks = entity.Remarks,
-                    PerformedByUserId = entity.PerformedByUserId,     // ← ADDED
-                    PerformedByUserName = entity.PerformedByUserName, // ← ADDED
-                    StatusFrom = entity.StatusFrom,                   // ← ADDED
-                    StatusTo = entity.StatusTo,                       // ← ADDED
-                    CurrentTat = entity.CurrentTat,                   // ← ADDED
+                    PerformedByUserId = entity.PerformedByUserId,
+                    PerformedByUserName = entity.PerformedByUserName,
+                    StatusFrom = entity.StatusFrom,
+                    StatusTo = entity.StatusTo,
+                    CurrentTat = entity.CurrentTat,
                     TotalTat = entity.TotalTat,
                     FirstDateTime = entity.FirstDateTime,
                     FirstUpdate = entity.FirstUpdate,
@@ -115,14 +334,11 @@ namespace Valuation.Api.Services
                 });
             }
 
-            // Sort by DateTime descending (newest first)
             return results.OrderByDescending(x => x.DateTime).ToList();
         }
 
-
         public async Task UpdateAsync(WorkflowUpdateDto dto)
         {
-            // Compute PartitionKey and RowKey
             var partitionKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
             var rowKey = dto.ValuationId;
 
@@ -130,7 +346,6 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
@@ -139,7 +354,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity
                 entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -148,7 +362,9 @@ namespace Valuation.Api.Services
                 };
             }
 
-            // Only update fields that are not null in dto (for reference types) or have value (for value types)
+            // ✅ Capture previous status BEFORE modifying
+            var previousStatus = entity.Status;
+
             if (dto.VehicleNumber != null) entity.VehicleNumber = dto.VehicleNumber;
             if (dto.ApplicantName != null) entity.ApplicantName = dto.ApplicantName;
             if (dto.ApplicantContact != null) entity.ApplicantContact = dto.ApplicantContact;
@@ -191,9 +407,17 @@ namespace Valuation.Api.Services
             if (dto.Name != null) entity.Name = dto.Name;
             if (dto.ValuationType != null) entity.ValuationType = dto.ValuationType;
 
+            // ================================
+            // ✅ UNIVERSAL RETURN FIX
+            // ================================
+            if (previousStatus == "Returned" && dto.Status == null)
+            {
+                entity.Status = "InProgress";
+                entity.RedFlag = "false";
+            }
+
             entity.UpdatedAt = DateTime.UtcNow;
 
-            // Upsert (insert or merge)
             await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
         }
 
@@ -203,9 +427,9 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Query for the latest workflow step in progress
+                // ✅ UPDATED: Include 'Returned' so they are fetched
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
-                    filter: $"Status eq 'InProgress'").ConfigureAwait(false))
+                    filter: $"Status eq 'InProgress' or Status eq 'Rejected' or Status eq 'Returned'").ConfigureAwait(false))
                 {
                     results.Add(new WorkflowModel
                     {
@@ -234,11 +458,9 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // No records found, return empty list
             }
             catch (Exception ex)
             {
-                // Handle other exceptions as needed
                 throw new InvalidOperationException("Error querying workflow in progress", ex);
             }
 
@@ -251,9 +473,10 @@ namespace Valuation.Api.Services
             if (stateKeys == null || !stateKeys.Any())
                 return results;
 
-            // Build OData filter: (State eq 'A' or State eq 'B' or ...)
             var stateFilter = string.Join(" or ", stateKeys.Select(s => $"State eq '{s.Replace("'", "''")}'"));
-            var filter = $"Status eq 'InProgress' and ({stateFilter})";
+            
+            // ✅ UPDATED: Added 'Returned' so AVO/QC/Admin dashboards see them
+            var filter = $"(Status eq 'InProgress' or Status eq 'Returned') and ({stateFilter})";
 
             try
             {
@@ -285,7 +508,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // No records found, return empty list
             }
             catch (Exception ex)
             {
@@ -301,9 +523,10 @@ namespace Valuation.Api.Services
             if (districtKeys == null || !districtKeys.Any())
                 return results;
 
-            // Build OData filter: (District eq 'A' or District eq 'B' or ...)
             var districtFilter = string.Join(" or ", districtKeys.Select(d => $"District eq '{d.Replace("'", "''")}'"));
-            var filter = $"Status eq 'InProgress' and ({districtFilter})";
+            
+            // ✅ UPDATED: Added 'Returned' so AVO/QC/Admin dashboards see them
+            var filter = $"(Status eq 'InProgress' or Status eq 'Returned') and ({districtFilter})";
 
             try
             {
@@ -335,7 +558,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // No records found, return empty list
             }
             catch (Exception ex)
             {
@@ -355,26 +577,22 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update assignment fields
                 entity.AssignedTo = assignedTo ?? entity.AssignedTo;
                 entity.AssignedToPhoneNumber = assignedToPhoneNumber ?? entity.AssignedToPhoneNumber;
                 entity.AssignedToEmail = assignedToEmail ?? entity.AssignedToEmail;
                 entity.AssignedToWhatsapp = assignedToWhatsapp ?? entity.AssignedToWhatsapp;
                 entity.UpdatedAt = DateTime.UtcNow;
 
-                // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity with assignment fields
                 var entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -407,25 +625,21 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update assignment fields
                 entity.StakeholderAssignedTo = AssignedTo ?? "";
                 entity.StakeholderAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
                 entity.StakeholderAssignedToEmail = AssignedToEmail ?? "";
                 entity.StakeholderAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
-                // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity with assignment fields
                 var entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -458,25 +672,21 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update assignment fields
                 entity.BackEndAssignedTo = AssignedTo ?? "";
                 entity.BackEndAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
                 entity.BackEndAssignedToEmail = AssignedToEmail ?? "";
                 entity.BackEndAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
-                // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity with assignment fields
                 var entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -509,25 +719,21 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update assignment fields
                 entity.AVOAssignedTo = AssignedTo ?? "";
                 entity.AVOAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
                 entity.AVOAssignedToEmail = AssignedToEmail ?? "";
                 entity.AVOAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
-                // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity with assignment fields
                 var entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -560,25 +766,21 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update assignment fields
                 entity.QualityControlAssignedTo = AssignedTo ?? "";
                 entity.QualityControlAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
                 entity.QualityControlAssignedToEmail = AssignedToEmail ?? "";
                 entity.QualityControlAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
-                // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity with assignment fields
                 var entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -611,25 +813,21 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update assignment fields
                 entity.FinalReportAssignedTo = AssignedTo ?? "";
                 entity.FinalReportAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
                 entity.FinalReportAssignedToEmail = AssignedToEmail ?? "";
                 entity.FinalReportAssignedToWhatsapp = AssignedToWhatsapp ?? "";
                 entity.UpdatedAt = DateTime.UtcNow;
-                // Upsert (insert or merge)
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found: create new entity with assignment fields
                 var entity = new WorkflowEntity
                 {
                     PartitionKey = partitionKey,
@@ -656,14 +854,12 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Fetch existing entity
                 var response = await _tableClient.GetEntityAsync<WorkflowEntity>(
                     partitionKey: partitionKey,
                     rowKey: rowKey).ConfigureAwait(false);
 
                 var entity = response.Value;
 
-                // Update status to Completed
                 entity.Status = "Status";
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
@@ -676,16 +872,11 @@ namespace Valuation.Api.Services
                 entity.AssignedToEmail = assignment.AssignedToEmail ?? "";
                 entity.AssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
 
-                // Upsert (insert or merge) to CompletedWorkflows table
                 await _completedTableClient.CreateIfNotExistsAsync().ConfigureAwait(false);
-
-                // Insert into CompletedWorkflows
                 await _completedTableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace).ConfigureAwait(false);
 
-                // Delete from Workflows table only if it exists
                 try
                 {
-                    // Check if entity exists before attempting to delete
                     var getResponse = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey).ConfigureAwait(false);
                     if (getResponse != null && getResponse.Value != null)
                     {
@@ -694,12 +885,10 @@ namespace Valuation.Api.Services
                 }
                 catch (RequestFailedException ex) when (ex.Status == 404)
                 {
-                    // Entity does not exist, nothing to delete
                 }
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Workflow not found for completion, nothing to do
                 return;
             }
         }
@@ -740,7 +929,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found in Workflows, check CompletedWorkflows
                 try
                 {
                     var completedResponse = await _completedTableClient.GetEntityAsync<WorkflowEntity>(
@@ -772,7 +960,6 @@ namespace Valuation.Api.Services
                 }
                 catch (RequestFailedException ex2) when (ex2.Status == 404)
                 {
-                    // Not found in either table
                     return null;
                 }
             }
@@ -800,28 +987,23 @@ namespace Valuation.Api.Services
                     Whatsapp = entity.AssignedToWhatsapp ?? string.Empty
                 };
 
-                if (AssignedUser == null)
+                if (string.IsNullOrEmpty(AssignedUser.Name))
                 {
-                    // 1) pick the first workflow step
                     var workflowStep = entity.Workflow;
                     if (workflowStep != null)
                     {
-                        // 2) use its name (e.g. "Stakeholder") as the prefix
                         var prefix = workflowStep;
-                        // 3) build each property name
                         string nameProp = $"{prefix}AssignedTo";
                         string phoneProp = $"{prefix}AssignedToPhoneNumber";
                         string emailProp = $"{prefix}AssignedToEmail";
                         string whatsappProp = $"{prefix}AssignedToWhatsapp";
 
-                        // 4) helper to read a string property or return empty
                         string GetVal(string propName) =>
                             entity.GetType()
                                 .GetProperty(propName)?
                                 .GetValue(entity) as string
                             ?? string.Empty;
 
-                        // 5) now construct your UserModel
                         AssignedUser = new UserModel
                         {
                             Name = GetVal(nameProp).Trim(),
@@ -836,7 +1018,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found → return null
                 return null;
             }
         }
@@ -849,9 +1030,8 @@ namespace Valuation.Api.Services
 
             try
             {
-                // Query for workflows assigned to the given phone number
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
-                    filter: $"AssignedToPhoneNumber eq '{phoneNumber}'").ConfigureAwait(false))
+                    filter: $"AssignedToPhoneNumber eq '{phoneNumber}' and (Status eq 'InProgress' or Status eq 'Returned')").ConfigureAwait(false))
                 {
                     results.Add(new WorkflowModel
                     {
@@ -878,11 +1058,9 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // No records found, return empty list
             }
             catch (Exception ex)
             {
-                // Handle other exceptions as needed
                 throw new InvalidOperationException("Error querying workflows by phone number", ex);
             }
 
@@ -913,7 +1091,6 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Not found → return null
                 return null;
             }
         }
@@ -929,8 +1106,123 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                // Nothing to delete if not found
             }
         }
+
+        // ==============================================================================
+        //  ⚠️ START & COMPLETE METHODS ADDED BELOW
+        // ==============================================================================
+
+        public async Task StartWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                var entity = response.Value;
+
+                // 1. Update Status
+                entity.Status = "InProgress";
+                entity.WorkflowStepOrder = stepOrder;
+
+                // 2. Map Step Order to Name (Keep consistent with your frontend)
+                if (stepOrder == 1) entity.Workflow = "Stakeholder";
+                else if (stepOrder == 2) entity.Workflow = "Backend";
+                else if (stepOrder == 3) entity.Workflow = "AVO";
+                else if (stepOrder == 4) entity.Workflow = "QualityControl";
+                else if (stepOrder == 5) entity.Workflow = "FinalReport";
+
+                // 3. Clear RedFlag (Important: removes the 'Rejected' banner)
+                entity.RedFlag = "false"; 
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation record not found.");
+            }
+        }
+
+        // ==============================================================================
+        //  ✅ FIX 3: CompleteWorkflowStepAsync (Un-stuck the case)
+        // ==============================================================================
+        public async Task CompleteWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                var entity = response.Value;
+
+                // ✅ CHANGED: Reset Status and RedFlag when completing a step
+                // This ensures if it was "Returned", it goes back to "InProgress"
+                entity.Status = "InProgress";
+                entity.RedFlag = "false";
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation record not found.");
+            }
+        }
+
+        public async Task SavePaymentAsync(PaymentDto dto)
+        {
+            var partitionKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
+            var rowKey = dto.ValuationId;
+
+            WorkflowEntity entity;
+
+            try
+            {
+                var response = await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey);
+                entity = response.Value;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                throw new Exception("Valuation not found.");
+            }
+
+            entity.PaymentStatus = dto.PaymentStatus;
+            entity.PaymentMethod = dto.PaymentMethod;
+            entity.PaymentReference = dto.PaymentReference;
+            entity.PaymentDate = dto.PaymentDate;
+            entity.PaymentAmount = dto.PaymentAmount;
+            entity.UpdatedAt = DateTime.UtcNow;
+            entity.PaymentNotes = dto.PaymentNotes;
+
+            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
+        }
+
+        public async Task<PaymentDto?> GetPaymentAsync(string valuationId)
+        {
+            await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
+                filter: $"RowKey eq '{valuationId}'"))
+            {
+                return new PaymentDto
+                {
+                    ValuationId = entity.RowKey,
+                    VehicleNumber = entity.VehicleNumber,
+                    ApplicantContact = entity.ApplicantContact,
+                    PaymentStatus = entity.PaymentStatus,
+                    PaymentReference = entity.PaymentReference,
+                    PaymentMethod = entity.PaymentMethod,
+                    PaymentDate = entity.PaymentDate,
+                    PaymentAmount = entity.PaymentAmount,
+                    PaymentNotes = entity.PaymentNotes
+                };
+            }
+
+            return null;
+        }
+
+
     }
 }

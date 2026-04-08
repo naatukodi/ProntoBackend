@@ -24,7 +24,6 @@ public class ValuationService : IValuationService
     private readonly string _attestrToken;
     private readonly IWorkflowTableService _workflowTableService;
 
-
     public ValuationService(
         CosmosClient cosmos,
         BlobServiceClient blobService,
@@ -43,8 +42,6 @@ public class ValuationService : IValuationService
         _attestrToken = configuration["Attestr:Token"] ?? "";
         _workflowTableService = workflowTableService;
     }
-
-
 
     private Container Container =>
         _cosmos.GetDatabase(_dbId).GetContainer(_containerId);
@@ -198,51 +195,49 @@ public class ValuationService : IValuationService
         }
     }
 
-    public async Task<ActionResult> CompleteValuationDocumentAsync(string valuationId,
+    public async Task<ActionResult> CompleteValuationDocumentAsync(
+        string valuationId,
         string vehicleNumber,
-        string applicantContact, CompleteValuationRequestDto request)
+        string applicantContact,
+        CompleteValuationRequestDto request)
     {
         var pk = GetPk(vehicleNumber, applicantContact);
+
         try
         {
             var resp = await Container.ReadItemAsync<ValuationDocument>(
                 id: valuationId,
                 partitionKey: pk);
+
             var doc = resp.Resource;
 
-            if (doc.Status != request.Status)
-                doc.Status = request.Status;
-            if (doc.CompletedAt != (request.CompletedAt ?? DateTime.UtcNow))
-                doc.CompletedAt = request.CompletedAt ?? DateTime.UtcNow;
-            if (doc.CompletedBy != request.CompletedBy)
-                doc.CompletedBy = request.CompletedBy;
-            if (doc.CompletedByPhoneNumber != request.CompletedByPhoneNumber)
-                doc.CompletedByPhoneNumber = request.CompletedByPhoneNumber;
-            if (doc.CompletedByEmail != request.CompletedByEmail)
-                doc.CompletedByEmail = request.CompletedByEmail;
-            if (doc.CompletedByWhatsapp != request.CompletedByWhatsapp)
-                doc.CompletedByWhatsapp = request.CompletedByWhatsapp;
+            doc.Status = request.Status ?? doc.Status;
+            doc.CompletedAt = request.CompletedAt ?? DateTime.UtcNow;
+            doc.CompletedBy = request.CompletedBy;
+            doc.CompletedByPhoneNumber = request.CompletedByPhoneNumber;
+            doc.CompletedByEmail = request.CompletedByEmail;
+            doc.CompletedByWhatsapp = request.CompletedByWhatsapp;
 
-            if (doc.PaymentStatus != request.PaymentStatus)
-                doc.PaymentStatus = request.PaymentStatus;
-            if (doc.PaymentReference != request.PaymentReference)
-                doc.PaymentReference = request.PaymentReference;
-            if (doc.PaymentDate != request.PaymentDate)
-                doc.PaymentDate = request.PaymentDate;
-            if (doc.PaymentMethod != request.PaymentMethod)
-                doc.PaymentMethod = request.PaymentMethod;
-            if (doc.PaymentAmount != request.PaymentAmount)
-                doc.PaymentAmount = request.PaymentAmount;
-            if (doc.Remarks != request.Remarks)
-                doc.Remarks = request.Remarks;
+            doc.PaymentStatus = request.PaymentStatus;
+            doc.PaymentReference = request.PaymentReference;
+            doc.PaymentDate = request.PaymentDate;
+            doc.PaymentMethod = request.PaymentMethod;
+            doc.PaymentAmount = request.PaymentAmount;
+            doc.Remarks = request.Remarks;
+
+            // ✅ STORE FINAL MANUAL VALUATION
+            if (request.FinalValuationAmount.HasValue)
+            {
+                doc.FinalValuationAmount = request.FinalValuationAmount.Value;
+            }
 
             await Container.UpsertItemAsync(doc, pk);
 
-            // Update the workflow table as well
             await _workflowTableService.CompleteFinalReportWFAsync(
                 valuationId,
                 vehicleNumber,
-                applicantContact, new AssignmentDto
+                applicantContact,
+                new AssignmentDto
                 {
                     AssignedTo = request.CompletedBy ?? "",
                     AssignedToPhoneNumber = request.CompletedByPhoneNumber ?? "",
@@ -256,7 +251,7 @@ public class ValuationService : IValuationService
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             throw new KeyNotFoundException(
-                $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}' and applicant '{applicantContact}'.");
+                $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}'.");
         }
     }
 
@@ -312,6 +307,7 @@ public class ValuationService : IValuationService
                 $"No valuation doc with id '{valuationId}' for vehicle '{vehicleNumber}' and applicant '{applicantContact}'.");
         }
     }
+
     public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
     {
 
@@ -433,11 +429,12 @@ public class ValuationService : IValuationService
     public async Task<List<OpenValuationDto>> GetOpenValuationsAsync()
     {
         var query = new QueryDefinition(@"
-            SELECT
+            SELECT 
                 c.id,
                 c.VehicleNumber,
-                c.Stakeholder.Applicant.Name     AS applicantName,
-                c.Stakeholder.Applicant.Contact  AS applicantContact,
+                c.VehicleDetails.EngineNumber,
+                c.VehicleDetails.ChassisNumber,
+                c.Status,
                 c.CreatedAt,
                 ARRAY(
                     SELECT VALUE wf
@@ -640,7 +637,6 @@ public class ValuationService : IValuationService
         });
     }
 
-
     private async Task<string?> UploadIfAsync(IFormFile? file, string reg, string contact)
     {
         if (file == null) return null;
@@ -654,6 +650,7 @@ public class ValuationService : IValuationService
         await blobClient.UploadAsync(stream, headers);
         return blobClient.Uri.ToString();
     }
+
     public async Task DeleteVehicleDetailsAsync(
         string valuationId, string vehicleNumber, string applicantContact)
     {
@@ -670,216 +667,191 @@ public class ValuationService : IValuationService
             // nothing to delete
         }
     }
-    public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
-    string? vehicleNumber,
-    string? engineNumber,
-    string? chassisNumber)
+
+    // ✅ NEW DTO CLASS: Prevents crashing when Cosmos DB returns missing properties
+    private class DuplicateQueryResult
     {
+        public string id { get; set; }
+        public string? VehicleNumber { get; set; }
+        public string? EngineNumber { get; set; }
+        public string? ChassisNumber { get; set; }
+        public string? Status { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public string? Company { get; set; }
+        public double? ValuationAmount { get; set; } 
+    }
+
+    public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
+        string? vehicleNumber,
+        string? engineNumber,
+        string? chassisNumber)
+    {
+        // ✅ CATCH FRONTEND BUG: Stop Angular from searching for literal "undefined"
+        string? CleanStr(string? val) =>
+            string.IsNullOrWhiteSpace(val) || val == "undefined" || val == "null" ? null : val;
+
+        vehicleNumber = CleanStr(vehicleNumber);
+        engineNumber = CleanStr(engineNumber);
+        chassisNumber = CleanStr(chassisNumber);
+
         var response = new VehicleDuplicateCheckResponse
         {
-            IsVehicleNumberExists = false,
-            IsEngineNumberExists = false,
-            IsChassisNumberExists = false,
             ExistingRecords = new List<ExistingVehicleRecord>(),
             Messages = new List<string>()
         };
 
-        // Validate at least one parameter
-        if (string.IsNullOrWhiteSpace(vehicleNumber) &&
-            string.IsNullOrWhiteSpace(engineNumber) &&
-            string.IsNullOrWhiteSpace(chassisNumber))
+        if (vehicleNumber == null && engineNumber == null && chassisNumber == null)
         {
             return response;
         }
 
         try
         {
-            // Dictionary to track records by ValuationId and accumulate matched fields
             var recordsDict = new Dictionary<string, ExistingVehicleRecord>();
 
-            // Check Vehicle Number
-            if (!string.IsNullOrWhiteSpace(vehicleNumber))
+            // ✅ SAFE ITERATOR: Uses DuplicateQueryResult instead of <dynamic>
+            async Task ExecuteQuery(QueryDefinition query, string matchedField)
             {
-                var vehicleQuery = new QueryDefinition(@"
+                using var iterator = Container.GetItemQueryIterator<DuplicateQueryResult>(query);
+
+                while (iterator.HasMoreResults)
+                {
+                    var batch = await iterator.ReadNextAsync();
+
+                    foreach (var item in batch)
+                    {
+                        string valId = item.id;
+
+                        if (!recordsDict.ContainsKey(valId))
+                        {
+                            recordsDict[valId] = new ExistingVehicleRecord
+                            {
+                                ValuationId = valId,
+                                VehicleNumber = item.VehicleNumber,
+                                EngineNumber = item.EngineNumber,
+                                ChassisNumber = item.ChassisNumber,
+                                Status = item.Status ?? "Unknown",
+                                CreatedDate = item.CreatedAt ?? DateTime.MinValue,
+                                MatchedField = matchedField,
+                                Company = item.Company,
+                                ValuationAmount = item.ValuationAmount.HasValue ? (decimal)item.ValuationAmount.Value : null
+                            };
+                        }
+                        else
+                        {
+                            if (!recordsDict[valId].MatchedField.Contains(matchedField))
+                            {
+                                recordsDict[valId].MatchedField += ", " + matchedField;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ================= SAFE VALUATION EXPRESSION =================
+            string valuationExpression = @"
+                IIF(
+                    IS_DEFINED(c.FinalValuationAmount),
+                    c.FinalValuationAmount,
+                    IIF(
+                        IS_DEFINED(c.ValuationResponse) AND IS_DEFINED(c.ValuationResponse.MidRange),
+                        c.ValuationResponse.MidRange,
+                        null
+                    )
+                ) AS ValuationAmount";
+
+            // ================= VEHICLE NUMBER =================
+            if (vehicleNumber != null)
+            {
+                var vehicleQuery = new QueryDefinition($@"
                     SELECT 
                         c.id,
                         c.VehicleNumber,
-                        c.VehicleDetails.EngineNumber,
-                        c.VehicleDetails.ChassisNumber,
+                        c.VehicleDetails.EngineNumber AS EngineNumber,
+                        c.VehicleDetails.ChassisNumber AS ChassisNumber,
                         c.Status,
-                        c.CreatedAt
+                        c.CreatedAt,
+                        IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        {valuationExpression}
                     FROM c
-                    WHERE UPPER(c.VehicleNumber) = @vehicleNumber
+                    WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
+                    AND UPPER(c.VehicleNumber) = @vehicleNumber
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
 
-                using var vehicleIterator = Container.GetItemQueryIterator<dynamic>(vehicleQuery);
-                
-                while (vehicleIterator.HasMoreResults)
-                {
-                    var batch = await vehicleIterator.ReadNextAsync();
-                    foreach (var item in batch)
-                    {
-                        string valId = item.id;
-                        if (!recordsDict.ContainsKey(valId))
-                        {
-                            recordsDict[valId] = new ExistingVehicleRecord
-                            {
-                                ValuationId = valId,
-                                VehicleNumber = item.VehicleNumber,
-                                EngineNumber = item.EngineNumber,
-                                ChassisNumber = item.ChassisNumber,
-                                Status = item.Status ?? "Unknown",
-                                CreatedDate = item.CreatedAt,
-                                MatchedField = "Vehicle Number"
-                            };
-                        }
-                        else
-                        {
-                            // Append matched field
-                            recordsDict[valId].MatchedField += ", Vehicle Number";
-                        }
-                    }
-                }
-
-                if (recordsDict.Any())
-                {
-                    response.IsVehicleNumberExists = true;
-                }
+                await ExecuteQuery(vehicleQuery, "Vehicle Number");
             }
 
-            // Check Engine Number
-            if (!string.IsNullOrWhiteSpace(engineNumber))
+            // ================= ENGINE NUMBER =================
+            if (engineNumber != null)
             {
-                var engineQuery = new QueryDefinition(@"
+                var engineQuery = new QueryDefinition($@"
                     SELECT 
                         c.id,
                         c.VehicleNumber,
-                        c.VehicleDetails.EngineNumber,
-                        c.VehicleDetails.ChassisNumber,
+                        c.VehicleDetails.EngineNumber AS EngineNumber,
+                        c.VehicleDetails.ChassisNumber AS ChassisNumber,
                         c.Status,
-                        c.CreatedAt
+                        c.CreatedAt,
+                        IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        {valuationExpression}
                     FROM c
-                    WHERE UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
+                    WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
+                    AND IS_DEFINED(c.VehicleDetails.EngineNumber)
+                    AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
 
-                using var engineIterator = Container.GetItemQueryIterator<dynamic>(engineQuery);
-                
-                while (engineIterator.HasMoreResults)
-                {
-                    var batch = await engineIterator.ReadNextAsync();
-                    foreach (var item in batch)
-                    {
-                        string valId = item.id;
-                        if (!recordsDict.ContainsKey(valId))
-                        {
-                            recordsDict[valId] = new ExistingVehicleRecord
-                            {
-                                ValuationId = valId,
-                                VehicleNumber = item.VehicleNumber,
-                                EngineNumber = item.EngineNumber,
-                                ChassisNumber = item.ChassisNumber,
-                                Status = item.Status ?? "Unknown",
-                                CreatedDate = item.CreatedAt,
-                                MatchedField = "Engine Number"
-                            };
-                        }
-                        else
-                        {
-                            // Append matched field if not already there
-                            if (!recordsDict[valId].MatchedField.Contains("Engine Number"))
-                            {
-                                recordsDict[valId].MatchedField += ", Engine Number";
-                            }
-                        }
-                    }
-                }
-
-                if (recordsDict.Any(r => r.Value.MatchedField.Contains("Engine Number")))
-                {
-                    response.IsEngineNumberExists = true;
-                }
+                await ExecuteQuery(engineQuery, "Engine Number");
             }
 
-            // Check Chassis Number
-            if (!string.IsNullOrWhiteSpace(chassisNumber))
+            // ================= CHASSIS NUMBER =================
+            if (chassisNumber != null)
             {
-                var chassisQuery = new QueryDefinition(@"
+                var chassisQuery = new QueryDefinition($@"
                     SELECT 
                         c.id,
                         c.VehicleNumber,
-                        c.VehicleDetails.EngineNumber,
-                        c.VehicleDetails.ChassisNumber,
+                        c.VehicleDetails.EngineNumber AS EngineNumber,
+                        c.VehicleDetails.ChassisNumber AS ChassisNumber,
                         c.Status,
-                        c.CreatedAt
+                        c.CreatedAt,
+                        IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        {valuationExpression}
                     FROM c
-                    WHERE UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
+                    WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
+                    AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
+                    AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
 
-                using var chassisIterator = Container.GetItemQueryIterator<dynamic>(chassisQuery);
-                
-                while (chassisIterator.HasMoreResults)
-                {
-                    var batch = await chassisIterator.ReadNextAsync();
-                    foreach (var item in batch)
-                    {
-                        string valId = item.id;
-                        if (!recordsDict.ContainsKey(valId))
-                        {
-                            recordsDict[valId] = new ExistingVehicleRecord
-                            {
-                                ValuationId = valId,
-                                VehicleNumber = item.VehicleNumber,
-                                EngineNumber = item.EngineNumber,
-                                ChassisNumber = item.ChassisNumber,
-                                Status = item.Status ?? "Unknown",
-                                CreatedDate = item.CreatedAt,
-                                MatchedField = "Chassis Number"
-                            };
-                        }
-                        else
-                        {
-                            // Append matched field if not already there
-                            if (!recordsDict[valId].MatchedField.Contains("Chassis Number"))
-                            {
-                                recordsDict[valId].MatchedField += ", Chassis Number";
-                            }
-                        }
-                    }
-                }
-
-                if (recordsDict.Any(r => r.Value.MatchedField.Contains("Chassis Number")))
-                {
-                    response.IsChassisNumberExists = true;
-                }
+                await ExecuteQuery(chassisQuery, "Chassis Number");
             }
 
-            // Convert dictionary to list
             response.ExistingRecords = recordsDict.Values.ToList();
-
-            // Build messages
-            if (response.IsVehicleNumberExists)
-            {
-                var count = response.ExistingRecords.Count(r => r.MatchedField.Contains("Vehicle Number"));
-                response.Messages.Add($"Vehicle number '{vehicleNumber}' found in {count} existing record(s)");
-            }
-
-            if (response.IsEngineNumberExists)
-            {
-                var count = response.ExistingRecords.Count(r => r.MatchedField.Contains("Engine Number"));
-                response.Messages.Add($"Engine number '{engineNumber}' found in {count} existing record(s)");
-            }
-
-            if (response.IsChassisNumberExists)
-            {
-                var count = response.ExistingRecords.Count(r => r.MatchedField.Contains("Chassis Number"));
-                response.Messages.Add($"Chassis number '{chassisNumber}' found in {count} existing record(s)");
-            }
-
-            response.IsDuplicate = response.IsVehicleNumberExists ||
-                                response.IsEngineNumberExists ||
-                                response.IsChassisNumberExists;
-
             response.TotalDuplicatesFound = response.ExistingRecords.Count;
+
+            response.IsVehicleNumberExists =
+                response.ExistingRecords.Any(r => r.MatchedField.Contains("Vehicle Number"));
+
+            response.IsEngineNumberExists =
+                response.ExistingRecords.Any(r => r.MatchedField.Contains("Engine Number"));
+
+            response.IsChassisNumberExists =
+                response.ExistingRecords.Any(r => r.MatchedField.Contains("Chassis Number"));
+
+            response.IsDuplicate =
+                response.IsVehicleNumberExists ||
+                response.IsEngineNumberExists ||
+                response.IsChassisNumberExists;
+
+            // ================= AVERAGE =================
+            var amounts = response.ExistingRecords
+                .Where(r => r.ValuationAmount.HasValue && r.ValuationAmount.Value > 0)
+                .Select(r => r.ValuationAmount!.Value)
+                .ToList();
+
+            if (amounts.Any())
+            {
+                response.AverageValuationAmount = amounts.Average();
+            }
 
             return response;
         }
@@ -889,5 +861,4 @@ public class ValuationService : IValuationService
             throw;
         }
     }
-
 }

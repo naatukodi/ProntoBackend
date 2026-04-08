@@ -13,5 +13,6 @@ public class CompleteValuationRequestDto
     public string? CompletedByPhoneNumber { get; set; }
     public string? CompletedByEmail { get; set; }
     public string? CompletedByWhatsapp { get; set; }
-    public string? Remarks {get; set;}
+    public string? Remarks { get; set; }
+    public decimal? FinalValuationAmount { get; set; }
 }
