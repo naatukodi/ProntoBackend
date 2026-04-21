@@ -1,5 +1,8 @@
 // Controllers/WorkflowController.cs
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Valuation.Api.Models;
 
 [ApiController]
@@ -28,9 +31,15 @@ public class WorkflowController : ControllerBase
         [FromQuery] string applicantContact,
         int stepOrder)
     {
-        await _svc.StartStepAsync(
-            valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
-        return NoContent();
+        try 
+        {
+            await _svc.StartStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
+            return NoContent();
+        } 
+        catch (Exception ex) 
+        {
+            return BadRequest(ex.Message); // Sends the exact error to Flutter
+        }
     }
 
     [HttpPost("{stepOrder}/complete")]
@@ -40,9 +49,15 @@ public class WorkflowController : ControllerBase
         [FromQuery] string applicantContact,
         int stepOrder)
     {
-        await _svc.CompleteStepAsync(
-            valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
-        return NoContent();
+        try 
+        {
+            await _svc.CompleteStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
+            return NoContent();
+        } 
+        catch (Exception ex) 
+        {
+            return BadRequest(ex.Message);
+        }
     }
     
     [HttpPost("{stepOrder}/reject")]
@@ -52,9 +67,15 @@ public class WorkflowController : ControllerBase
         [FromQuery] string applicantContact,
         int stepOrder)
     {
-        await _svc.RejectStepAsync(
-            valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
-        return NoContent();
+        try 
+        {
+            await _svc.RejectStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
+            return NoContent();
+        } 
+        catch (Exception ex) 
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpDelete]
@@ -63,8 +84,14 @@ public class WorkflowController : ControllerBase
         [FromQuery] string vehicleNumber,
         [FromQuery] string applicantContact)
     {
-        await _svc.DeleteAsync(
-            valuationId.ToString(), vehicleNumber, applicantContact);
-        return NoContent();
+        try 
+        {
+            await _svc.DeleteAsync(valuationId.ToString(), vehicleNumber, applicantContact);
+            return NoContent();
+        } 
+        catch (Exception ex) 
+        {
+            return BadRequest(ex.Message);
+        }
     }
 }
