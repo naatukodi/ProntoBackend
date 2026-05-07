@@ -107,7 +107,7 @@ namespace Valuation.Api.Services
                     if (report.PhotoMetadata != null && report.PhotoMetadata.ContainsKey(kvp.Key))
                     {
                         var meta = report.PhotoMetadata[kvp.Key];
-                        docDate = meta.CapturedDate;
+                        docDate = DateTime.TryParse(meta.CapturedDate, out var parsedDate) ? parsedDate : (DateTime?)null;
                         docLoc = meta.LocationText;
                     }
 

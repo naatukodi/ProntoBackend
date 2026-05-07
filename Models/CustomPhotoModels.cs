@@ -20,4 +20,18 @@ namespace Valuation.Api.Models
         public string? DateCaptured { get; set; }
         public string? Location { get; set; }
     }
+
+    // Stores metadata for a single photo (date + location text)
+    public class PhotoMetadata
+    {
+        public string? CapturedDate { get; set; }
+        public string? LocationText { get; set; }
+    }
+
+    // DTO received from client when updating photo metadata
+    public class PhotoMetadataUpdateDto
+    {
+        public string? CapturedDate { get; set; }
+        public string? LocationText { get; set; }
+    }
 }
