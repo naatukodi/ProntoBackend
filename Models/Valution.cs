@@ -1,50 +1,54 @@
-// Define ValuationDocument if it does not exist elsewhere
+using System;
+using System.Collections.Generic;
 
-namespace Valuation.Api.Models;
-
-public class ValuationDocument
+namespace Valuation.Api.Models
 {
-    public string id { get; set; }
-    public Stakeholder? Stakeholder { get; set; }
-    // Add other properties as needed
-    public string? CompositeKey { get; set; }
-    public string? VehicleNumber { get; set; }
-    public string? ApplicantContact { get; set; }
-    public string? VehicleSegment { get; set; }
-    public List<Document>? Documents { get; set; }
-    public VehicleDetailsDto? VehicleDetails { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public InspectionDetails? InspectionDetails { get; set; }
-    public QualityControl? QualityControl { get; set; }
-    public ValuationResponse? ValuationResponse { get; set; }
-    public Dictionary<string, string> PhotoUrls { get; set; } = new();
-    public Dictionary<string, string> VideoUrls { get; set; } = new();
-    public List<WorkflowStep>? Workflow { get; set; }
-    public string? Status { get; set; } = "Open";
-    public string? CreatedBy { get; set; }
-    public string? UpdatedBy { get; set; }
-    public DateTime? DeletedAt { get; set; }
-    public string? DeletedBy { get; set; }
-    public DateTime? CompletedAt { get; set; }
-    public string? CompletedBy { get; set; }
-    public string? AssignedTo { get; set; }
-    public string? AssignedToPhoneNumber { get; set; }
-    public string? AssignedToEmail { get; set; }
-    public string? AssignedToWhatsapp { get; set; }
-    public string? AssignedToRole { get; set; }
-    public string? RedFlag { get; set; } // Nullable to allow for no red flag
-    public string? Remarks { get; set; }
+    public class ValuationDocument
+    {
+        public string id { get; set; } = string.Empty;
+        public Stakeholder? Stakeholder { get; set; }
+        public string? CompositeKey { get; set; }
+        public string? VehicleNumber { get; set; }
+        public string? ApplicantContact { get; set; }
+        public string? VehicleSegment { get; set; }
+        public List<Document>? Documents { get; set; }
+        public VehicleDetailsDto? VehicleDetails { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public InspectionDetails? InspectionDetails { get; set; }
+        public QualityControl? QualityControl { get; set; }
+        public ValuationResponse? ValuationResponse { get; set; }
+        
+        public Dictionary<string, string> PhotoUrls { get; set; } = new();
+        public Dictionary<string, string> VideoUrls { get; set; } = new();
+        public Dictionary<string, PhotoMetadata> PhotoMetadata { get; set; } = new();
+        
+        // ✅ NEW: Array for dynamic custom images
+        public List<SavedCustomPhoto> CustomPhotos { get; set; } = new();
 
-    public string? PaymentStatus { get; set; } // Nullable to allow for no payment status
-    public string? PaymentReference { get; set; } // Nullable to allow for no payment reference
-    public DateTime? PaymentDate { get; set; } // Nullable to allow for no payment date
-    public string? PaymentMethod { get; set; } // Nullable to allow for no payment method
-    public string? PaymentAmount { get; set; } // Nullable to allow for no payment amount
-    public string? CompletedByPhoneNumber { get; set; }
-    public string? CompletedByEmail { get; set; }
-    public string? CompletedByWhatsapp { get; set; }
-    public Dictionary<string, PhotoMetadata> PhotoMetadata { get; set; } = new Dictionary<string, PhotoMetadata>();
-    // ✅ NEW
-    public decimal? FinalValuationAmount { get; set; }
+        public List<WorkflowStep>? Workflow { get; set; }
+        public string? Status { get; set; } = "Open";
+        public string? CreatedBy { get; set; }
+        public string? UpdatedBy { get; set; }
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedBy { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public string? CompletedBy { get; set; }
+        public string? AssignedTo { get; set; }
+        public string? AssignedToPhoneNumber { get; set; }
+        public string? AssignedToEmail { get; set; }
+        public string? AssignedToWhatsapp { get; set; }
+        public string? AssignedToRole { get; set; }
+        public string? RedFlag { get; set; } 
+        public string? Remarks { get; set; }
+        public string? PaymentStatus { get; set; } 
+        public string? PaymentReference { get; set; } 
+        public DateTime? PaymentDate { get; set; } 
+        public string? PaymentMethod { get; set; } 
+        public string? PaymentAmount { get; set; } 
+        public string? CompletedByPhoneNumber { get; set; }
+        public string? CompletedByEmail { get; set; }
+        public string? CompletedByWhatsapp { get; set; }
+        public decimal? FinalValuationAmount { get; set; }
+    }
 }

@@ -63,7 +63,7 @@ public class WorkflowService : IWorkflowService
 
         var step = doc.Workflow.FirstOrDefault(s => s.StepOrder == stepOrder)
                    ?? throw new Exception($"Step {stepOrder} is not defined in the database workflow array.");
-                   
+
         step.Status = "InProgress";
         step.StartedAt = DateTime.UtcNow;
 
@@ -79,7 +79,7 @@ public class WorkflowService : IWorkflowService
 
         var step = doc.Workflow.FirstOrDefault(s => s.StepOrder == stepOrder)
                    ?? throw new Exception($"Step {stepOrder} is not defined in the database workflow array.");
-                   
+
         if (step.Status != "InProgress")
             throw new Exception($"Cannot complete step {stepOrder} because its current status is '{step.Status}', not 'InProgress'.");
 

@@ -1,17 +1,14 @@
-// src/Valuation.Api/Models/VehiclePhotosDto.cs
+using Microsoft.AspNetCore.Http;
+using System.Collections.Generic;
+
 namespace Valuation.Api.Models
 {
-    /// <summary>
-    /// Contains up to 19 optional IFormFile properties (one for each required / optional photo).
-    /// Plus 1 mandatory video field for vehicle video.
-    /// </summary>
     public class VehiclePhotosDto
     {
-        public string ValuationId { get; set; } = null!;
-        public string VehicleNumber { get; set; } = null!;
-        public string ApplicantContact { get; set; } = null!;
+        public string ValuationId { get; set; } = string.Empty;
+        public string VehicleNumber { get; set; } = string.Empty;
+        public string ApplicantContact { get; set; } = string.Empty;
 
-        // 1) Exterior angles
         public IFormFile? FrontLeftSide { get; set; }
         public IFormFile? FrontRightSide { get; set; }
         public IFormFile? RearLeftSide { get; set; }
@@ -20,39 +17,21 @@ namespace Valuation.Api.Models
         public IFormFile? RearViewTailgate { get; set; }
         public IFormFile? DriverSideProfile { get; set; }
         public IFormFile? PassengerSideProfile { get; set; }
-
-        // 2) Interior & engine
         public IFormFile? Dashboard { get; set; }
         public IFormFile? InstrumentCluster { get; set; }
         public IFormFile? EngineBay { get; set; }
+        public IFormFile? ChassisNumberPlate { get; set; }
+        public IFormFile? ChassisImprint { get; set; }
         public IFormFile? GearAndSeats { get; set; }
         public IFormFile? DashboardCloseup { get; set; }
         public IFormFile? Odometer { get; set; }
-
-        // 3) Identification
-        public IFormFile? ChassisNumberPlate { get; set; }
-        public IFormFile? ChassisImprint { get; set; }
-
-        // 4) Miscellaneous
         public IFormFile? SelfieWithVehicle { get; set; }
-        public IFormFile? Underbody { get; set; }       // optional
+        public IFormFile? Underbody { get; set; }
         public IFormFile? TiresAndRims { get; set; }
-
-        // ✅ 5) Video (MANDATORY)
         public IFormFile? VehicleVideo { get; set; }
-    }
 
-    // ✅ ADDED: Models for Photo Metadata (Date, Time, Location)
-    public class PhotoMetadata
-    {
-        public DateTime? CapturedDate { get; set; }
-        public string? LocationText { get; set; }
-    }
-
-    // ✅ ADDED: DTO for updating metadata from the API
-    public class PhotoMetadataUpdateDto
-    {
-        public DateTime? CapturedDate { get; set; }
-        public string? LocationText { get; set; }
+        // ✅ NEW: Properties for Custom Images
+        public IList<IFormFile>? CustomImageFiles { get; set; }
+        public string? CustomImagesMetadata { get; set; } 
     }
 }

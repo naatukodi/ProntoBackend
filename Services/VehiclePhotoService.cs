@@ -1,7 +1,7 @@
-// src/Valuation.Api/Services/VehiclePhotoService.cs
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Azure.Cosmos;
+using System.Text.Json;
 using Valuation.Api.Models;
 
 namespace Valuation.Api.Services
@@ -22,25 +22,16 @@ namespace Valuation.Api.Services
         {
             _cosmosClient = cosmosClient;
             _blobServiceClient = blobServiceClient;
-            _blobContainerName = configuration["Blob:ContainerName"]
-                ?? "documents";
-            _cdnEndpoint = configuration["Blob:CdnEndpointHostname"]
-                ?? "https://prontomoto.azureedge.net";
-            _databaseName = configuration["Cosmos:DatabaseId"]
-                ?? "ValuationsDb";
-            _containerName = configuration["Cosmos:ContainerId"]
-                ?? "Valuations";
+            _blobContainerName = configuration["Blob:ContainerName"] ?? "documents";
+            _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://prontomoto.azureedge.net";
+            _databaseName = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
+            _containerName = configuration["Cosmos:ContainerId"] ?? "Valuations";
         }
 
-        /// <summary>
-        /// ✅ Validate video file (size and format)
-        /// </summary>
         private (bool Valid, string Error) ValidateVideoFile(IFormFile file)
         {
-            if (file == null || file.Length == 0)
-                return (false, "No file provided");
+            if (file == null || file.Length == 0) return (false, "No file provided");
 
-            // Check size (100MB max)
             const long maxSize = 100 * 1024 * 1024;
             if (file.Length > maxSize)
             {
@@ -48,15 +39,10 @@ namespace Valuation.Api.Services
                 return (false, $"File size exceeds 100MB ({sizeMB}MB)");
             }
 
-            // Check format
             var allowedVideoMimeTypes = new[]
             {
-                "video/mp4",
-                "video/quicktime",           // .mov
-                "video/x-msvideo",           // .avi
-                "video/x-matroska",          // .mkv
-                "video/webm",
-                "video/mpeg"
+                "video/mp4", "video/quicktime", "video/x-msvideo", 
+                "video/x-matroska", "video/webm", "video/mpeg"
             };
 
             if (!allowedVideoMimeTypes.Contains(file.ContentType))
@@ -67,59 +53,43 @@ namespace Valuation.Api.Services
             return (true, "");
         }
 
-        /// <summary>
-        /// ✅ Process and upload video to blob storage (similar to photos)
-        /// </summary>
-        private async Task<string?> ProcessAndUploadVideoAsync(
-            IFormFile videoFile,
-            string fieldKey)
+        private async Task<string?> ProcessAndUploadVideoAsync(IFormFile videoFile, string fieldKey)
         {
-            if (videoFile == null)
-                return null;
+            if (videoFile == null) return null;
 
-            // Ensure container exists with PublicAccessType.Blob
-            var containerClient = _blobServiceClient
-                .GetBlobContainerClient(_blobContainerName);
+            var containerClient = _blobServiceClient.GetBlobContainerClient(_blobContainerName);
             await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
 
-            // Build blob name for video: videos/{guid}-{file}
-            var sanitizedName = videoFile.FileName.Replace(" ", "_");
-            var blobName = $"videos/{Guid.NewGuid()}-{sanitizedName}";
+            // ✅ Optimized Name Sanitization
+            var extension = Path.GetExtension(videoFile.FileName);
+            var blobName = $"videos/{Guid.NewGuid()}{extension}";
             var blobClient = containerClient.GetBlobClient(blobName);
 
             var headers = new BlobHttpHeaders { ContentType = videoFile.ContentType };
             using var stream = videoFile.OpenReadStream();
             await blobClient.UploadAsync(stream, headers);
 
-            // Build and return the public CDN URL
             var cdnBase = _cdnEndpoint.TrimEnd('/');
             var container = containerClient.Name;
             return $"{cdnBase}/{container}/{blobName}";
         }
 
-        /// <summary>
-        /// Uploads any non‐null files in the DTO and returns a dictionary of fieldKey → public CDN URL.
-        /// </summary>
         public async Task<Dictionary<string, string>> UpdatePhotosAsync(VehiclePhotosDto dto)
         {
             var compositeKey = $"{dto.VehicleNumber}|{dto.ApplicantContact}";
             var pk = new PartitionKey(compositeKey);
 
-            // 1) Read or create ValuationDocument
             var database = _cosmosClient.GetDatabase(_databaseName);
             var container = database.GetContainer(_containerName);
 
             ValuationDocument doc;
             try
             {
-                var resp = await container.ReadItemAsync<ValuationDocument>(
-                    id: dto.ValuationId,
-                    partitionKey: pk);
+                var resp = await container.ReadItemAsync<ValuationDocument>(id: dto.ValuationId, partitionKey: pk);
                 doc = resp.Resource;
             }
             catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                // Create a fresh document
                 doc = new ValuationDocument
                 {
                     id = dto.ValuationId,
@@ -130,6 +100,7 @@ namespace Valuation.Api.Services
                     CreatedAt = DateTime.UtcNow,
                     PhotoUrls = new Dictionary<string, string>(),
                     VideoUrls = new Dictionary<string, string>(),
+                    CustomPhotos = new List<SavedCustomPhoto>(), // Init list
                     Workflow = new List<WorkflowStep>
                     {
                         new() { StepOrder = 1, TemplateStepId = 1, AssignedToRole = "Stakeholder", Status = "InProgress" },
@@ -141,18 +112,16 @@ namespace Valuation.Api.Services
                 };
             }
 
-            // 2) Helper to upload each photo file and return a public CDN URL
             async Task<string> UploadAndGenerateUrlAsync(IFormFile file)
             {
-                if (file == null)
-                    throw new ArgumentNullException(nameof(file));
+                if (file == null) throw new ArgumentNullException(nameof(file));
 
-                var containerClient = _blobServiceClient
-                    .GetBlobContainerClient(_blobContainerName);
+                var containerClient = _blobServiceClient.GetBlobContainerClient(_blobContainerName);
                 await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
 
-                var sanitizedName = file.FileName.Replace(" ", "_");
-                var blobName = $"{dto.VehicleNumber}/{dto.ApplicantContact}/{Guid.NewGuid()}-{sanitizedName}";
+                // ✅ Optimized Name Sanitization
+                var extension = Path.GetExtension(file.FileName);
+                var blobName = $"{dto.VehicleNumber}/{dto.ApplicantContact}/{Guid.NewGuid()}{extension}";
                 var blobClient = containerClient.GetBlobClient(blobName);
 
                 var headers = new BlobHttpHeaders { ContentType = file.ContentType };
@@ -160,11 +129,9 @@ namespace Valuation.Api.Services
                 await blobClient.UploadAsync(stream, headers);
 
                 var cdnBase = _cdnEndpoint.TrimEnd('/');
-                var containerName = containerClient.Name; // "documents"
-                return $"{cdnBase}/{containerName}/{blobName}";
+                return $"{cdnBase}/{containerClient.Name}/{blobName}";
             }
 
-            // 3) Iterate over each DTO property; upload if non‐null (photos)
             var fieldsToCheck = new Dictionary<string, IFormFile?>
             {
                 { nameof(dto.FrontLeftSide), dto.FrontLeftSide },
@@ -190,117 +157,101 @@ namespace Valuation.Api.Services
 
             foreach (var kv in fieldsToCheck)
             {
-                var fieldKey = kv.Key;
-                var file = kv.Value;
-                if (file != null)
+                if (kv.Value != null)
                 {
-                    var publicUrl = await UploadAndGenerateUrlAsync(file);
-                    doc.PhotoUrls[fieldKey] = publicUrl;
+                    var publicUrl = await UploadAndGenerateUrlAsync(kv.Value);
+                    doc.PhotoUrls[kv.Key] = publicUrl;
                 }
             }
 
-            // ✅ Process vehicle video (MANDATORY)
+            // ✅ NEW: Process Custom Images dynamically
+            if (dto.CustomImageFiles != null && dto.CustomImageFiles.Count > 0)
+            {
+                var parsedMetadata = new List<CustomImageMetadataInput>();
+                if (!string.IsNullOrWhiteSpace(dto.CustomImagesMetadata))
+                {
+                    parsedMetadata = JsonSerializer.Deserialize<List<CustomImageMetadataInput>>(
+                        dto.CustomImagesMetadata, 
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    ) ?? new List<CustomImageMetadataInput>();
+                }
+
+                if (doc.CustomPhotos == null) doc.CustomPhotos = new List<SavedCustomPhoto>();
+
+                for (int i = 0; i < dto.CustomImageFiles.Count; i++)
+                {
+                    var customFile = dto.CustomImageFiles[i];
+                    var meta = parsedMetadata.FirstOrDefault(m => m.Index == i);
+
+                    if (customFile.Length > 0)
+                    {
+                        var publicUrl = await UploadAndGenerateUrlAsync(customFile);
+                        
+                        doc.CustomPhotos.Add(new SavedCustomPhoto
+                        {
+                            Id = Guid.NewGuid().ToString(),
+                            Name = meta?.Name ?? "Custom Image",
+                            PhotoUrl = publicUrl,
+                            DateCaptured = meta?.Date,
+                            Location = meta?.Location
+                        });
+                    }
+                }
+            }
+
             if (dto.VehicleVideo != null)
             {
                 var validation = ValidateVideoFile(dto.VehicleVideo);
-                if (!validation.Valid)
-                {
-                    throw new Exception($"Invalid vehicle video: {validation.Error}");
-                }
+                if (!validation.Valid) throw new Exception($"Invalid vehicle video: {validation.Error}");
 
-                var videoUrl = await ProcessAndUploadVideoAsync(
-                    dto.VehicleVideo,
-                    nameof(dto.VehicleVideo));
+                var videoUrl = await ProcessAndUploadVideoAsync(dto.VehicleVideo, nameof(dto.VehicleVideo));
 
                 if (videoUrl != null)
                 {
-                    if (doc.VideoUrls == null)
-                        doc.VideoUrls = new Dictionary<string, string>();
-
+                    if (doc.VideoUrls == null) doc.VideoUrls = new Dictionary<string, string>();
                     doc.VideoUrls["VehicleVideo"] = videoUrl;
                 }
             }
 
-            // 4) Upsert document (create or replace)
             doc.CompositeKey = compositeKey;
             await container.UpsertItemAsync(doc, pk);
 
-            // 5) Return the updated PhotoUrls + VideoUrls dictionary
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            if (doc.PhotoUrls != null)
-            {
-                foreach (var kv in doc.PhotoUrls)
-                {
-                    result[kv.Key] = kv.Value;
-                }
-            }
-
-            if (doc.VideoUrls != null)
-            {
-                foreach (var kv in doc.VideoUrls)
-                {
-                    result[kv.Key] = kv.Value; // "VehicleVideo"
-                }
-            }
+            if (doc.PhotoUrls != null) foreach (var kv in doc.PhotoUrls) result[kv.Key] = kv.Value;
+            if (doc.VideoUrls != null) foreach (var kv in doc.VideoUrls) result[kv.Key] = kv.Value;
 
             return result;
         }
 
-        /// <summary>
-        /// Retrieves existing PhotoUrls (and video URLs) and returns their public CDN URLs.
-        /// </summary>
-        public async Task<Dictionary<string, string>?> GetPhotoUrlsAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact)
+        public async Task<Dictionary<string, string>?> GetPhotoUrlsAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
-            var compositeKey = $"{vehicleNumber}|{applicantContact}";
-            var pk = new PartitionKey(compositeKey);
-
-            var database = _cosmosClient.GetDatabase(_databaseName);
-            var container = database.GetContainer(_containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
 
             try
             {
-                var response = await container.ReadItemAsync<ValuationDocument>(
-                    id: valuationId,
-                    partitionKey: pk);
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
                 var doc = response.Resource;
-                var storedMap = doc.PhotoUrls;
-
                 var updatedMap = new Dictionary<string, string>();
-                var blobContainer = _blobServiceClient
-                    .GetBlobContainerClient(_blobContainerName);
 
-                // Photos (rebuild via CDN endpoint)
-                if (storedMap != null)
+                if (doc.PhotoUrls != null)
                 {
-                    foreach (var kv in storedMap)
+                    foreach (var kv in doc.PhotoUrls)
                     {
-                        var fieldKey = kv.Key;
-                        var existingUrl = kv.Value;
-
-                        var uri = new Uri(existingUrl);
+                        var uri = new Uri(kv.Value);
                         var absolutePath = uri.AbsolutePath.TrimStart('/');
-                        var prefix = _blobContainerName + "/"; // "documents/"
+                        var prefix = _blobContainerName + "/";
                         var blobName = absolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
                             ? absolutePath.Substring(prefix.Length)
                             : absolutePath;
 
-                        var cdnBase = _cdnEndpoint.TrimEnd('/');
-                        var containerName = blobContainer.Name; // "documents"
-                        updatedMap[fieldKey] = $"{cdnBase}/{containerName}/{blobName}";
+                        updatedMap[kv.Key] = $"{_cdnEndpoint.TrimEnd('/')}/{_blobContainerName}/{blobName}";
                     }
                 }
 
-                // ✅ Add video URLs directly (already CDN-style from ProcessAndUploadVideoAsync)
                 if (doc.VideoUrls != null)
                 {
-                    foreach (var kv in doc.VideoUrls)
-                    {
-                        updatedMap[kv.Key] = kv.Value; // "VehicleVideo"
-                    }
+                    foreach (var kv in doc.VideoUrls) updatedMap[kv.Key] = kv.Value;
                 }
 
                 return updatedMap;
@@ -311,66 +262,57 @@ namespace Valuation.Api.Services
             }
         }
 
-        /// <summary>
-        /// ✅ Get all video URLs from database
-        /// </summary>
-        public async Task<Dictionary<string, string>?> GetVideoUrlsAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact)
+        public async Task<Dictionary<string, string>?> GetVideoUrlsAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
-            var compositeKey = $"{vehicleNumber}|{applicantContact}";
-            var pk = new PartitionKey(compositeKey);
-
-            var database = _cosmosClient.GetDatabase(_databaseName);
-            var container = database.GetContainer(_containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
 
             try
             {
-                var response = await container.ReadItemAsync<ValuationDocument>(
-                    id: valuationId,
-                    partitionKey: pk);
-                var doc = response.Resource;
-
-                return doc.VideoUrls ?? new Dictionary<string, string>();
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                return response.Resource.VideoUrls ?? new Dictionary<string, string>();
             }
             catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return null;
             }
         }
-
-        /// <summary>
-        /// Deletes all blobs and clears PhotoUrls for this valuation.
-        /// </summary>
-        public async Task DeletePhotosAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact)
+        
+        // ✅ NEW: Retrieve custom photos for the PDF
+        public async Task<List<SavedCustomPhoto>> GetCustomPhotosAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
-            var compositeKey = $"{vehicleNumber}|{applicantContact}";
-            var pk = new PartitionKey(compositeKey);
-
-            var database = _cosmosClient.GetDatabase(_databaseName);
-            var container = database.GetContainer(_containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
 
             try
             {
-                var response = await container.ReadItemAsync<ValuationDocument>(
-                    id: valuationId,
-                    partitionKey: pk);
-                var doc = response.Resource;
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                return response.Resource.CustomPhotos ?? new List<SavedCustomPhoto>();
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new List<SavedCustomPhoto>();
+            }
+        }
 
+        public async Task DeletePhotosAsync(string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            try
+            {
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                var doc = response.Resource;
                 var blobContainer = _blobServiceClient.GetBlobContainerClient(_blobContainerName);
+
                 foreach (var kv in doc.PhotoUrls)
                 {
-                    var url = kv.Value;
-                    var uri = new Uri(url);
+                    var uri = new Uri(kv.Value);
                     var absolutePath = uri.AbsolutePath.TrimStart('/');
-                    var prefix = _blobContainerName + "/"; // "documents/"
+                    var prefix = _blobContainerName + "/";
                     var blobName = absolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                        ? absolutePath.Substring(prefix.Length)
-                        : absolutePath;
+                        ? absolutePath.Substring(prefix.Length) : absolutePath;
 
                     var blobClient = blobContainer.GetBlobClient(blobName);
                     await blobClient.DeleteIfExistsAsync();
@@ -379,70 +321,44 @@ namespace Valuation.Api.Services
                 doc.PhotoUrls.Clear();
                 await container.UpsertItemAsync(doc, pk);
             }
-            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                // Nothing to do if document not found
-            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound) { }
         }
 
-        // =========================================================================
-        // ✅ NEW METHODS FOR METADATA EDITING
-        // =========================================================================
-
-        /// <summary>
-        /// ✅ Updates ONLY the metadata (Date/Location) for a specific photo type
-        /// </summary>
-        public async Task<PhotoMetadata> UpdatePhotoMetadataAsync(string valuationId, string photoType, PhotoMetadataUpdateDto input)
+        // ✅ UPDATED: Fixed Cross-Partition Query by using ReadItemAsync with PartitionKey
+        public async Task<PhotoMetadata> UpdatePhotoMetadataAsync(string valuationId, string vehicleNumber, string applicantContact, string photoType, PhotoMetadataUpdateDto input)
         {
-            var database = _cosmosClient.GetDatabase(_databaseName);
-            var container = database.GetContainer(_containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
 
-            // 1. Find document using just ID (Cross-partition query if necessary)
-            // Ideally, we should pass vehicleNumber & contact to build partition key,
-            // but for editing specific metadata, querying by ID is acceptable if PK is unknown.
-            var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
-                .WithParameter("@id", valuationId);
+            var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+            var doc = response.Resource;
 
-            var iterator = container.GetItemQueryIterator<ValuationDocument>(query);
-            var doc = (await iterator.ReadNextAsync()).FirstOrDefault();
+            if (doc.PhotoMetadata == null) doc.PhotoMetadata = new Dictionary<string, PhotoMetadata>();
+            if (!doc.PhotoMetadata.ContainsKey(photoType)) doc.PhotoMetadata[photoType] = new PhotoMetadata();
 
-            if (doc == null) throw new Exception("Valuation not found");
-
-            // 2. Initialize Dictionary if null
-            if (doc.PhotoMetadata == null) 
-                doc.PhotoMetadata = new Dictionary<string, PhotoMetadata>();
-
-            // 3. Ensure entry exists for this photo type
-            if (!doc.PhotoMetadata.ContainsKey(photoType))
-            {
-                doc.PhotoMetadata[photoType] = new PhotoMetadata();
-            }
-
-            // 4. Update the values
             doc.PhotoMetadata[photoType].CapturedDate = input.CapturedDate;
             doc.PhotoMetadata[photoType].LocationText = input.LocationText;
 
-            // 5. Save back to DB (We must use PartitionKey for Upsert)
-            await container.UpsertItemAsync(doc, new PartitionKey(doc.CompositeKey));
+            await container.UpsertItemAsync(doc, pk);
 
             return doc.PhotoMetadata[photoType];
         }
 
-        /// <summary>
-        /// ✅ Retrieves the metadata dictionary for the frontend
-        /// </summary>
-        public async Task<Dictionary<string, PhotoMetadata>> GetPhotoMetadataAsync(string valuationId)
+        // ✅ UPDATED: Fixed Cross-Partition Query
+        public async Task<Dictionary<string, PhotoMetadata>> GetPhotoMetadataAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
-            var database = _cosmosClient.GetDatabase(_databaseName);
-            var container = database.GetContainer(_containerName);
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
 
-            var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
-                .WithParameter("@id", valuationId);
-
-            var iterator = container.GetItemQueryIterator<ValuationDocument>(query);
-            var doc = (await iterator.ReadNextAsync()).FirstOrDefault();
-
-            return doc?.PhotoMetadata ?? new Dictionary<string, PhotoMetadata>();
+            try
+            {
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                return response.Resource.PhotoMetadata ?? new Dictionary<string, PhotoMetadata>();
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new Dictionary<string, PhotoMetadata>();
+            }
         }
     }
 }
