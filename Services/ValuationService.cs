@@ -337,8 +337,7 @@ public class ValuationService : IValuationService
     public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
     {
 
-        //var regNumber = registration.Replace(" ", "").ToUpper();
-        var regNumber = "TN12XX2345"; // Hardcoded for testing
+        var regNumber = registration.Replace(" ", "").ToUpper();
 
         using var client = new HttpClient();
 
@@ -508,14 +507,19 @@ public class ValuationService : IValuationService
         if (updatedDto == null)
             throw new InvalidOperationException("Could not fetch vehicle details DTO.");
 
-        // Preserve RC data by copying non-null values from updatedDto to dto
+        // Fill in blanks from RC/existing data; user-supplied values always win
         foreach (var prop in typeof(VehicleDetailsDto).GetProperties())
         {
-            var updatedValue = prop.GetValue(updatedDto);
-            if (updatedValue != null)
-            {
-                prop.SetValue(dto, updatedValue);
-            }
+            if (!prop.CanWrite) continue;
+            if (prop.PropertyType == typeof(IFormFile)) continue;
+
+            var userValue = prop.GetValue(dto);
+            var rcValue   = prop.GetValue(updatedDto);
+
+            bool userProvided = userValue != null &&
+                                !(userValue is string s && string.IsNullOrEmpty(s));
+            if (!userProvided && rcValue != null)
+                prop.SetValue(dto, rcValue);
         }
 
         //  RESTORE remarks after all updates
@@ -552,9 +556,12 @@ public class ValuationService : IValuationService
             };
         }
 
-        // 5) Upload images (if any) and update DTO URLs
-        dto.StencilTraceUrl = await UploadIfAsync(dto.StencilTrace, registrationNumber, applicantContact);
-        dto.ChassisNoPhotoUrl = await UploadIfAsync(dto.ChassisNoPhoto, registrationNumber, applicantContact);
+        // 5) Upload images only if a new file was supplied; never null-out an existing URL
+        var newStencilUrl = await UploadIfAsync(dto.StencilTrace, registrationNumber, applicantContact);
+        if (newStencilUrl != null) dto.StencilTraceUrl = newStencilUrl;
+
+        var newChassisUrl = await UploadIfAsync(dto.ChassisNoPhoto, registrationNumber, applicantContact);
+        if (newChassisUrl != null) dto.ChassisNoPhotoUrl = newChassisUrl;
 
         // 6) Patch the document’s VehicleDetails
         doc.VehicleDetails = dto;

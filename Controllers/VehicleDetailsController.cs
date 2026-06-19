@@ -17,11 +17,18 @@ namespace Valuation.Api.Controllers
             [FromQuery] string vehicleNumber,
             [FromQuery] string applicantContact)
         {
-            var dto = await _svc.GetVehicleDetailsAsync(
-                valuationId.ToString(), vehicleNumber, applicantContact);
-            if (dto == null)
-                return Ok(new VehicleDetailsDto());
-            return Ok(dto);
+            try
+            {
+                var dto = await _svc.GetVehicleDetailsAsync(
+                    valuationId.ToString(), vehicleNumber, applicantContact);
+                if (dto == null)
+                    return Ok(new VehicleDetailsDto());
+                return Ok(dto);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message, type = ex.GetType().Name });
+            }
         }
 
         /// <summary>
