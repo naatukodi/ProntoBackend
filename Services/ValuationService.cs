@@ -138,6 +138,10 @@ public class ValuationService : IValuationService
                 Remarks = null
             };
         }
+        catch (CosmosException)
+        {
+            return new VehicleDetailsDto { RegistrationNumber = vehicleNumber };
+        }
     }
 
     public async Task<VehicleDetailsDto?> GetVehicleDetailsWithRcCheckAsync(
