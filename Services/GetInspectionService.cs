@@ -202,6 +202,9 @@ namespace Valuation.Api.Services
             if (dto.SwingUnit != null) doc.InspectionDetails.SwingUnit = dto.SwingUnit;
             if (dto.Upholstery != null) doc.InspectionDetails.Upholstery = dto.Upholstery;
             if (dto.InteriorTrims != null) doc.InspectionDetails.InteriorTrims = dto.InteriorTrims;
+            if (dto.Front != null) doc.InspectionDetails.Front = dto.Front;
+            if (dto.Rear != null) doc.InspectionDetails.Rear = dto.Rear;
+            if (dto.Axles != null) doc.InspectionDetails.Axles = dto.Axles;
             if (dto.SpeedoMeter != null) doc.InspectionDetails.SpeedoMeter = dto.SpeedoMeter;
             if (dto.FrontAxles != null) doc.InspectionDetails.FrontAxles = dto.FrontAxles;
             if (dto.RearAxles != null) doc.InspectionDetails.RearAxles = dto.RearAxles;

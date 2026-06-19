@@ -78,6 +78,9 @@ namespace Valuation.Api.Models
         public string? SwingUnit { get; set; }
         public string? Upholstery { get; set; }
         public string? InteriorTrims { get; set; }
+        public string? Front { get; set; }
+        public string? Rear { get; set; }
+        public string? Axles { get; set; }
         public string? SpeedoMeter { get; set; }
         public string? FrontAxles { get; set; }
         public string? RearAxles { get; set; }
