@@ -172,6 +172,12 @@ namespace Valuation.Api.Services
                 doc.InspectionDetails.AllHosePipes = dto.AllHosePipes;
             if (photoUrls.Count > 0)
                 doc.InspectionDetails.Photos = photoUrls;
+            var chassisVerificationUrl = await UploadIf(dto.ChassisVerificationPhoto);
+            if (chassisVerificationUrl != null)
+                doc.InspectionDetails.ChassisVerificationPhotoUrl = chassisVerificationUrl;
+            var chassisStencilTraceUrl = await UploadIf(dto.ChassisStencilTracePhoto);
+            if (chassisStencilTraceUrl != null)
+                doc.InspectionDetails.ChassisStencilTracePhotoUrl = chassisStencilTraceUrl;
             if (dto.Remarks != null)
                 doc.InspectionDetails.Remarks = dto.Remarks;
 

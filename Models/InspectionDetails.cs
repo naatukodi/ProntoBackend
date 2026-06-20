@@ -50,6 +50,10 @@ namespace Valuation.Api.Models
         // Photo URLs (original multiple)
         public List<string>? Photos { get; set; }
 
+        // Named photo URLs
+        public string? ChassisVerificationPhotoUrl { get; set; }
+        public string? ChassisStencilTracePhotoUrl { get; set; }
+
 
         // --- Newly requested additional fields ---
         public string? FuelSystem { get; set; }

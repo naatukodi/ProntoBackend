@@ -46,6 +46,10 @@ namespace Valuation.Api.Models
         // Multiple uploads
         public IList<IFormFile>? Photos { get; set; }
 
+        // Named image uploads
+        public IFormFile? ChassisVerificationPhoto { get; set; }
+        public IFormFile? ChassisStencilTracePhoto { get; set; }
+
 
         // --- Newly requested additional fields ---
         public IFormFile? FrontPhoto { get; set; }
