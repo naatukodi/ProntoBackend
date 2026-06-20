@@ -78,7 +78,8 @@ namespace Valuation.Api.Controllers
                     "FrontViewGrille", "RearViewTailgate", "DriverSideProfile", "PassengerSideProfile",
                     "Dashboard", "InstrumentCluster", "EngineBay", "ChassisNumberPlate",
                     "ChassisImprint", "GearAndSeats", "DashboardCloseup", "Odometer",
-                    "SelfieWithVehicle", "TiresAndRims"
+                    "SelfieWithVehicle", "TiresAndRims",
+                    "ChassisVerification", "ChassisStencilTrace"
                 };
 
                 var photoDisplayNames = new Dictionary<string, string>
@@ -91,7 +92,8 @@ namespace Valuation.Api.Controllers
                     { "EngineBay", "Engine Bay" }, { "ChassisNumberPlate", "Chassis Number Plate" },
                     { "ChassisImprint", "Chassis Imprint" }, { "GearAndSeats", "Gear and Seats" },
                     { "DashboardCloseup", "Dashboard Close-up" }, { "Odometer", "Odometer" },
-                    { "SelfieWithVehicle", "Selfie with Vehicle" }, { "TiresAndRims", "Tires and Rims" }
+                    { "SelfieWithVehicle", "Selfie with Vehicle" }, { "TiresAndRims", "Tires and Rims" },
+                    { "ChassisVerification", "Chassis Verification" }, { "ChassisStencilTrace", "Chassis Stencil Trace" }
                 };
 
                 var normalizedPhotoUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
