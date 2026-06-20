@@ -29,9 +29,11 @@ namespace Valuation.Api.Models
         public IFormFile? Underbody { get; set; }
         public IFormFile? TiresAndRims { get; set; }
         public IFormFile? VehicleVideo { get; set; }
+        public IFormFile? ChassisVerification { get; set; }
+        public IFormFile? ChassisStencilTrace { get; set; }
 
         // ✅ NEW: Properties for Custom Images
         public IList<IFormFile>? CustomImageFiles { get; set; }
-        public string? CustomImagesMetadata { get; set; } 
+        public string? CustomImagesMetadata { get; set; }
     }
 }

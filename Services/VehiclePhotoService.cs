@@ -152,7 +152,9 @@ namespace Valuation.Api.Services
                 { nameof(dto.Odometer), dto.Odometer },
                 { nameof(dto.SelfieWithVehicle), dto.SelfieWithVehicle },
                 { nameof(dto.Underbody), dto.Underbody },
-                { nameof(dto.TiresAndRims), dto.TiresAndRims }
+                { nameof(dto.TiresAndRims), dto.TiresAndRims },
+                { nameof(dto.ChassisVerification), dto.ChassisVerification },
+                { nameof(dto.ChassisStencilTrace), dto.ChassisStencilTrace }
             };
 
             foreach (var kv in fieldsToCheck)
