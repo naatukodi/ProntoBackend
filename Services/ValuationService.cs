@@ -18,6 +18,7 @@ public class ValuationService : IValuationService
     private readonly string _dbId;
     private readonly string _containerId;
     private readonly string _blobContainerName;
+    private readonly string _cdnEndpoint;
     private readonly HttpClient _httpClient;
     private readonly string _basicAuthHeader;
     private readonly string _attestrUrl;
@@ -35,7 +36,8 @@ public class ValuationService : IValuationService
         _blobService = blobService;
         _dbId = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
         _containerId = configuration["Cosmos:ContainerId"] ?? "Valuations";
-        _blobContainerName = configuration["Blob:ContainerName"] ?? "vehicle-documents";
+        _blobContainerName = configuration["Blob:ContainerName"] ?? "documents";
+        _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://vehgablobs.blob.core.windows.net";
         _httpClient = httpClient;
         _basicAuthHeader = configuration["BasicAuth:Header"] ?? "";
         _attestrUrl = configuration["Attestr:Url"] ?? "https://api.attestr.com/api/v2/public/checkx/rc";
@@ -211,6 +213,24 @@ public class ValuationService : IValuationService
                     doc.ValuationResponse = vr;
                     await Container.UpsertItemAsync(doc, pk);
                 }
+            }
+
+            // Rewrite PhotoUrls to use current CDN/blob endpoint
+            if (doc.PhotoUrls != null)
+            {
+                var rewritten = new Dictionary<string, string>();
+                foreach (var kv in doc.PhotoUrls)
+                {
+                    if (string.IsNullOrEmpty(kv.Value)) { rewritten[kv.Key] = kv.Value; continue; }
+                    var uri = new Uri(kv.Value);
+                    var absolutePath = uri.AbsolutePath.TrimStart('/');
+                    var prefix = _blobContainerName + "/";
+                    var blobName = absolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                        ? absolutePath.Substring(prefix.Length)
+                        : absolutePath;
+                    rewritten[kv.Key] = $"{_cdnEndpoint.TrimEnd('/')}/{_blobContainerName}/{blobName}";
+                }
+                doc.PhotoUrls = rewritten;
             }
 
             return doc;
