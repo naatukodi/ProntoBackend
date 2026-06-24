@@ -16,5 +16,7 @@ public class QualityControl
     public string? AssignedToPhoneNumber { get; set; }
     public string? AssignedToEmail { get; set; }
     public string? AssignedToWhatsapp { get; set; }
-    
+
+    public Dictionary<string, string?>? QcChecklist { get; set; }
+    public Dictionary<string, string?>? QcChecklistRemarks { get; set; }
 }
