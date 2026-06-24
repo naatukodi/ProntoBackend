@@ -215,23 +215,7 @@ public class ValuationService : IValuationService
                 }
             }
 
-            // Rewrite PhotoUrls to use current CDN/blob endpoint
-            if (doc.PhotoUrls != null)
-            {
-                var rewritten = new Dictionary<string, string>();
-                foreach (var kv in doc.PhotoUrls)
-                {
-                    if (string.IsNullOrEmpty(kv.Value)) { rewritten[kv.Key] = kv.Value; continue; }
-                    var uri = new Uri(kv.Value);
-                    var absolutePath = uri.AbsolutePath.TrimStart('/');
-                    var prefix = _blobContainerName + "/";
-                    var blobName = absolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                        ? absolutePath.Substring(prefix.Length)
-                        : absolutePath;
-                    rewritten[kv.Key] = $"{_cdnEndpoint.TrimEnd('/')}/{_blobContainerName}/{blobName}";
-                }
-                doc.PhotoUrls = rewritten;
-            }
+            // Photo URLs are stored with their correct host in Cosmos DB — no rewriting needed.
 
             return doc;
         }
