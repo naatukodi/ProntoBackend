@@ -23,7 +23,7 @@ namespace Valuation.Api.Services
             _cosmosClient = cosmosClient;
             _blobServiceClient = blobServiceClient;
             _blobContainerName = configuration["Blob:ContainerName"] ?? "documents";
-            _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://prontomoto.azureedge.net";
+            _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://vehgablobs.blob.core.windows.net";
             _databaseName = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
             _containerName = configuration["Cosmos:ContainerId"] ?? "Valuations";
         }
