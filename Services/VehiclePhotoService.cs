@@ -69,9 +69,7 @@ namespace Valuation.Api.Services
             using var stream = videoFile.OpenReadStream();
             await blobClient.UploadAsync(stream, headers);
 
-            var cdnBase = _cdnEndpoint.TrimEnd('/');
-            var container = containerClient.Name;
-            return $"{cdnBase}/{container}/{blobName}";
+            return blobClient.Uri.ToString();
         }
 
         public async Task<Dictionary<string, string>> UpdatePhotosAsync(VehiclePhotosDto dto)
@@ -128,8 +126,7 @@ namespace Valuation.Api.Services
                 using var stream = file.OpenReadStream();
                 await blobClient.UploadAsync(stream, headers);
 
-                var cdnBase = _cdnEndpoint.TrimEnd('/');
-                return $"{cdnBase}/{containerClient.Name}/{blobName}";
+                return blobClient.Uri.ToString();
             }
 
             var fieldsToCheck = new Dictionary<string, IFormFile?>
@@ -237,24 +234,10 @@ namespace Valuation.Api.Services
                 var updatedMap = new Dictionary<string, string>();
 
                 if (doc.PhotoUrls != null)
-                {
-                    foreach (var kv in doc.PhotoUrls)
-                    {
-                        var uri = new Uri(kv.Value);
-                        var absolutePath = uri.AbsolutePath.TrimStart('/');
-                        var prefix = _blobContainerName + "/";
-                        var blobName = absolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                            ? absolutePath.Substring(prefix.Length)
-                            : absolutePath;
-
-                        updatedMap[kv.Key] = $"{_cdnEndpoint.TrimEnd('/')}/{_blobContainerName}/{blobName}";
-                    }
-                }
+                    foreach (var kv in doc.PhotoUrls) updatedMap[kv.Key] = kv.Value;
 
                 if (doc.VideoUrls != null)
-                {
                     foreach (var kv in doc.VideoUrls) updatedMap[kv.Key] = kv.Value;
-                }
 
                 return updatedMap;
             }
