@@ -179,6 +179,95 @@ namespace Valuation.Api.Models
         public string? FrontAxleFe { get; set; }
         public string? RearDrawbar { get; set; }
 
+        // --- Excel-registry aligned fields ---
+        // Shared cross-type
+        public string? TyreCondition { get; set; }
+        public string? ElectricalSystem { get; set; }
+        public string? LoadBodyAssy { get; set; }
+        public string? BodyAssy { get; set; }
+        public string? CabinAssy { get; set; }
+        public string? FrontBrakes { get; set; }
+        public string? RearBrakes { get; set; }
+        public string? HeadLights { get; set; }
+        public string? FrontSuspension { get; set; }
+        public string? RearSuspension { get; set; }
+        public string? RightSideGate { get; set; }
+        public string? LeftSideGate { get; set; }
+
+        // 2W specific
+        public string? FrontScoop { get; set; }
+        public string? RvMirrors { get; set; }
+        public string? LockSet { get; set; }
+        public string? SideCovers { get; set; }
+        public string? BellyPanels { get; set; }
+        public string? BrakeLeversFluid { get; set; }
+        public string? Silencer { get; set; }
+        public string? SilencerCover { get; set; }
+        public string? Accelerator { get; set; }
+        public string? HandleBar { get; set; }
+        public string? SteeringStem { get; set; }
+        public string? FrontShockAbsorber { get; set; }
+        public string? RearShockAbsorber { get; set; }
+        public string? LegGuard { get; set; }
+        public string? SareeGuard { get; set; }
+        public string? ChainGuard { get; set; }
+        public string? SelfStart { get; set; }
+        public string? Horn { get; set; }
+        public string? KickPedalFootRest { get; set; }
+
+        // 3W specific
+        public string? FrontPanel { get; set; }
+        public string? FrontGlassFrame { get; set; }
+        public string? Switches { get; set; }
+        public string? LoadCarrier { get; set; }
+
+        // CE specific
+        public string? SteeringControlSystem { get; set; }
+        public string? CabinStructure { get; set; }
+        public string? DashboardControls { get; set; }
+        public string? GlassPanels { get; set; }
+        public string? BucketBlade { get; set; }
+        public string? PinsAndBushes { get; set; }
+        public string? ServiceBrake { get; set; }
+        public string? EmergencyStop { get; set; }
+        public string? Sensors { get; set; }
+        public string? SteeringControlLevers { get; set; }
+        public string? HydraulicSteeringPump { get; set; }
+        public string? SwivelJoints { get; set; }
+        public string? HydraulicOilCooler { get; set; }
+        public string? HydraulicPump { get; set; }
+        public string? HosesAndFittings { get; set; }
+        public string? SwingMechanism { get; set; }
+        public string? TrackChains { get; set; }
+        public string? Sprockets { get; set; }
+        public string? Rollers { get; set; }
+        public string? HourMeter { get; set; }
+        public string? BonnetGuard { get; set; }
+        public string? TorqueConverter { get; set; }
+        public string? FinalDrive { get; set; }
+
+        // BUS specific
+        public string? BodyStructure { get; set; }
+        public string? DriverCabin { get; set; }
+        public string? BumpersAndGrilles { get; set; }
+        public string? SeatsAndBerths { get; set; }
+        public string? SideBodyPanels { get; set; }
+        public string? RearBodyPanels { get; set; }
+
+        // FE/Tractor specific
+        public string? OperatorPlatform { get; set; }
+        public string? OperatorStation { get; set; }
+        public string? Canopy { get; set; }
+        public string? FrontGrilles { get; set; }
+        public string? BrakeEqualization { get; set; }
+        public string? FanAssy { get; set; }
+        public string? RearAxleFe { get; set; }
+        public string? TieRodsJoints { get; set; }
+        public string? Muffler { get; set; }
+        public string? AirFilter { get; set; }
+        public string? DropArm { get; set; }
+        public string? AttachmentHitch { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
         public string? AssignedTo { get; set; }
