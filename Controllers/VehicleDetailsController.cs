@@ -118,7 +118,8 @@ namespace Valuation.Api.Controllers
         public async Task<ActionResult<VehicleDuplicateCheckResponse>> CheckDuplicateVehicle(
             [FromQuery] string? vehicleNumber = null,
             [FromQuery] string? engineNumber = null,
-            [FromQuery] string? chassisNumber = null)
+            [FromQuery] string? chassisNumber = null,
+            [FromQuery] string? excludeId = null)
         {
             try
             {
@@ -134,7 +135,7 @@ namespace Valuation.Api.Controllers
                 }
 
                 var response = await _svc.CheckDuplicateVehicleAsync(
-                    vehicleNumber, engineNumber, chassisNumber);
+                    vehicleNumber, engineNumber, chassisNumber, excludeId);
 
                 return Ok(response);
             }

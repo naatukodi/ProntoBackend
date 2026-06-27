@@ -721,7 +721,8 @@ public class ValuationService : IValuationService
     public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
         string? vehicleNumber,
         string? engineNumber,
-        string? chassisNumber)
+        string? chassisNumber,
+        string? excludeId = null)
     {
         // ✅ CATCH FRONTEND BUG: Stop Angular from searching for literal "undefined"
         string? CleanStr(string? val) =>
@@ -801,11 +802,13 @@ public class ValuationService : IValuationService
                     )
                 ) AS ValuationAmount";
 
+            string excludeClause = string.IsNullOrWhiteSpace(excludeId) ? "" : "AND c.id != @excludeId";
+
             // ================= VEHICLE NUMBER =================
             if (vehicleNumber != null)
             {
                 var vehicleQuery = new QueryDefinition($@"
-                    SELECT 
+                    SELECT
                         c.id,
                         c.VehicleNumber,
                         c.VehicleDetails.EngineNumber AS EngineNumber,
@@ -817,7 +820,9 @@ public class ValuationService : IValuationService
                     FROM c
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND UPPER(c.VehicleNumber) = @vehicleNumber
+                    {excludeClause}
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
+                if (!string.IsNullOrWhiteSpace(excludeId)) vehicleQuery = vehicleQuery.WithParameter("@excludeId", excludeId);
 
                 await ExecuteQuery(vehicleQuery, "Vehicle Number");
             }
@@ -826,7 +831,7 @@ public class ValuationService : IValuationService
             if (engineNumber != null)
             {
                 var engineQuery = new QueryDefinition($@"
-                    SELECT 
+                    SELECT
                         c.id,
                         c.VehicleNumber,
                         c.VehicleDetails.EngineNumber AS EngineNumber,
@@ -839,7 +844,9 @@ public class ValuationService : IValuationService
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.EngineNumber)
                     AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
+                    {excludeClause}
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
+                if (!string.IsNullOrWhiteSpace(excludeId)) engineQuery = engineQuery.WithParameter("@excludeId", excludeId);
 
                 await ExecuteQuery(engineQuery, "Engine Number");
             }
@@ -848,7 +855,7 @@ public class ValuationService : IValuationService
             if (chassisNumber != null)
             {
                 var chassisQuery = new QueryDefinition($@"
-                    SELECT 
+                    SELECT
                         c.id,
                         c.VehicleNumber,
                         c.VehicleDetails.EngineNumber AS EngineNumber,
@@ -861,7 +868,9 @@ public class ValuationService : IValuationService
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
                     AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
+                    {excludeClause}
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
+                if (!string.IsNullOrWhiteSpace(excludeId)) chassisQuery = chassisQuery.WithParameter("@excludeId", excludeId);
 
                 await ExecuteQuery(chassisQuery, "Chassis Number");
             }
