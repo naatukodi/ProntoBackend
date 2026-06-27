@@ -788,12 +788,16 @@ public class ValuationService : IValuationService
             // ================= SAFE VALUATION EXPRESSION =================
             string valuationExpression = @"
                 IIF(
-                    IS_DEFINED(c.FinalValuationAmount),
-                    c.FinalValuationAmount,
+                    IS_DEFINED(c.QualityControl) AND NOT IS_NULL(c.QualityControl) AND IS_DEFINED(c.QualityControl.ValuationAmount) AND NOT IS_NULL(c.QualityControl.ValuationAmount) AND c.QualityControl.ValuationAmount > 0,
+                    c.QualityControl.ValuationAmount,
                     IIF(
-                        IS_DEFINED(c.ValuationResponse) AND IS_DEFINED(c.ValuationResponse.MidRange),
-                        c.ValuationResponse.MidRange,
-                        null
+                        IS_DEFINED(c.FinalValuationAmount) AND NOT IS_NULL(c.FinalValuationAmount) AND c.FinalValuationAmount > 0,
+                        c.FinalValuationAmount,
+                        IIF(
+                            IS_DEFINED(c.ValuationResponse) AND NOT IS_NULL(c.ValuationResponse) AND IS_DEFINED(c.ValuationResponse.MidRange) AND NOT IS_NULL(c.ValuationResponse.MidRange) AND c.ValuationResponse.MidRange > 0,
+                            c.ValuationResponse.MidRange,
+                            null
+                        )
                     )
                 ) AS ValuationAmount";
 
