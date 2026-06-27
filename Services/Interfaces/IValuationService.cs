@@ -29,9 +29,10 @@ public interface IValuationService
         CompleteValuationRequestDto request);
 
     Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
-        string? vehicleNumber, 
-        string? engineNumber, 
-        string? chassisNumber);
+        string? vehicleNumber,
+        string? engineNumber,
+        string? chassisNumber,
+        string? excludeId = null);
 
     Task<VehicleDetailsDto?> GetVehicleDetailsWithRcCheckAsync(string valuationId, string vehicleNumber, string applicantContact);
 
