@@ -76,24 +76,28 @@ namespace Valuation.Api.Controllers
                 {
                     "FrontLeftSide", "FrontRightSide", "RearLeftSide", "RearRightSide",
                     "FrontViewGrille", "RearViewTailgate", "DriverSideProfile", "PassengerSideProfile",
-                    "Dashboard", "InstrumentCluster", "EngineBay", "ChassisNumberPlate",
-                    "ChassisImprint", "GearAndSeats", "DashboardCloseup", "Odometer",
-                    "SelfieWithVehicle", "TiresAndRims",
-                    "ChassisVerification", "ChassisStencilTrace"
+                    "EngineBay", "VinPlate", "ChassisImprint", "Odometer",
+                    "SelfieWithVehicle", "VehicleVideo",
+                    "ChassisVerification", "ChassisStencilTrace", "WorkingOperationPhoto"
                 };
 
                 var photoDisplayNames = new Dictionary<string, string>
                 {
                     { "FrontLeftSide", "Front Left Side" }, { "FrontRightSide", "Front Right Side" },
                     { "RearLeftSide", "Rear Left Side" }, { "RearRightSide", "Rear Right Side" },
-                    { "FrontViewGrille", "Front View (grille)" }, { "RearViewTailgate", "Rear View (tailgate)" },
+                    { "FrontViewGrille", "Front View (Grille)" }, { "RearViewTailgate", "Rear View (Tailgate)" },
                     { "DriverSideProfile", "Driver's Side Profile" }, { "PassengerSideProfile", "Passenger Side Profile" },
                     { "Dashboard", "Dashboard" }, { "InstrumentCluster", "Instrument Cluster" },
-                    { "EngineBay", "Engine Bay" }, { "ChassisNumberPlate", "Chassis Number Plate" },
-                    { "ChassisImprint", "Chassis Imprint" }, { "GearAndSeats", "Gear and Seats" },
+                    { "EngineBay", "Engine Bay" }, { "VinPlate", "VIN Plate" },
+                    { "ChassisImprint", "Chassis Imprint" },
+                    { "GearInterior", "Gear (Interior)" }, { "FrontSeat", "Front Seat" }, { "RearSeat", "Rear Seat" },
                     { "DashboardCloseup", "Dashboard Close-up" }, { "Odometer", "Odometer" },
-                    { "SelfieWithVehicle", "Selfie with Vehicle" }, { "TiresAndRims", "Tires and Rims" },
-                    { "ChassisVerification", "Chassis Verification" }, { "ChassisStencilTrace", "Chassis Stencil Trace" }
+                    { "SelfieWithVehicle", "Selfie with Vehicle" },
+                    { "TireFrontLeft", "Tire Front Left" }, { "TireFrontRight", "Tire Front Right" },
+                    { "TireRearLeft", "Tire Rear Left" }, { "TireRearRight", "Tire Rear Right" },
+                    { "Underbody", "Under Body" },
+                    { "ChassisVerification", "Chassis Verification" }, { "ChassisStencilTrace", "Chassis Stencil Trace" },
+                    { "WorkingOperationPhoto", "Working / Operation Photo" }
                 };
 
                 var normalizedPhotoUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

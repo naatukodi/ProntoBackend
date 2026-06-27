@@ -20,17 +20,23 @@ namespace Valuation.Api.Models
         public IFormFile? Dashboard { get; set; }
         public IFormFile? InstrumentCluster { get; set; }
         public IFormFile? EngineBay { get; set; }
-        public IFormFile? ChassisNumberPlate { get; set; }
+        public IFormFile? VinPlate { get; set; }
         public IFormFile? ChassisImprint { get; set; }
-        public IFormFile? GearAndSeats { get; set; }
+        public IFormFile? GearInterior { get; set; }
+        public IFormFile? FrontSeat { get; set; }
+        public IFormFile? RearSeat { get; set; }
         public IFormFile? DashboardCloseup { get; set; }
         public IFormFile? Odometer { get; set; }
         public IFormFile? SelfieWithVehicle { get; set; }
         public IFormFile? Underbody { get; set; }
-        public IFormFile? TiresAndRims { get; set; }
+        public IFormFile? TireFrontLeft { get; set; }
+        public IFormFile? TireFrontRight { get; set; }
+        public IFormFile? TireRearLeft { get; set; }
+        public IFormFile? TireRearRight { get; set; }
         public IFormFile? VehicleVideo { get; set; }
         public IFormFile? ChassisVerification { get; set; }
         public IFormFile? ChassisStencilTrace { get; set; }
+        public IFormFile? WorkingOperationPhoto { get; set; }
 
         // ✅ NEW: Properties for Custom Images
         public IList<IFormFile>? CustomImageFiles { get; set; }

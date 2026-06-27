@@ -142,16 +142,22 @@ namespace Valuation.Api.Services
                 { nameof(dto.Dashboard), dto.Dashboard },
                 { nameof(dto.InstrumentCluster), dto.InstrumentCluster },
                 { nameof(dto.EngineBay), dto.EngineBay },
-                { nameof(dto.ChassisNumberPlate), dto.ChassisNumberPlate },
+                { nameof(dto.VinPlate), dto.VinPlate },
                 { nameof(dto.ChassisImprint), dto.ChassisImprint },
-                { nameof(dto.GearAndSeats), dto.GearAndSeats },
+                { nameof(dto.GearInterior), dto.GearInterior },
+                { nameof(dto.FrontSeat), dto.FrontSeat },
+                { nameof(dto.RearSeat), dto.RearSeat },
                 { nameof(dto.DashboardCloseup), dto.DashboardCloseup },
                 { nameof(dto.Odometer), dto.Odometer },
                 { nameof(dto.SelfieWithVehicle), dto.SelfieWithVehicle },
                 { nameof(dto.Underbody), dto.Underbody },
-                { nameof(dto.TiresAndRims), dto.TiresAndRims },
+                { nameof(dto.TireFrontLeft), dto.TireFrontLeft },
+                { nameof(dto.TireFrontRight), dto.TireFrontRight },
+                { nameof(dto.TireRearLeft), dto.TireRearLeft },
+                { nameof(dto.TireRearRight), dto.TireRearRight },
                 { nameof(dto.ChassisVerification), dto.ChassisVerification },
-                { nameof(dto.ChassisStencilTrace), dto.ChassisStencilTrace }
+                { nameof(dto.ChassisStencilTrace), dto.ChassisStencilTrace },
+                { nameof(dto.WorkingOperationPhoto), dto.WorkingOperationPhoto }
             };
 
             foreach (var kv in fieldsToCheck)
