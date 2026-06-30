@@ -6,5 +6,6 @@ namespace Valuation.Api.Models
     {
         public string Name { get; set; } = default!;
         public string Contact { get; set; } = default!;
+        public string? AlternativeContact { get; set; }
     }
 }

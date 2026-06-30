@@ -32,7 +32,7 @@ namespace Valuation.Api.Controllers
         }
 
         /// <summary>
-        /// Get the stored vehicle details AND enrich them with Attestr API RC data.
+        /// Get the stored vehicle details AND enrich them with Surepass RC data.
         /// </summary>
         [HttpGet("with-rc")]
         public async Task<ActionResult<VehicleDetailsDto>> GetWithRc(

@@ -9,6 +9,7 @@ namespace Valuation.Api.Models
     public class Stakeholder
     {
         public string Name { get; set; } = default!;
+        public string? Branch { get; set; }
         public string ExecutiveName { get; set; } = default!;
         public string ExecutiveContact { get; set; } = default!;
         public string? ExecutiveWhatsapp { get; set; }

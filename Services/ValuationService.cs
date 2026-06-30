@@ -21,8 +21,8 @@ public class ValuationService : IValuationService
     private readonly string _cdnEndpoint;
     private readonly HttpClient _httpClient;
     private readonly string _basicAuthHeader;
-    private readonly string _attestrUrl;
-    private readonly string _attestrToken;
+    private readonly string _surepassUrl;
+    private readonly string _surepassToken;
     private readonly IWorkflowTableService _workflowTableService;
 
     public ValuationService(
@@ -40,8 +40,8 @@ public class ValuationService : IValuationService
         _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://vehgablobs.blob.core.windows.net";
         _httpClient = httpClient;
         _basicAuthHeader = configuration["BasicAuth:Header"] ?? "";
-        _attestrUrl = configuration["Attestr:Url"] ?? "https://api.attestr.com/api/v2/public/checkx/rc";
-        _attestrToken = configuration["Attestr:Token"] ?? "";
+        _surepassUrl = configuration["Surepass:Url"] ?? "https://kyc-api.surepass.io/api/v1/rc/rc-text";
+        _surepassToken = configuration["Surepass:Token"] ?? "";
         _workflowTableService = workflowTableService;
     }
 
@@ -154,14 +154,14 @@ public class ValuationService : IValuationService
         // 1) fetch existing
         VehicleDetailsDto? dto = await GetVehicleDetailsAsync(valuationId, registrationNumber, applicantContact);
 
-        // 2) call Attestr API
+        // 2) call Surepass API
         var api = await GetVehicleInfoAsync(registrationNumber);
         if (api == null) return dto;
 
         // 3) map into DTO
         if (dto == null)
             dto = new VehicleDetailsDto();
-        MapAttestrToDto(api, dto);
+        MapSurepassToDto(api, dto);
 
         dto.RegistrationNumber = registrationNumber;
 
@@ -338,121 +338,135 @@ public class ValuationService : IValuationService
         }
     }
 
-    public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
+    public async Task<SurepassRcData?> GetVehicleInfoAsync(string registration)
     {
-
         var regNumber = registration.Replace(" ", "").ToUpper();
 
         using var client = new HttpClient();
 
-        // Set up Authorization and Accept headers
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _attestrToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _surepassToken);
         client.DefaultRequestHeaders.Accept.Clear();
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        // Prepare JSON payload
-        var payload = new { reg = regNumber };
+        var payload = new { id_number = regNumber };
         var json = JsonSerializer.Serialize(payload);
 
-        // Create content WITHOUT charset in Content-Type
         using var content = new StringContent(json, Encoding.UTF8);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         try
         {
-            Console.WriteLine($"Sending POST to {_attestrUrl} with payload: {json}");
-            var response = await client.PostAsync(_attestrUrl, content);
+            Console.WriteLine($"Sending POST to {_surepassUrl} with payload: {json}");
+            var response = await client.PostAsync(_surepassUrl, content);
 
             var body = await response.Content.ReadAsStringAsync();
             Console.WriteLine($"Status: {(int)response.StatusCode} {response.ReasonPhrase}");
             Console.WriteLine("Response Body:");
             Console.WriteLine(body);
-            return JsonSerializer.Deserialize<CheckXResponse>(body);
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var wrapper = JsonSerializer.Deserialize<SurepassRcResponse>(body, options);
+            return wrapper?.Success == true ? wrapper.Data : null;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("Error while calling Attestr API:");
+            Console.Error.WriteLine("Error while calling Surepass API:");
             Console.Error.WriteLine(ex);
         }
         return null;
     }
 
 
-    private void MapAttestrToDto(CheckXResponse api, VehicleDetailsDto dto)
+    // Surepass sometimes returns invalid dates like "2099-09-00" (day=0) or "2099-00-04" (month=0).
+    // This helper replaces zeroed parts with 01 so DateTime.TryParse succeeds.
+    private static DateTime? SafeParseDate(string? dateStr)
     {
-        // ── Dates ────────────────────────────────────────────────────────────
-        if (DateTime.TryParse(api.Registered, out var regDt))
+        if (string.IsNullOrWhiteSpace(dateStr)) return null;
+        var parts = dateStr.Split('-');
+        if (parts.Length == 3)
+        {
+            if (parts[1] == "00") parts[1] = "01";
+            if (parts[2] == "00") parts[2] = "01";
+            dateStr = string.Join("-", parts);
+        }
+        return DateTime.TryParse(dateStr, out var dt) ? dt : null;
+    }
+
+    private void MapSurepassToDto(SurepassRcData api, VehicleDetailsDto dto)
+    {
+        // ── Registration date ─────────────────────────────────────────────────
+        var regDt = SafeParseDate(api.RegistrationDate);
+        if (regDt.HasValue)
         {
             dto.DateOfRegistration = regDt;
-            dto.YearOfMfg = regDt.Year;
-            dto.MonthOfMfg = regDt.Month;
+            dto.YearOfMfg = regDt.Value.Year;
+            dto.MonthOfMfg = regDt.Value.Month;
         }
 
-        if (!string.IsNullOrWhiteSpace(api.Manufactured))
+        // ── Manufacturing date ("M/YYYY" format) ──────────────────────────────
+        if (!string.IsNullOrWhiteSpace(api.ManufacturingDate))
         {
-            var parts = api.Manufactured.Split('/');
+            var parts = api.ManufacturingDate.Split('/');
             if (parts.Length == 2
-                && int.TryParse(parts[0], out var m)
-                && int.TryParse(parts[1], out var y))
+                && int.TryParse(parts[0], out var mfgMonth)
+                && int.TryParse(parts[1], out var mfgYear)
+                && mfgMonth >= 1 && mfgMonth <= 12
+                && mfgYear > 1900)
             {
-                dto.ManufacturedDate = new DateTime(y, m, 1);
+                dto.ManufacturedDate = new DateTime(mfgYear, mfgMonth, 1);
             }
         }
 
-        if (DateTime.TryParse(api.PollutionCertificateUpto, out var pollUpto))
-            dto.PollutionCertificateUpto = pollUpto;
+        // ── Other dates ───────────────────────────────────────────────────────
+        dto.PollutionCertificateUpto = SafeParseDate(api.PuccUpto);
+        dto.PermitIssued             = SafeParseDate(api.PermitIssueDate);
+        dto.PermitFrom               = SafeParseDate(api.PermitValidFrom);
+        dto.PermitValidUpTo          = SafeParseDate(api.PermitValidUpto);
+        dto.InsuranceValidUpTo       = SafeParseDate(api.InsuranceUpto);
+        dto.FitnessValidTo           = SafeParseDate(api.FitUpTo);
+        dto.TaxUpto                  = SafeParseDate(api.TaxUpto);
 
-        if (DateTime.TryParse(api.PermitIssued, out var permitIssued))
-            dto.PermitIssued = permitIssued;
-        if (DateTime.TryParse(api.PermitFrom, out var permitFrom))
-            dto.PermitFrom = permitFrom;
-        if (DateTime.TryParse(api.TaxUpto, out var taxUpto))
-            dto.TaxUpto = taxUpto;
-
-        // ── Numerics ─────────────────────────────────────────────────────────
+        // ── Numerics ──────────────────────────────────────────────────────────
         if (double.TryParse(api.CubicCapacity, out var cc))
             dto.EngineCC = Convert.ToInt32(Math.Round(cc));
 
-        if (double.TryParse(api.GrossWeight, out var gw))
+        if (double.TryParse(api.VehicleGrossWeight, out var gw))
             dto.GrossVehicleWeight = gw;
 
-        if (int.TryParse(api.SeatingCapacity, out var sc))
+        if (int.TryParse(api.SeatCapacity, out var sc))
             dto.SeatingCapacity = sc;
 
         // ── Simple field copies ───────────────────────────────────────────────
-        dto.Rto = api.Rto;
-        dto.Lender = api.Lender;
-        dto.ExShowroomPrice = api.ExShowroomPrice;
-        dto.CategoryCode = api.Category;
-        dto.ClassOfVehicle = api.CategoryDescription ?? dto.ClassOfVehicle;
-        dto.NormsType = api.NormsType;
-        dto.MakerVariant = api.MakerVariant;
-        dto.PollutionCertificateNumber = api.PollutionCertificateNumber;
-        dto.PermitType = api.PermitType;
-        dto.TaxPaidUpto = api.TaxPaidUpto;
+        dto.Rto                      = api.RegisteredAt;
+        dto.Lender                   = api.Financer;
+        dto.CategoryCode             = api.VehicleCategory;
+        dto.ClassOfVehicle           = api.VehicleCategoryDescription ?? dto.ClassOfVehicle;
+        dto.NormsType                = api.NormsType;
+        dto.MakerVariant             = api.Variant;
+        dto.PollutionCertificateNumber = api.PuccNumber;
+        dto.PermitType               = api.PermitType;
+        dto.PermitNo                 = api.PermitNumber;
+        dto.TaxPaidUpto              = api.TaxPaidUpto;
+        dto.OwnerSerialNo            = api.OwnerNumber;
 
-        // ── Boolean business logic ───────────────────────────────────────────
-        dto.RcStatus = api.Valid;
+        // ── Boolean business logic ────────────────────────────────────────────
+        // Surepass does not return a direct valid bool; use success from the wrapper (already filtered before this call)
+        dto.RcStatus      = true;
         dto.BacklistStatus = !string.IsNullOrWhiteSpace(api.BlacklistStatus);
 
-        // ── overwrite a few core fields if API gives better data ─────────────
-        dto.Make = api.MakerDescription ?? dto.Make;
-        dto.Model = api.MakerModel ?? dto.Model;
-        dto.ChassisNumber = api.ChassisNumber ?? dto.ChassisNumber;
-        dto.EngineNumber = api.EngineNumber ?? dto.EngineNumber;
-        dto.Colour = api.ColorType ?? dto.Colour;
-        dto.Fuel = api.FuelType ?? dto.Fuel;
-        dto.OwnerName = api.Owner ?? dto.OwnerName;
-        dto.PresentAddress = api.CurrentAddress ?? dto.PresentAddress;
-        dto.PermanentAddress = api.PermanentAddress ?? dto.PermanentAddress;
-        dto.Hypothecation = api.Financed;
-        dto.Insurer = api.InsuranceProvider ?? dto.Insurer;
+        // ── Core fields — only overwrite if Surepass returns a value ──────────
+        dto.Make             = api.MakerDescription      ?? dto.Make;
+        dto.Model            = api.MakerModel            ?? dto.Model;
+        dto.ChassisNumber    = api.VehicleChasisNumber   ?? dto.ChassisNumber;
+        dto.EngineNumber     = api.VehicleEngineNumber   ?? dto.EngineNumber;
+        dto.Colour           = api.Color                 ?? dto.Colour;
+        dto.Fuel             = api.FuelType              ?? dto.Fuel;
+        dto.OwnerName        = api.OwnerName             ?? dto.OwnerName;
+        dto.PresentAddress   = api.PresentAddress        ?? dto.PresentAddress;
+        dto.PermanentAddress = api.PermanentAddress      ?? dto.PermanentAddress;
+        dto.Hypothecation    = api.Financed;
+        dto.Insurer          = api.InsuranceCompany      ?? dto.Insurer;
         dto.InsurancePolicyNo = api.InsurancePolicyNumber ?? dto.InsurancePolicyNo;
-        if (DateTime.TryParse(api.InsuranceUpto, out var insUpto))
-            dto.InsuranceValidUpTo = insUpto;
-        // PRESERVE remarks so user edits are not lost
-        if (string.IsNullOrWhiteSpace(dto.Remarks))
-        dto.Remarks = dto.Remarks;
     }
 
     public async Task<List<OpenValuationDto>> GetOpenValuationsAsync()

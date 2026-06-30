@@ -141,6 +141,7 @@ namespace Valuation.Api.Services
             doc.Stakeholder = new Stakeholder
             {
                 Name = dto.Name,
+                Branch = dto.Branch,
                 ExecutiveName = dto.ExecutiveName,
                 ExecutiveContact = dto.ExecutiveContact,
                 ExecutiveWhatsapp = dto.ExecutiveWhatsapp,
@@ -157,12 +158,12 @@ namespace Valuation.Api.Services
                     Block = dto.Block,
                     State = dto.State,
                     Country = dto.Country
-
                 },
                 Applicant = new Applicant
                 {
                     Name = dto.ApplicantName,
-                    Contact = dto.ApplicantContact
+                    Contact = dto.ApplicantContact,
+                    AlternativeContact = dto.ApplicantAlternativeContact
                 }
             };
 
