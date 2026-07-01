@@ -116,5 +116,9 @@ namespace Valuation.Api.Services
         Task StartWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
 
         Task CompleteWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
+
+        Task<int> GetCompletedCountAsync();
+
+        Task<List<WorkflowModel>> GetCompletedCasesAsync();
     }
 }

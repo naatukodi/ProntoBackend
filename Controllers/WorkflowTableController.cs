@@ -187,10 +187,12 @@ namespace Valuation.Api.Controllers
     public class OpenWorkflowsController : ControllerBase
     {
         private readonly IWorkflowTableService _svc;
+        private readonly IWorkflowService _cosmosWf;
 
-        public OpenWorkflowsController(IWorkflowTableService svc)
+        public OpenWorkflowsController(IWorkflowTableService svc, IWorkflowService cosmosWf)
         {
             _svc = svc;
+            _cosmosWf = cosmosWf;
         }
 
         /// <summary>
@@ -280,6 +282,20 @@ namespace Valuation.Api.Controllers
                 return NotFound("No workflows found for the specified districts.");
 
             return Ok(results);
+        }
+
+        [HttpGet("completed/count")]
+        public async Task<IActionResult> GetCompletedCount()
+        {
+            var count = await _svc.GetCompletedCountAsync();
+            return Ok(new { count });
+        }
+
+        [HttpGet("completed")]
+        public async Task<IActionResult> GetCompletedCases()
+        {
+            var cases = await _cosmosWf.GetCompletedCasesAsync();
+            return Ok(cases);
         }
     }
 }

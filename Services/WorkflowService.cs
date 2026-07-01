@@ -70,7 +70,7 @@ public class WorkflowService : IWorkflowService
         await _container.UpsertItemAsync(doc, pk);
     }
 
-    public async Task CompleteStepAsync(string id, string veh, string appl, int stepOrder)
+    public async Task CompleteStepAsync(string id, string veh, string appl, int stepOrder, string? approvedBy = null)
     {
         var pk = Pk(veh, appl);
         var doc = await LoadDoc(id, pk);
@@ -85,6 +85,12 @@ public class WorkflowService : IWorkflowService
 
         step.Status = "Completed";
         step.CompletedAt = DateTime.UtcNow;
+
+        if (stepOrder == 5 && !string.IsNullOrWhiteSpace(approvedBy))
+        {
+            doc.CompletedBy = approvedBy;
+            doc.CompletedAt = DateTime.UtcNow;
+        }
 
         await _container.UpsertItemAsync(doc, pk);
     }
@@ -122,5 +128,49 @@ public class WorkflowService : IWorkflowService
         var doc = await LoadDoc(id, pk);
         doc.Workflow = null;
         await _container.UpsertItemAsync(doc, pk);
+    }
+
+    public async Task<List<WorkflowModel>> GetCompletedCasesAsync()
+    {
+        var results = new List<WorkflowModel>();
+
+        var query = new Microsoft.Azure.Cosmos.QueryDefinition(
+            "SELECT * FROM c WHERE EXISTS(" +
+            "SELECT VALUE wf FROM wf IN c.Workflow " +
+            "WHERE wf.StepOrder = 5 AND wf.Status = 'Completed'" +
+            ")"
+        );
+
+        using var iter = _container.GetItemQueryIterator<Valuation.Api.Models.ValuationDocument>(query);
+        while (iter.HasMoreResults)
+        {
+            var page = await iter.ReadNextAsync();
+            foreach (var doc in page)
+            {
+                var step5 = doc.Workflow?.FirstOrDefault(w => w.StepOrder == 5);
+                results.Add(new Valuation.Api.Models.WorkflowModel
+                {
+                    ValuationId = doc.id,
+                    VehicleNumber = doc.VehicleNumber ?? "",
+                    ApplicantName = doc.Stakeholder?.Applicant?.Name ?? "",
+                    ApplicantContact = doc.ApplicantContact ?? "",
+                    Workflow = "FinalReport",
+                    WorkflowStepOrder = 5,
+                    Status = "Completed",
+                    CreatedAt = doc.CreatedAt,
+                    CompletedAt = step5?.CompletedAt ?? doc.CompletedAt,
+                    AssignedTo = doc.AssignedTo,
+                    AssignedToPhoneNumber = doc.AssignedToPhoneNumber,
+                    AssignedToEmail = doc.AssignedToEmail,
+                    AssignedToWhatsapp = doc.AssignedToWhatsapp,
+                    RedFlag = doc.RedFlag,
+                    Remarks = doc.Remarks,
+                    Name = doc.Stakeholder?.Name ?? "",
+                    ValuationType = doc.Stakeholder?.ValuationType ?? ""
+                });
+            }
+        }
+
+        return results;
     }
 }

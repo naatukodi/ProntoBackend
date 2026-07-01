@@ -860,17 +860,18 @@ namespace Valuation.Api.Services
 
                 var entity = response.Value;
 
-                entity.Status = "Status";
+                entity.Status = "Completed";
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
-                entity.FinalReportAssignedTo = assignment.AssignedTo ?? "";
-                entity.FinalReportAssignedToPhoneNumber = assignment.AssignedToPhoneNumber ?? "";
-                entity.FinalReportAssignedToEmail = assignment.AssignedToEmail ?? "";
-                entity.FinalReportAssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
-                entity.AssignedTo = assignment.AssignedTo ?? "";
-                entity.AssignedToPhoneNumber = assignment.AssignedToPhoneNumber ?? "";
-                entity.AssignedToEmail = assignment.AssignedToEmail ?? "";
-                entity.AssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
+                entity.CompletedBy = assignment.AssignedTo ?? "";
+                entity.FinalReportAssignedTo = entity.FinalReportAssignedTo ?? "";
+                entity.FinalReportAssignedToPhoneNumber = entity.FinalReportAssignedToPhoneNumber ?? "";
+                entity.FinalReportAssignedToEmail = entity.FinalReportAssignedToEmail ?? "";
+                entity.FinalReportAssignedToWhatsapp = entity.FinalReportAssignedToWhatsapp ?? "";
+                entity.AssignedTo = entity.AssignedTo ?? "";
+                entity.AssignedToPhoneNumber = entity.AssignedToPhoneNumber ?? "";
+                entity.AssignedToEmail = entity.AssignedToEmail ?? "";
+                entity.AssignedToWhatsapp = entity.AssignedToWhatsapp ?? "";
 
                 await _completedTableClient.CreateIfNotExistsAsync().ConfigureAwait(false);
                 await _completedTableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace).ConfigureAwait(false);
@@ -1197,6 +1198,8 @@ namespace Valuation.Api.Services
             entity.PaymentAmount = dto.PaymentAmount;
             entity.UpdatedAt = DateTime.UtcNow;
             entity.PaymentNotes = dto.PaymentNotes;
+            entity.PaymentSavedBy = dto.SavedBy;
+            entity.PaymentSavedAt = DateTime.UtcNow;
 
             await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
         }
@@ -1216,11 +1219,53 @@ namespace Valuation.Api.Services
                     PaymentMethod = entity.PaymentMethod,
                     PaymentDate = entity.PaymentDate,
                     PaymentAmount = entity.PaymentAmount,
-                    PaymentNotes = entity.PaymentNotes
+                    PaymentNotes = entity.PaymentNotes,
+                    SavedBy = entity.PaymentSavedBy,
+                    SavedAt = entity.PaymentSavedAt
                 };
             }
 
             return null;
+        }
+
+        public async Task<int> GetCompletedCountAsync()
+        {
+            int count = 0;
+            await foreach (var _ in _completedTableClient.QueryAsync<Azure.Data.Tables.TableEntity>(select: new[] { "RowKey" }))
+                count++;
+            return count;
+        }
+
+        public async Task<List<WorkflowModel>> GetCompletedCasesAsync()
+        {
+            var results = new List<WorkflowModel>();
+
+            await foreach (var entity in _completedTableClient.QueryAsync<WorkflowEntity>())
+            {
+                results.Add(new WorkflowModel
+                {
+                    ValuationId = entity.RowKey,
+                    VehicleNumber = entity.VehicleNumber,
+                    ApplicantName = entity.ApplicantName,
+                    ApplicantContact = entity.ApplicantContact,
+                    Workflow = entity.Workflow,
+                    WorkflowStepOrder = entity.WorkflowStepOrder,
+                    Status = entity.Status,
+                    CreatedAt = entity.CreatedAt,
+                    CompletedAt = entity.CompletedAt,
+                    AssignedTo = entity.AssignedTo,
+                    Location = entity.Location,
+                    RedFlag = entity.RedFlag,
+                    Remarks = entity.Remarks,
+                    AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                    AssignedToEmail = entity.AssignedToEmail,
+                    AssignedToWhatsapp = entity.AssignedToWhatsapp,
+                    Name = entity.Name,
+                    ValuationType = entity.ValuationType
+                });
+            }
+
+            return results;
         }
 
 

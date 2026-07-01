@@ -4,13 +4,20 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Valuation.Api.Models;
+using Valuation.Api.Services;
 
 [ApiController]
 [Route("api/valuations/{valuationId:guid}/workflow")]
 public class WorkflowController : ControllerBase
 {
     private readonly IWorkflowService _svc;
-    public WorkflowController(IWorkflowService svc) => _svc = svc;
+    private readonly IWorkflowTableService _tableSvc;
+
+    public WorkflowController(IWorkflowService svc, IWorkflowTableService tableSvc)
+    {
+        _svc = svc;
+        _tableSvc = tableSvc;
+    }
 
     [HttpGet]
     public async Task<ActionResult<List<WorkflowStep>>> Get(
@@ -31,12 +38,12 @@ public class WorkflowController : ControllerBase
         [FromQuery] string applicantContact,
         int stepOrder)
     {
-        try 
+        try
         {
             await _svc.StartStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
             return NoContent();
-        } 
-        catch (Exception ex) 
+        }
+        catch (Exception ex)
         {
             return BadRequest(ex.Message); // Sends the exact error to Flutter
         }
@@ -47,14 +54,32 @@ public class WorkflowController : ControllerBase
         Guid valuationId,
         [FromQuery] string vehicleNumber,
         [FromQuery] string applicantContact,
-        int stepOrder)
+        int stepOrder,
+        [FromQuery] string? approvedBy = null)
     {
-        try 
+        try
         {
-            await _svc.CompleteStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
+            await _svc.CompleteStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder, approvedBy);
+
+            if (stepOrder == 5)
+            {
+                var decodedContact = Uri.UnescapeDataString(applicantContact);
+                await _tableSvc.CompleteFinalReportWFAsync(
+                    valuationId.ToString(),
+                    vehicleNumber,
+                    decodedContact,
+                    new AssignmentDto
+                    {
+                        AssignedTo = approvedBy ?? "",
+                        AssignedToPhoneNumber = "",
+                        AssignedToEmail = "",
+                        AssignedToWhatsapp = ""
+                    });
+            }
+
             return NoContent();
-        } 
-        catch (Exception ex) 
+        }
+        catch (Exception ex)
         {
             return BadRequest(ex.Message);
         }

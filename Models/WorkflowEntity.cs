@@ -71,6 +71,8 @@ namespace Valuation.Api.Models
         public DateTime? PaymentDate { get; set; }
         public decimal? PaymentAmount { get; set; }
         public string? PaymentNotes { get; set; }
+        public string? PaymentSavedBy { get; set; }
+        public DateTime? PaymentSavedAt { get; set; }
 
 
     }
