@@ -1234,12 +1234,19 @@ namespace Valuation.Api.Services
             var agedThreshold = now.AddHours(-24);
             var ph = Uri.UnescapeDataString(phoneNumber.Trim()).Replace("'", "''");
 
-            // ── 1. OPEN cases currently assigned to this user ──────────────
+            var (rolePhoneFieldEarly, userStepOrderEarly) = GetRolePhoneConfig(role);
+
+            // ── 1. OPEN: cases where role-specific phone matches AND still at this step ──
+            // Uses role-specific field (e.g. BackEndAssignedToPhoneNumber) which is always
+            // set when a user is assigned, unlike AssignedToPhoneNumber which may be stale.
             var openCases = new List<WorkflowModel>();
-            await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
-                filter: $"AssignedToPhoneNumber eq '{ph}' and (Status eq 'InProgress' or Status eq 'Returned')"))
+            if (!string.IsNullOrEmpty(rolePhoneFieldEarly))
             {
-                openCases.Add(MapWorkflowEntity(e));
+                await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
+                    filter: $"{rolePhoneFieldEarly} eq '{ph}' and WorkflowStepOrder eq {userStepOrderEarly}"))
+                {
+                    openCases.Add(MapWorkflowEntity(e));
+                }
             }
 
             // ── 2. AGED = open cases not updated in 24+ hours ─────────────
@@ -1250,16 +1257,15 @@ namespace Valuation.Api.Services
             });
 
             // ── 3. COMPLETED by this user (cases they forwarded) ──────────
-            var (rolePhoneField, userStepOrder) = GetRolePhoneConfig(role);
             var completedCases = new List<WorkflowModel>();
 
-            if (!string.IsNullOrEmpty(rolePhoneField))
+            if (!string.IsNullOrEmpty(rolePhoneFieldEarly))
             {
                 // Cases still active but past user's step
-                if (userStepOrder < 5)
+                if (userStepOrderEarly < 5)
                 {
                     await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
-                        filter: $"{rolePhoneField} eq '{ph}' and WorkflowStepOrder gt {userStepOrder}"))
+                        filter: $"{rolePhoneFieldEarly} eq '{ph}' and WorkflowStepOrder gt {userStepOrderEarly}"))
                     {
                         completedCases.Add(MapWorkflowEntity(e));
                     }
@@ -1267,7 +1273,7 @@ namespace Valuation.Api.Services
 
                 // Fully approved cases
                 await foreach (var e in _completedTableClient.QueryAsync<WorkflowEntity>(
-                    filter: $"{rolePhoneField} eq '{ph}'"))
+                    filter: $"{rolePhoneFieldEarly} eq '{ph}'"))
                 {
                     completedCases.Add(MapWorkflowEntity(e));
                 }
