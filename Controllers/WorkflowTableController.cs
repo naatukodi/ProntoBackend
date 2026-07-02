@@ -297,5 +297,17 @@ namespace Valuation.Api.Controllers
             var cases = await _cosmosWf.GetCompletedCasesAsync();
             return Ok(cases);
         }
+
+        [HttpGet("user-dashboard")]
+        public async Task<IActionResult> GetUserDashboardStats(
+            [FromQuery] string phone,
+            [FromQuery] string role)
+        {
+            if (string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(role))
+                return BadRequest("phone and role are required.");
+
+            var stats = await _svc.GetUserDashboardStatsAsync(phone, role);
+            return Ok(stats);
+        }
     }
 }

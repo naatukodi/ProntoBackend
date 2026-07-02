@@ -120,5 +120,7 @@ namespace Valuation.Api.Services
         Task<int> GetCompletedCountAsync();
 
         Task<List<WorkflowModel>> GetCompletedCasesAsync();
+
+        Task<UserDashboardStatsDto> GetUserDashboardStatsAsync(string phoneNumber, string role);
     }
 }

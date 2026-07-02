@@ -1228,6 +1228,174 @@ namespace Valuation.Api.Services
             return null;
         }
 
+        public async Task<UserDashboardStatsDto> GetUserDashboardStatsAsync(string phoneNumber, string role)
+        {
+            var now = DateTime.UtcNow;
+            var agedThreshold = now.AddHours(-24);
+            var ph = Uri.UnescapeDataString(phoneNumber.Trim()).Replace("'", "''");
+
+            // ── 1. OPEN cases currently assigned to this user ──────────────
+            var openCases = new List<WorkflowModel>();
+            await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
+                filter: $"AssignedToPhoneNumber eq '{ph}' and (Status eq 'InProgress' or Status eq 'Returned')"))
+            {
+                openCases.Add(MapWorkflowEntity(e));
+            }
+
+            // ── 2. AGED = open cases not updated in 24+ hours ─────────────
+            int agedCount = openCases.Count(c =>
+            {
+                var t = c.UpdatedAt ?? c.CreatedAt;
+                return t.HasValue && t.Value.ToUniversalTime() < agedThreshold;
+            });
+
+            // ── 3. COMPLETED by this user (cases they forwarded) ──────────
+            var (rolePhoneField, userStepOrder) = GetRolePhoneConfig(role);
+            var completedCases = new List<WorkflowModel>();
+
+            if (!string.IsNullOrEmpty(rolePhoneField))
+            {
+                // Cases still active but past user's step
+                if (userStepOrder < 5)
+                {
+                    await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
+                        filter: $"{rolePhoneField} eq '{ph}' and WorkflowStepOrder gt {userStepOrder}"))
+                    {
+                        completedCases.Add(MapWorkflowEntity(e));
+                    }
+                }
+
+                // Fully approved cases
+                await foreach (var e in _completedTableClient.QueryAsync<WorkflowEntity>(
+                    filter: $"{rolePhoneField} eq '{ph}'"))
+                {
+                    completedCases.Add(MapWorkflowEntity(e));
+                }
+            }
+
+            // ── 4. AVG TAT from LeadHistory ────────────────────────────────
+            var tatHours = new List<double>();
+
+            // Collect all history entries performed by this user (one full scan)
+            var userHistory = new List<LeadHistoryEntity>();
+            await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                filter: $"PerformedByUserId eq '{ph}'"))
+            {
+                userHistory.Add(h);
+            }
+
+            // Filter to submission events from user's role
+            var submissions = userHistory
+                .Where(h => IsSubmissionFromRole(h.StatusFrom, role))
+                .OrderByDescending(h => h.DateTime)
+                .ToList();
+
+            // For each submission, find when the case arrived at user's step
+            var seenValuations = new HashSet<string>();
+            foreach (var sub in submissions)
+            {
+                if (seenValuations.Contains(sub.PartitionKey)) continue;
+                seenValuations.Add(sub.PartitionKey);
+
+                // Find arrival: most recent history entry for same case where StatusTo = user's role
+                DateTime? arrivalAt = null;
+                var vid = sub.PartitionKey.Replace("'", "''");
+                await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                    filter: $"PartitionKey eq '{vid}'"))
+                {
+                    if (IsArrivalToRole(h.StatusTo, role) && h.DateTime < sub.DateTime)
+                    {
+                        if (arrivalAt == null || h.DateTime > arrivalAt.Value)
+                            arrivalAt = h.DateTime;
+                    }
+                }
+
+                if (arrivalAt.HasValue && sub.DateTime > arrivalAt.Value)
+                {
+                    tatHours.Add((sub.DateTime - arrivalAt.Value).TotalHours);
+                }
+                else if (sub.FirstDateTime.HasValue)
+                {
+                    var fallbackHours = (sub.DateTime - sub.FirstDateTime.Value).TotalHours;
+                    if (fallbackHours > 0) tatHours.Add(fallbackHours);
+                }
+            }
+
+            return new UserDashboardStatsDto
+            {
+                OpenCount      = openCases.Count,
+                AgedCount      = agedCount,
+                CompletedCount = completedCases.Count,
+                AvgTatHours    = tatHours.Any() ? Math.Round(tatHours.Average(), 1) : 0,
+                OpenCases      = openCases,
+                CompletedCases = completedCases
+            };
+        }
+
+        private WorkflowModel MapWorkflowEntity(WorkflowEntity e) => new WorkflowModel
+        {
+            ValuationId           = e.RowKey,
+            VehicleNumber         = e.VehicleNumber,
+            ApplicantName         = e.ApplicantName,
+            ApplicantContact      = e.ApplicantContact,
+            Workflow              = e.Workflow,
+            WorkflowStepOrder     = e.WorkflowStepOrder,
+            Status                = e.Status,
+            CreatedAt             = e.CreatedAt,
+            UpdatedAt             = e.UpdatedAt,
+            CompletedAt           = e.CompletedAt,
+            AssignedTo            = e.AssignedTo,
+            Location              = e.Location,
+            RedFlag               = e.RedFlag,
+            Remarks               = e.Remarks,
+            AssignedToPhoneNumber = e.AssignedToPhoneNumber,
+            AssignedToEmail       = e.AssignedToEmail,
+            AssignedToWhatsapp    = e.AssignedToWhatsapp,
+            Name                  = e.Name,
+            ValuationType         = e.ValuationType
+        };
+
+        private static (string phoneField, int stepOrder) GetRolePhoneConfig(string role) =>
+            role.Trim().ToLowerInvariant() switch
+            {
+                "stakeholder"                   => ("StakeholderAssignedToPhoneNumber", 1),
+                "backend"                       => ("BackEndAssignedToPhoneNumber",     2),
+                "avo"                           => ("AVOAssignedToPhoneNumber",         3),
+                "qc" or "qualitycontrol"        => ("QualityControlAssignedToPhoneNumber", 4),
+                "finalreport"                   => ("FinalReportAssignedToPhoneNumber", 5),
+                _                               => ("", 0)
+            };
+
+        private static bool IsSubmissionFromRole(string? statusFrom, string role)
+        {
+            if (string.IsNullOrEmpty(statusFrom)) return false;
+            var sf = statusFrom.ToLowerInvariant();
+            return role.Trim().ToLowerInvariant() switch
+            {
+                "backend"     => sf is "backend" or "backEnd",
+                "avo"         => sf == "avo",
+                "qc"          => sf is "qc" or "qualitycontrol",
+                "finalreport" => sf == "finalreport",
+                "stakeholder" => sf == "stakeholder",
+                _ => false
+            };
+        }
+
+        private static bool IsArrivalToRole(string? statusTo, string role)
+        {
+            if (string.IsNullOrEmpty(statusTo)) return false;
+            var st = statusTo.ToLowerInvariant();
+            return role.Trim().ToLowerInvariant() switch
+            {
+                "backend"     => st is "backend" or "backEnd",
+                "avo"         => st == "avo",
+                "qc"          => st is "qc" or "qualitycontrol",
+                "finalreport" => st == "finalreport",
+                "stakeholder" => st == "stakeholder",
+                _ => false
+            };
+        }
+
         public async Task<int> GetCompletedCountAsync()
         {
             int count = 0;
