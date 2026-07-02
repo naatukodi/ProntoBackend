@@ -1236,29 +1236,25 @@ namespace Valuation.Api.Services
 
             var (rolePhoneFieldEarly, userStepOrderEarly) = GetRolePhoneConfig(role);
 
-            // ── 1. OPEN: union of role-specific phone field + AssignedToPhoneNumber ──
-            // Cases may arrive at a step with only AssignedToPhoneNumber set (first-time arrival)
-            // OR with the role-specific field set (explicit assignment). Both must be caught.
+            // ── 1. OPEN: all cases at the user's step that are mine OR unclaimed ──
+            // A case is "mine" when the role-specific phone field or AssignedToPhoneNumber
+            // matches. A case is "unclaimed" when no role-specific assignee exists yet
+            // (e.g. Stakeholder forwarded to Backend without picking a Backend user) —
+            // every user of that role sees unclaimed cases and can pick them up.
+            var phRaw = Uri.UnescapeDataString(phoneNumber.Trim());
             var openCases = new List<WorkflowModel>();
-            var openSeen = new HashSet<string>();
 
-            if (!string.IsNullOrEmpty(rolePhoneFieldEarly))
+            if (userStepOrderEarly > 0)
             {
-                // Cases explicitly assigned via role-specific field (e.g. BackEndAssignedToPhoneNumber)
                 await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
-                    filter: $"{rolePhoneFieldEarly} eq '{ph}' and WorkflowStepOrder eq {userStepOrderEarly}"))
+                    filter: $"WorkflowStepOrder eq {userStepOrderEarly}"))
                 {
-                    if (openSeen.Add(e.RowKey))
+                    var rolePhone = GetRolePhoneValue(e, role);
+                    var isMine = rolePhone == phRaw || e.AssignedToPhoneNumber == phRaw;
+                    var isUnclaimed = string.IsNullOrEmpty(rolePhone);
+                    if (isMine || isUnclaimed)
                         openCases.Add(MapWorkflowEntity(e));
                 }
-            }
-
-            // Cases where current assignee phone matches (first-time arrivals, not yet role-assigned)
-            await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
-                filter: $"AssignedToPhoneNumber eq '{ph}' and WorkflowStepOrder eq {userStepOrderEarly}"))
-            {
-                if (openSeen.Add(e.RowKey))
-                    openCases.Add(MapWorkflowEntity(e));
             }
 
             // ── 2. AGED = open cases not updated in 24+ hours ─────────────
@@ -1382,6 +1378,17 @@ namespace Valuation.Api.Services
                 "qc" or "qualitycontrol"        => ("QualityControlAssignedToPhoneNumber", 4),
                 "finalreport"                   => ("FinalReportAssignedToPhoneNumber", 5),
                 _                               => ("", 0)
+            };
+
+        private static string? GetRolePhoneValue(WorkflowEntity e, string role) =>
+            role.Trim().ToLowerInvariant() switch
+            {
+                "stakeholder"            => e.StakeholderAssignedToPhoneNumber,
+                "backend"                => e.BackEndAssignedToPhoneNumber,
+                "avo"                    => e.AVOAssignedToPhoneNumber,
+                "qc" or "qualitycontrol" => e.QualityControlAssignedToPhoneNumber,
+                "finalreport"            => e.FinalReportAssignedToPhoneNumber,
+                _                        => null
             };
 
         private static bool IsSubmissionFromRole(string? statusFrom, string role)
