@@ -1236,17 +1236,29 @@ namespace Valuation.Api.Services
 
             var (rolePhoneFieldEarly, userStepOrderEarly) = GetRolePhoneConfig(role);
 
-            // ── 1. OPEN: cases where role-specific phone matches AND still at this step ──
-            // Uses role-specific field (e.g. BackEndAssignedToPhoneNumber) which is always
-            // set when a user is assigned, unlike AssignedToPhoneNumber which may be stale.
+            // ── 1. OPEN: union of role-specific phone field + AssignedToPhoneNumber ──
+            // Cases may arrive at a step with only AssignedToPhoneNumber set (first-time arrival)
+            // OR with the role-specific field set (explicit assignment). Both must be caught.
             var openCases = new List<WorkflowModel>();
+            var openSeen = new HashSet<string>();
+
             if (!string.IsNullOrEmpty(rolePhoneFieldEarly))
             {
+                // Cases explicitly assigned via role-specific field (e.g. BackEndAssignedToPhoneNumber)
                 await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: $"{rolePhoneFieldEarly} eq '{ph}' and WorkflowStepOrder eq {userStepOrderEarly}"))
                 {
-                    openCases.Add(MapWorkflowEntity(e));
+                    if (openSeen.Add(e.RowKey))
+                        openCases.Add(MapWorkflowEntity(e));
                 }
+            }
+
+            // Cases where current assignee phone matches (first-time arrivals, not yet role-assigned)
+            await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
+                filter: $"AssignedToPhoneNumber eq '{ph}' and WorkflowStepOrder eq {userStepOrderEarly}"))
+            {
+                if (openSeen.Add(e.RowKey))
+                    openCases.Add(MapWorkflowEntity(e));
             }
 
             // ── 2. AGED = open cases not updated in 24+ hours ─────────────
@@ -1256,7 +1268,7 @@ namespace Valuation.Api.Services
                 return t.HasValue && t.Value.ToUniversalTime() < agedThreshold;
             });
 
-            // ── 3. COMPLETED by this user (cases they forwarded) ──────────
+            // ── 3. COMPLETED by this user (cases they forwarded to next step) ───
             var completedCases = new List<WorkflowModel>();
 
             if (!string.IsNullOrEmpty(rolePhoneFieldEarly))
