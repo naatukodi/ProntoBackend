@@ -11,11 +11,13 @@ namespace Valuation.Api.Services
         private const string CompletedTableName = "CompletedWorkflows";
         private const string LeadHistoryTableName = "LeadHistory";
         private const string UserTableName = "Users";
+        private const string UserRolesTableName = "UserRoles";
 
         private readonly TableClient _tableClient;
         private readonly TableClient _completedTableClient;
         private readonly TableClient _leadHistoryTableClient;
         private readonly TableClient _userTableClient;
+        private readonly TableClient _userRolesTableClient;
 
         public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
@@ -27,11 +29,13 @@ namespace Valuation.Api.Services
             _completedTableClient = serviceClient.GetTableClient(CompletedTableName);
             _leadHistoryTableClient = serviceClient.GetTableClient(LeadHistoryTableName);
             _userTableClient = serviceClient.GetTableClient(UserTableName);
+            _userRolesTableClient = serviceClient.GetTableClient(UserRolesTableName);
 
             _tableClient.CreateIfNotExists();
             _completedTableClient.CreateIfNotExists();
             _leadHistoryTableClient.CreateIfNotExists();
             _userTableClient.CreateIfNotExists();
+            _userRolesTableClient.CreateIfNotExists();
         }
 
         // ==============================================================================
@@ -1136,8 +1140,11 @@ namespace Valuation.Api.Services
                 else if (stepOrder == 5) entity.Workflow = "FinalReport";
 
                 // 3. Clear RedFlag (Important: removes the 'Rejected' banner)
-                entity.RedFlag = "false"; 
+                entity.RedFlag = "false";
                 entity.UpdatedAt = DateTime.UtcNow;
+
+                // 4. Auto-assign the step to its role user (best-effort, never blocks)
+                await AutoAssignStepUserAsync(entity, stepOrder);
 
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
             }
@@ -1145,6 +1152,131 @@ namespace Valuation.Api.Services
             {
                 throw new Exception("Valuation record not found.");
             }
+        }
+
+        /// <summary>
+        /// When a case arrives at a step: if a role-specific assignee already exists,
+        /// sync the current AssignedTo fields to them. Otherwise, if exactly one
+        /// serviceable user holds the role for that step, assign the case to them.
+        /// With zero or multiple candidates the case stays unclaimed (dashboard pool).
+        /// </summary>
+        private async Task AutoAssignStepUserAsync(WorkflowEntity entity, int stepOrder)
+        {
+            try
+            {
+                string? existingPhone = stepOrder switch
+                {
+                    1 => entity.StakeholderAssignedToPhoneNumber,
+                    2 => entity.BackEndAssignedToPhoneNumber,
+                    3 => entity.AVOAssignedToPhoneNumber,
+                    4 => entity.QualityControlAssignedToPhoneNumber,
+                    5 => entity.FinalReportAssignedToPhoneNumber,
+                    _ => null
+                };
+
+                UserEntity? target = null;
+
+                if (!string.IsNullOrEmpty(existingPhone))
+                {
+                    try
+                    {
+                        var resp = await _userTableClient.GetEntityAsync<UserEntity>("Users", existingPhone);
+                        target = resp.Value;
+                    }
+                    catch (RequestFailedException ex) when (ex.Status == 404)
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    var matchedUserIds = new HashSet<string>();
+                    await foreach (var ur in _userRolesTableClient.QueryAsync<UserRoleEntity>())
+                    {
+                        if (RoleMatchesStep(ur.RowKey, stepOrder))
+                            matchedUserIds.Add(ur.PartitionKey);
+                    }
+
+                    var candidates = new List<UserEntity>();
+                    foreach (var uid in matchedUserIds)
+                    {
+                        try
+                        {
+                            var resp = await _userTableClient.GetEntityAsync<UserEntity>("Users", uid);
+                            var u = resp.Value;
+                            if (u.ServiceStatus == "Serviceable" || u.ServiceStatus == "Servicable")
+                                candidates.Add(u);
+                        }
+                        catch (RequestFailedException ex) when (ex.Status == 404)
+                        {
+                        }
+                    }
+
+                    // Zero or multiple candidates → leave unclaimed, never guess
+                    if (candidates.Count != 1) return;
+                    target = candidates[0];
+                }
+
+                if (target == null) return;
+
+                entity.AssignedTo = target.Name;
+                entity.AssignedToPhoneNumber = target.PhoneNumber;
+                entity.AssignedToEmail = target.Email;
+                entity.AssignedToWhatsapp = target.Whatsapp;
+
+                switch (stepOrder)
+                {
+                    case 1:
+                        entity.StakeholderAssignedTo = target.Name;
+                        entity.StakeholderAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.StakeholderAssignedToEmail = target.Email;
+                        entity.StakeholderAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 2:
+                        entity.BackEndAssignedTo = target.Name;
+                        entity.BackEndAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.BackEndAssignedToEmail = target.Email;
+                        entity.BackEndAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 3:
+                        entity.AVOAssignedTo = target.Name;
+                        entity.AVOAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.AVOAssignedToEmail = target.Email;
+                        entity.AVOAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 4:
+                        entity.QualityControlAssignedTo = target.Name;
+                        entity.QualityControlAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.QualityControlAssignedToEmail = target.Email;
+                        entity.QualityControlAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 5:
+                        entity.FinalReportAssignedTo = target.Name;
+                        entity.FinalReportAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.FinalReportAssignedToEmail = target.Email;
+                        entity.FinalReportAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                }
+            }
+            catch
+            {
+                // Auto-assignment is best-effort — a failure must never block the step transition
+            }
+        }
+
+        private static bool RoleMatchesStep(string? roleId, int stepOrder)
+        {
+            if (string.IsNullOrWhiteSpace(roleId)) return false;
+            var r = roleId.Trim().ToLowerInvariant().Replace(" ", "");
+            return stepOrder switch
+            {
+                1 => r.Contains("stakeholder"),
+                2 => r.Contains("backend"),
+                3 => r == "avo",
+                4 => r == "qc" || r.Contains("qualitycontrol"),
+                5 => r.Contains("finalreport"),
+                _ => false
+            };
         }
 
         // ==============================================================================
