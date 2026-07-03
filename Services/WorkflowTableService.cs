@@ -1264,20 +1264,8 @@ namespace Valuation.Api.Services
             }
         }
 
-        private static bool RoleMatchesStep(string? roleId, int stepOrder)
-        {
-            if (string.IsNullOrWhiteSpace(roleId)) return false;
-            var r = roleId.Trim().ToLowerInvariant().Replace(" ", "");
-            return stepOrder switch
-            {
-                1 => r.Contains("stakeholder"),
-                2 => r.Contains("backend"),
-                3 => r == "avo",
-                4 => r == "qc" || r.Contains("qualitycontrol"),
-                5 => r.Contains("finalreport"),
-                _ => false
-            };
-        }
+        private static bool RoleMatchesStep(string? roleId, int stepOrder) =>
+            stepOrder > 0 && ResolveStepFromRole(roleId) == stepOrder;
 
         // ==============================================================================
         //  ✅ FIX 3: CompleteWorkflowStepAsync (Un-stuck the case)
@@ -1501,56 +1489,56 @@ namespace Valuation.Api.Services
             ValuationType         = e.ValuationType
         };
 
+        /// <summary>
+        /// Resolve any role/status string to its workflow step. Tolerant of
+        /// permission-style role names like "CanCreateStakeholder" or
+        /// "CanEditQualityControl" as well as plain step names ("Backend", "QC").
+        /// Returns 0 when the string maps to no step (e.g. Admin).
+        /// </summary>
+        private static int ResolveStepFromRole(string? role)
+        {
+            if (string.IsNullOrWhiteSpace(role)) return 0;
+            var r = role.Trim().ToLowerInvariant().Replace(" ", "");
+            if (r.Contains("stakeholder"))               return 1;
+            if (r.Contains("backend"))                   return 2;
+            if (r == "avo")                              return 3;
+            if (r == "qc" || r.Contains("qualitycontrol")) return 4;
+            if (r.Contains("finalreport"))               return 5;
+            return 0;
+        }
+
         private static (string phoneField, int stepOrder) GetRolePhoneConfig(string role) =>
-            role.Trim().ToLowerInvariant() switch
+            ResolveStepFromRole(role) switch
             {
-                "stakeholder"                   => ("StakeholderAssignedToPhoneNumber", 1),
-                "backend"                       => ("BackEndAssignedToPhoneNumber",     2),
-                "avo"                           => ("AVOAssignedToPhoneNumber",         3),
-                "qc" or "qualitycontrol"        => ("QualityControlAssignedToPhoneNumber", 4),
-                "finalreport"                   => ("FinalReportAssignedToPhoneNumber", 5),
-                _                               => ("", 0)
+                1 => ("StakeholderAssignedToPhoneNumber",    1),
+                2 => ("BackEndAssignedToPhoneNumber",        2),
+                3 => ("AVOAssignedToPhoneNumber",            3),
+                4 => ("QualityControlAssignedToPhoneNumber", 4),
+                5 => ("FinalReportAssignedToPhoneNumber",    5),
+                _ => ("", 0)
             };
 
         private static string? GetRolePhoneValue(WorkflowEntity e, string role) =>
-            role.Trim().ToLowerInvariant() switch
+            ResolveStepFromRole(role) switch
             {
-                "stakeholder"            => e.StakeholderAssignedToPhoneNumber,
-                "backend"                => e.BackEndAssignedToPhoneNumber,
-                "avo"                    => e.AVOAssignedToPhoneNumber,
-                "qc" or "qualitycontrol" => e.QualityControlAssignedToPhoneNumber,
-                "finalreport"            => e.FinalReportAssignedToPhoneNumber,
-                _                        => null
+                1 => e.StakeholderAssignedToPhoneNumber,
+                2 => e.BackEndAssignedToPhoneNumber,
+                3 => e.AVOAssignedToPhoneNumber,
+                4 => e.QualityControlAssignedToPhoneNumber,
+                5 => e.FinalReportAssignedToPhoneNumber,
+                _ => null
             };
 
         private static bool IsSubmissionFromRole(string? statusFrom, string role)
         {
-            if (string.IsNullOrEmpty(statusFrom)) return false;
-            var sf = statusFrom.ToLowerInvariant();
-            return role.Trim().ToLowerInvariant() switch
-            {
-                "backend"     => sf is "backend" or "backEnd",
-                "avo"         => sf == "avo",
-                "qc"          => sf is "qc" or "qualitycontrol",
-                "finalreport" => sf == "finalreport",
-                "stakeholder" => sf == "stakeholder",
-                _ => false
-            };
+            var step = ResolveStepFromRole(role);
+            return step > 0 && ResolveStepFromRole(statusFrom) == step;
         }
 
         private static bool IsArrivalToRole(string? statusTo, string role)
         {
-            if (string.IsNullOrEmpty(statusTo)) return false;
-            var st = statusTo.ToLowerInvariant();
-            return role.Trim().ToLowerInvariant() switch
-            {
-                "backend"     => st is "backend" or "backEnd",
-                "avo"         => st == "avo",
-                "qc"          => st is "qc" or "qualitycontrol",
-                "finalreport" => st == "finalreport",
-                "stakeholder" => st == "stakeholder",
-                _ => false
-            };
+            var step = ResolveStepFromRole(role);
+            return step > 0 && ResolveStepFromRole(statusTo) == step;
         }
 
         public async Task<int> GetCompletedCountAsync()
