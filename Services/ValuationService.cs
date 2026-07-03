@@ -64,44 +64,23 @@ public class ValuationService : IValuationService
             if (doc.VehicleDetails is null)
                 return new VehicleDetailsDto();
 
-            return new VehicleDetailsDto
+            // Return the stored DTO as-is so every field (Rto, Lender, permit,
+            // pollution, tax, etc.) survives the round-trip; a hand-written
+            // field-by-field copy here kept drifting out of date.
+            var dto = doc.VehicleDetails;
+
+            // File streams are never returned on GET
+            dto.StencilTrace = null;
+            dto.ChassisNoPhoto = null;
+
+            // Older documents may lack mfg month/year — derive from registration date
+            if ((dto.YearOfMfg is null or 0) && dto.DateOfRegistration.HasValue)
             {
-                RegistrationNumber = doc.VehicleDetails.RegistrationNumber,
-                Make = doc.VehicleDetails.Make,
-                Model = doc.VehicleDetails.Model,
-                MonthOfMfg = doc.VehicleDetails.DateOfRegistration?.Month ?? 0,
-                YearOfMfg = doc.VehicleDetails.DateOfRegistration?.Year ?? 0,
-                BodyType = doc.VehicleDetails.BodyType,
-                ChassisNumber = doc.VehicleDetails.ChassisNumber,
-                EngineNumber = doc.VehicleDetails.EngineNumber,
-                Colour = doc.VehicleDetails.Colour,
-                Fuel = doc.VehicleDetails.Fuel,
-                OwnerName = doc.VehicleDetails.OwnerName,
-                PresentAddress = doc.VehicleDetails.PresentAddress,
-                PermanentAddress = doc.VehicleDetails.PermanentAddress,
-                Hypothecation = doc.VehicleDetails.Hypothecation,
-                Insurer = doc.VehicleDetails.Insurer,
-                DateOfRegistration = doc.VehicleDetails.DateOfRegistration,
-                ClassOfVehicle = doc.VehicleDetails.ClassOfVehicle,
-                EngineCC = doc.VehicleDetails.EngineCC,
-                GrossVehicleWeight = doc.VehicleDetails.GrossVehicleWeight,
-                OwnerSerialNo = doc.VehicleDetails.OwnerSerialNo,
-                SeatingCapacity = doc.VehicleDetails.SeatingCapacity,
-                InsurancePolicyNo = doc.VehicleDetails.InsurancePolicyNo,
-                InsuranceValidUpTo = doc.VehicleDetails.InsuranceValidUpTo,
-                IDV = doc.VehicleDetails.IDV,
-                PermitNo = doc.VehicleDetails.PermitNo,
-                PermitValidUpTo = doc.VehicleDetails.PermitValidUpTo,
-                FitnessNo = doc.VehicleDetails.FitnessNo,
-                FitnessValidTo = doc.VehicleDetails.FitnessValidTo,
-                BacklistStatus = doc.VehicleDetails.BacklistStatus,
-                RcStatus = doc.VehicleDetails.RcStatus,
-                StencilTrace = null,          // not used in GET
-                ChassisNoPhoto = null,        // not used in GET
-                StencilTraceUrl = doc.VehicleDetails.StencilTraceUrl,
-                ChassisNoPhotoUrl = doc.VehicleDetails.ChassisNoPhotoUrl,
-                Remarks = doc.VehicleDetails.Remarks
-            };
+                dto.YearOfMfg = dto.DateOfRegistration.Value.Year;
+                dto.MonthOfMfg = dto.DateOfRegistration.Value.Month;
+            }
+
+            return dto;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -457,6 +436,7 @@ public class ValuationService : IValuationService
         // ── Core fields — only overwrite if Surepass returns a value ──────────
         dto.Make             = api.MakerDescription      ?? dto.Make;
         dto.Model            = api.MakerModel            ?? dto.Model;
+        dto.BodyType         = api.BodyType              ?? dto.BodyType;
         dto.ChassisNumber    = api.VehicleChasisNumber   ?? dto.ChassisNumber;
         dto.EngineNumber     = api.VehicleEngineNumber   ?? dto.EngineNumber;
         dto.Colour           = api.Color                 ?? dto.Colour;
