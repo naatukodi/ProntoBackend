@@ -31,6 +31,9 @@ namespace Valuation.Api.Models
         public string? assignedStates { get; set; } // Comma-separated list of state keys
         public string? assignedDistricts { get; set; } // Comma-separated list of district keys
 
+        // Credential for camera-app agency login
+        public string? Password { get; set; }
+
         // Additional metadata
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }

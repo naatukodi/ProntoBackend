@@ -30,5 +30,14 @@ namespace Valuation.Api.Models
         public string? Roles { get; set; } = default!;
         public string? AssignedDistricts { get; set; } = default!;
         public string? AssignedStates { get; set; } = default!;
+
+        // Credential for camera-app agency login (write-only: never returned in responses)
+        public string? Password { get; set; }
+    }
+
+    public class AgencyLoginRequest
+    {
+        public string UserId { get; set; } = default!;
+        public string Password { get; set; } = default!;
     }
 }

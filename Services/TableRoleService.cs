@@ -50,7 +50,8 @@ public class TableRoleService : IRoleService
             Block = user.Block,
             State = user.State,
             Country = user.Country,
-            Pincode = user.Pincode
+            Pincode = user.Pincode,
+            Password = user.Password
         };
 
         await _usersTable.UpsertEntityAsync(userEntity);
@@ -296,6 +297,24 @@ public class TableRoleService : IRoleService
                 AssignedDistricts = entity.Value.assignedDistricts ?? "[]",
                 AssignedStates = entity.Value.assignedStates ?? "[]"
             };
+        }
+        catch (RequestFailedException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<UserModel?> ValidateAgencyLoginAsync(string userId, string password)
+    {
+        try
+        {
+            var entity = await _usersTable.GetEntityAsync<UserEntity>("Users", userId);
+            var storedPassword = entity.Value.Password;
+
+            if (string.IsNullOrEmpty(storedPassword) || storedPassword != password)
+                return null;
+
+            return await GetUserAsync(userId);
         }
         catch (RequestFailedException)
         {
