@@ -39,15 +39,12 @@ namespace Valuation.Api.Services
                 return (false, $"File size exceeds 100MB ({sizeMB}MB)");
             }
 
-            var allowedVideoMimeTypes = new[]
-            {
-                "video/mp4", "video/quicktime", "video/x-msvideo", 
-                "video/x-matroska", "video/webm", "video/mpeg"
-            };
+            var allowedExtensions = new[] { ".mp4", ".mov", ".avi", ".mkv", ".webm", ".mpeg", ".mpg" };
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 
-            if (!allowedVideoMimeTypes.Contains(file.ContentType))
+            if (!allowedExtensions.Contains(ext))
             {
-                return (false, $"Unsupported format: {file.ContentType}. Allowed: MP4, MOV, AVI, MKV, WebM, MPEG");
+                return (false, $"Unsupported format: {ext}. Allowed: MP4, MOV, AVI, MKV, WebM, MPEG");
             }
 
             return (true, "");
