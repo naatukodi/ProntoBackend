@@ -27,8 +27,15 @@ namespace Valuation.Api.Controllers
             [FromForm] VehiclePhotosDto dto)
         {
             dto.ValuationId = valuationId.ToString();
-            var resultMap = await _photoService.UpdatePhotosAsync(dto);
-            return Ok(resultMap);
+            try
+            {
+                var resultMap = await _photoService.UpdatePhotosAsync(dto);
+                return Ok(resultMap);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpGet]

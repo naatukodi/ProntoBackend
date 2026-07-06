@@ -204,7 +204,7 @@ namespace Valuation.Api.Services
             if (dto.VehicleVideo != null)
             {
                 var validation = ValidateVideoFile(dto.VehicleVideo);
-                if (!validation.Valid) throw new Exception($"Invalid vehicle video: {validation.Error}");
+                if (!validation.Valid) throw new ArgumentException($"Invalid vehicle video: {validation.Error}");
 
                 var videoUrl = await ProcessAndUploadVideoAsync(dto.VehicleVideo, nameof(dto.VehicleVideo));
 
