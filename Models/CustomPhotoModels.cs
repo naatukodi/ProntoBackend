@@ -19,6 +19,11 @@ namespace Valuation.Api.Models
         public string PhotoUrl { get; set; } = string.Empty;
         public string? DateCaptured { get; set; }
         public string? Location { get; set; }
+
+        // Annotation note burned onto the photo, and the clean pre-annotation
+        // image it's redrawn from each time (so edits never stack).
+        public string? AnnotationNote { get; set; }
+        public string? OriginalPhotoUrl { get; set; }
     }
 
     // Stores metadata for a single photo (date + location text)
@@ -26,6 +31,11 @@ namespace Valuation.Api.Models
     {
         public string? CapturedDate { get; set; }
         public string? LocationText { get; set; }
+
+        // Annotation note burned onto the photo, and the clean pre-annotation
+        // image it's redrawn from each time (so edits never stack).
+        public string? AnnotationNote { get; set; }
+        public string? OriginalPhotoUrl { get; set; }
     }
 
     // DTO received from client when updating photo metadata

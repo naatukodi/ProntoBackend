@@ -42,4 +42,9 @@ namespace Valuation.Api.Models
         public IList<IFormFile>? CustomImageFiles { get; set; }
         public string? CustomImagesMetadata { get; set; }
     }
+
+    public class AnnotatePhotoRequest
+    {
+        public string Note { get; set; } = string.Empty;
+    }
 }

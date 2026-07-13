@@ -139,6 +139,56 @@ namespace Valuation.Api.Controllers
             }
         }
 
+        // Gallery page photo selection (chosen by QC, consumed by the PDF generator)
+        [HttpGet("gallery-selection")]
+        public async Task<ActionResult<List<string>>> GetGallerySelection(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var selection = await _photoService.GetGalleryPhotoSelectionAsync(valuationId.ToString(), vehicleNumber, applicantContact);
+            return Ok(selection);
+        }
+
+        [HttpPut("gallery-selection")]
+        public async Task<ActionResult<List<string>>> UpdateGallerySelection(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromBody] List<string> selectedKeys)
+        {
+            var result = await _photoService.UpdateGalleryPhotoSelectionAsync(
+                valuationId.ToString(), vehicleNumber, applicantContact, selectedKeys ?? new List<string>());
+            return Ok(result);
+        }
+
+        // Burns a text note onto an already-uploaded photo (fixed slot or custom photo)
+        // and replaces it in place. Compositing happens server-side to avoid Azure Blob
+        // Storage's lack of CORS headers, which would otherwise taint a client-side canvas.
+        [HttpPut("{photoKey}/annotate")]
+        public async Task<IActionResult> AnnotatePhoto(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            string photoKey,
+            [FromBody] AnnotatePhotoRequest request)
+        {
+            try
+            {
+                var result = await _photoService.AnnotatePhotoAsync(
+                    valuationId.ToString(), vehicleNumber, applicantContact, photoKey, request.Note);
+                return Ok(new { photoUrl = result.PhotoUrl, note = result.Note });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpDelete]
         public async Task<IActionResult> DeletePhotos(
             Guid valuationId,

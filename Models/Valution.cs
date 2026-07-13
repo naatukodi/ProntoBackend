@@ -26,6 +26,10 @@ namespace Valuation.Api.Models
         // ✅ NEW: Array for dynamic custom images
         public List<SavedCustomPhoto> CustomPhotos { get; set; } = new();
 
+        // Keys (from PhotoUrls) QC chose to include in the PDF gallery page.
+        // Null/empty means "not set" — PDF generator falls back to including everything available.
+        public List<string>? SelectedGalleryPhotos { get; set; }
+
         public List<WorkflowStep>? Workflow { get; set; }
         public string? Status { get; set; } = "Open";
         public string? CreatedBy { get; set; }

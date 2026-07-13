@@ -1,6 +1,7 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Azure.Cosmos;
+using SkiaSharp;
 using System.Text.Json;
 using Valuation.Api.Models;
 
@@ -10,6 +11,7 @@ namespace Valuation.Api.Services
     {
         private readonly CosmosClient _cosmosClient;
         private readonly BlobServiceClient _blobServiceClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _blobContainerName;
         private readonly string _databaseName;
         private readonly string _containerName;
@@ -18,10 +20,12 @@ namespace Valuation.Api.Services
         public VehiclePhotoService(
             CosmosClient cosmosClient,
             BlobServiceClient blobServiceClient,
+            IHttpClientFactory httpClientFactory,
             IConfiguration configuration)
         {
             _cosmosClient = cosmosClient;
             _blobServiceClient = blobServiceClient;
+            _httpClientFactory = httpClientFactory;
             _blobContainerName = configuration["Blob:ContainerName"] ?? "documents";
             _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://vehgablobs.blob.core.windows.net";
             _databaseName = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
@@ -280,6 +284,200 @@ namespace Valuation.Api.Services
             catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
                 return new List<SavedCustomPhoto>();
+            }
+        }
+
+        // Gallery page photo selection (used by QC + the PDF generator)
+        public async Task<List<string>> GetGalleryPhotoSelectionAsync(string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            try
+            {
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                return response.Resource.SelectedGalleryPhotos ?? new List<string>();
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return new List<string>();
+            }
+        }
+
+        public async Task<List<string>> UpdateGalleryPhotoSelectionAsync(string valuationId, string vehicleNumber, string applicantContact, List<string> selectedKeys)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+            var doc = response.Resource;
+
+            doc.SelectedGalleryPhotos = selectedKeys ?? new List<string>();
+            await container.UpsertItemAsync(doc, pk);
+
+            return doc.SelectedGalleryPhotos;
+        }
+
+        // Burns a text note onto a photo, in the same "white text, dark outline, no
+        // background box" style the capture-time watermark already uses. Always redraws
+        // from the untouched pre-annotation original (captured once, on first use) so
+        // editing the note later never stacks old and new text on top of each other.
+        public async Task<(string PhotoUrl, string Note)> AnnotatePhotoAsync(string valuationId, string vehicleNumber, string applicantContact, string photoKey, string note)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+            var doc = response.Resource;
+
+            string? displayedUrl = null;
+            bool isFixedSlot = doc.PhotoUrls != null && doc.PhotoUrls.TryGetValue(photoKey, out displayedUrl) && !string.IsNullOrWhiteSpace(displayedUrl);
+            SavedCustomPhoto? customMatch = null;
+            PhotoMetadata? fixedMeta = null;
+            string? originalUrl;
+
+            if (isFixedSlot)
+            {
+                doc.PhotoMetadata ??= new Dictionary<string, PhotoMetadata>();
+                if (!doc.PhotoMetadata.TryGetValue(photoKey, out fixedMeta) || fixedMeta == null)
+                {
+                    fixedMeta = new PhotoMetadata();
+                    doc.PhotoMetadata[photoKey] = fixedMeta;
+                }
+                originalUrl = !string.IsNullOrWhiteSpace(fixedMeta.OriginalPhotoUrl) ? fixedMeta.OriginalPhotoUrl : displayedUrl;
+            }
+            else
+            {
+                customMatch = doc.CustomPhotos?.FirstOrDefault(p => p.Id == photoKey);
+                if (customMatch == null) throw new KeyNotFoundException($"Photo '{photoKey}' not found.");
+                displayedUrl = customMatch.PhotoUrl;
+                originalUrl = !string.IsNullOrWhiteSpace(customMatch.OriginalPhotoUrl) ? customMatch.OriginalPhotoUrl : displayedUrl;
+            }
+
+            var httpClient = _httpClientFactory.CreateClient();
+            var baseBytes = await httpClient.GetByteArrayAsync(originalUrl);
+            var noteTrimmed = note?.Trim() ?? string.Empty;
+            var annotatedBytes = BurnNoteOntoImage(baseBytes, noteTrimmed);
+
+            using var uploadStream = new MemoryStream(annotatedBytes);
+            var newUrl = await UploadBytesAndGenerateUrlAsync(uploadStream, ".jpg", "image/jpeg", vehicleNumber, applicantContact);
+
+            if (isFixedSlot)
+            {
+                doc.PhotoUrls![photoKey] = newUrl;
+                fixedMeta!.OriginalPhotoUrl = originalUrl;
+                fixedMeta.AnnotationNote = noteTrimmed;
+            }
+            else
+            {
+                customMatch!.PhotoUrl = newUrl;
+                customMatch.OriginalPhotoUrl = originalUrl;
+                customMatch.AnnotationNote = noteTrimmed;
+            }
+
+            await container.UpsertItemAsync(doc, pk);
+
+            // Never delete the preserved clean original — only the superseded
+            // previously-displayed (already-annotated) version, if different.
+            if (!string.IsNullOrWhiteSpace(displayedUrl) && !string.Equals(displayedUrl, originalUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                await DeleteBlobByUrlAsync(displayedUrl);
+            }
+
+            return (newUrl, noteTrimmed);
+        }
+
+        // Draws white bold text with a dark stroked outline (no background box),
+        // matching the existing camera-app capture-time watermark style. Positioned
+        // bottom-right, above where the existing date/location stamp typically sits.
+        // Falls back to the untouched original if anything goes wrong.
+        private static byte[] BurnNoteOntoImage(byte[] imageBytes, string note)
+        {
+            if (string.IsNullOrWhiteSpace(note)) return imageBytes;
+
+            try
+            {
+                using var bitmap = SKBitmap.Decode(imageBytes);
+                if (bitmap == null) return imageBytes;
+
+                using var canvas = new SKCanvas(bitmap);
+
+                float textSize = bitmap.Width * 0.032f;
+                using var typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold);
+
+                using var strokePaint = new SKPaint
+                {
+                    Color = new SKColor(0, 0, 0, 217),
+                    IsAntialias = true,
+                    Typeface = typeface,
+                    TextSize = textSize,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = textSize * 0.12f,
+                    StrokeJoin = SKStrokeJoin.Round,
+                    TextAlign = SKTextAlign.Right
+                };
+                using var fillPaint = new SKPaint
+                {
+                    Color = SKColors.White,
+                    IsAntialias = true,
+                    Typeface = typeface,
+                    TextSize = textSize,
+                    Style = SKPaintStyle.Fill,
+                    TextAlign = SKTextAlign.Right
+                };
+
+                float pad = bitmap.Width * 0.02f;
+                float x = bitmap.Width - pad;
+                // Clear the existing date/location stamp, which can run up to ~5 lines
+                // (date/time + multi-part address). Tied to this text's own line height
+                // rather than a flat percentage so it scales with font/image size.
+                float lineHeight = textSize * 1.35f;
+                float y = bitmap.Height - (lineHeight * 5f) - pad;
+
+                canvas.DrawText(note, x, y, strokePaint);
+                canvas.DrawText(note, x, y, fillPaint);
+
+                using var image = SKImage.FromBitmap(bitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+                return data.ToArray();
+            }
+            catch
+            {
+                return imageBytes;
+            }
+        }
+
+        private async Task<string> UploadBytesAndGenerateUrlAsync(Stream stream, string extension, string contentType, string vehicleNumber, string applicantContact)
+        {
+            var containerClient = _blobServiceClient.GetBlobContainerClient(_blobContainerName);
+            await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+
+            var blobName = $"{vehicleNumber}/{applicantContact}/{Guid.NewGuid()}{extension}";
+            var blobClient = containerClient.GetBlobClient(blobName);
+
+            var headers = new BlobHttpHeaders { ContentType = contentType };
+            await blobClient.UploadAsync(stream, headers);
+
+            return blobClient.Uri.ToString();
+        }
+
+        private async Task DeleteBlobByUrlAsync(string url)
+        {
+            try
+            {
+                var blobContainer = _blobServiceClient.GetBlobContainerClient(_blobContainerName);
+                var uri = new Uri(url);
+                var absolutePath = uri.AbsolutePath.TrimStart('/');
+                var prefix = _blobContainerName + "/";
+                var blobName = absolutePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    ? absolutePath.Substring(prefix.Length) : absolutePath;
+
+                var blobClient = blobContainer.GetBlobClient(blobName);
+                await blobClient.DeleteIfExistsAsync();
+            }
+            catch
+            {
+                // Best-effort cleanup — the new photo is already saved either way.
             }
         }
 
