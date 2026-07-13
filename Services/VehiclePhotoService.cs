@@ -387,19 +387,6 @@ namespace Valuation.Api.Services
             return (newUrl, noteTrimmed);
         }
 
-        // Loaded once and reused. SKTypeface.FromFamilyName("Arial", ...) looks up a
-        // font by name in the OS's font registry, which silently falls back to a
-        // mismatched substitute on Azure's Linux hosting (no Arial there) and produces
-        // scrambled glyphs. Loading a bundled TTF by file path instead parses its glyph
-        // table directly, so rendering is identical regardless of what's installed on
-        // the host. QuestPDF already ships this exact Lato family to the output/publish
-        // directory for its own use, so it's guaranteed to be deployed alongside the app.
-        private static readonly Lazy<SKTypeface?> s_noteTypeface = new(() =>
-        {
-            var path = Path.Combine(AppContext.BaseDirectory, "LatoFont", "Lato-Bold.ttf");
-            return File.Exists(path) ? SKTypeface.FromFile(path) : SKTypeface.FromFamilyName(null, SKFontStyle.Bold);
-        });
-
         // Draws white bold text with a dark stroked outline (no background box),
         // matching the existing camera-app capture-time watermark style. Positioned
         // bottom-right, above where the existing date/location stamp typically sits.
@@ -416,7 +403,7 @@ namespace Valuation.Api.Services
                 using var canvas = new SKCanvas(bitmap);
 
                 float textSize = bitmap.Width * 0.032f;
-                var typeface = s_noteTypeface.Value;
+                using var typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold);
 
                 using var strokePaint = new SKPaint
                 {
