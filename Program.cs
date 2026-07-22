@@ -20,9 +20,12 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAngular", policy =>
     {
         policy.WithOrigins(
-            "http://localhost:4200",      // Angular dev server
-            "http://localhost:3000",      // Alternative port
-            "http://127.0.0.1:4200"       // Localhost alias
+            "http://localhost:4200",              // Angular dev server
+            "http://localhost:3000",              // Alternative port
+            "http://127.0.0.1:4200",              // Localhost alias
+            "http://localhost:5500",              // Vehga report builder (local dev)
+            "http://127.0.0.1:5500",
+            "https://vehga-reports.netlify.app"   // Vehga report builder (deployed backup tool)
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
