@@ -1315,7 +1315,8 @@ namespace Valuation.Api.Services
             entity.PaymentMethod = dto.PaymentMethod;
             entity.PaymentReference = dto.PaymentReference;
             entity.PaymentDate = dto.PaymentDate;
-            entity.PaymentAmount = dto.PaymentAmount;
+            entity.PaymentAmount =
+                dto.PaymentAmount.HasValue ? (double)dto.PaymentAmount.Value : null;
             entity.UpdatedAt = DateTime.UtcNow;
             entity.PaymentNotes = dto.PaymentNotes;
             entity.PaymentSavedBy = dto.SavedBy;
@@ -1338,7 +1339,9 @@ namespace Valuation.Api.Services
                     PaymentReference = entity.PaymentReference,
                     PaymentMethod = entity.PaymentMethod,
                     PaymentDate = entity.PaymentDate,
-                    PaymentAmount = entity.PaymentAmount,
+                    PaymentAmount = entity.PaymentAmount.HasValue
+                        ? (decimal)entity.PaymentAmount.Value
+                        : null,
                     PaymentNotes = entity.PaymentNotes,
                     SavedBy = entity.PaymentSavedBy,
                     SavedAt = entity.PaymentSavedAt
