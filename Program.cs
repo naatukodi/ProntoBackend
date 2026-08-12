@@ -120,6 +120,7 @@ builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();
 builder.Services.AddScoped<IQualityControlService, QualityControlService>();
 builder.Services.AddScoped<IWorkflowService, WorkflowService>();
 builder.Services.AddScoped<IWorkflowTableService, WorkflowTableService>();
+builder.Services.AddScoped<IMisService, MisService>();
 
 builder.Services.AddHttpClient(nameof(PincodeTableService));
 builder.Services.AddSingleton<IPincodeTableService, PincodeTableService>();
