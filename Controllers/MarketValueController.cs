@@ -5,18 +5,18 @@ using Valuation.Api.Repositories;
 namespace Valuation.Api.Controllers
 {
     /// <summary>
-    /// "Instant AI Value" — proxies the market-value prompt to Gemini so the API key
-    /// stays server-side. The Angular client used to call Google directly, which
-    /// shipped the key in the browser bundle.
+    /// "Instant AI Value" — proxies the market-value prompt to OpenAI so the API key
+    /// stays server-side. The Angular client used to call the model provider directly,
+    /// which shipped the key in the browser bundle.
     /// </summary>
     [ApiController]
     [Route("api/market-value")]
     public class MarketValueController : ControllerBase
     {
-        private readonly IGeminiRepository _repo;
+        private readonly IChatGptRepository _repo;
         private readonly ILogger<MarketValueController> _logger;
 
-        public MarketValueController(IGeminiRepository repo, ILogger<MarketValueController> logger)
+        public MarketValueController(IChatGptRepository repo, ILogger<MarketValueController> logger)
         {
             _repo = repo;
             _logger = logger;
@@ -55,8 +55,8 @@ namespace Valuation.Api.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                // Gemini key not configured — a deployment problem, not a bad request.
-                _logger.LogError(ex, "Market value requested but Gemini is not configured.");
+                // OpenAI key not configured — a deployment problem, not a bad request.
+                _logger.LogError(ex, "Market value requested but OpenAI is not configured.");
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, new
                 {
                     message = "AI valuation is not configured on the server."
@@ -64,7 +64,7 @@ namespace Valuation.Api.Controllers
             }
             catch (TaskCanceledException ex)
             {
-                _logger.LogWarning(ex, "Gemini request timed out.");
+                _logger.LogWarning(ex, "OpenAI market-value request timed out.");
                 return StatusCode(StatusCodes.Status504GatewayTimeout, new
                 {
                     message = "The AI server took too long to respond. Please try again."
@@ -73,7 +73,7 @@ namespace Valuation.Api.Controllers
             catch (HttpRequestException ex)
             {
                 // Upstream detail goes to the log, not to the browser — it can echo the key.
-                _logger.LogError(ex, "Gemini call failed.");
+                _logger.LogError(ex, "OpenAI market-value call failed.");
                 return StatusCode(StatusCodes.Status502BadGateway, new
                 {
                     message = "The AI service could not be reached. Please try again."

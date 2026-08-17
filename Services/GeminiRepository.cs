@@ -5,9 +5,13 @@ using Valuation.Api.Models;
 namespace Valuation.Api.Repositories
 {
     /// <summary>
-    /// Google Gemini — powers the "Instant AI Value" screen on the dashboard.
-    /// Separate from ChatGptRepository (OpenAI, QC page): different vendor account,
-    /// different key, different feature. Nothing here touches OpenAI.
+    /// Google Gemini. Currently wired to nothing: the "Instant AI Value" screen it was
+    /// written for now runs on ChatGptRepository (OpenAI) instead, because the Gemini key
+    /// was rejected in production. Kept intact so the screen can be pointed back here
+    /// once a working key is in place.
+    ///
+    /// Separate from ChatGptRepository by design: different vendor account, different
+    /// key. Nothing here touches OpenAI, and nothing falls back between the two.
     /// </summary>
     public class GeminiRepository : IGeminiRepository
     {

@@ -4,7 +4,11 @@ namespace Valuation.Api.Repositories
 {
     /// <summary>
     /// Gemini-backed calls. Kept separate from <see cref="IChatGptRepository"/>:
-    /// that one is OpenAI, on a different account and key, and serves the QC page.
+    /// that one is OpenAI, on a different account and key.
+    ///
+    /// No implementation of this interface is currently consumed — "Instant AI Value"
+    /// moved to <see cref="IChatGptRepository.GetMarketValueAsync"/> after the Gemini
+    /// key stopped working. Still registered so switching back is a one-line change.
     /// </summary>
     public interface IGeminiRepository
     {
