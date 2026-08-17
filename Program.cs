@@ -55,12 +55,6 @@ builder.Services.AddHttpClient("GoogleCSE", client =>
     client.BaseAddress = new Uri("https://www.googleapis.com/");
     client.Timeout = TimeSpan.FromSeconds(10);
 });
-builder.Services.AddHttpClient("Gemini", client =>
-{
-    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
-    // Matches the 30s ceiling the market-value screen used to enforce client-side.
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
 
 // --- 3) Cosmos DB setup ---
 var cosmosCfg  = builder.Configuration.GetSection("Cosmos");
@@ -132,7 +126,6 @@ builder.Services.AddHttpClient(nameof(PincodeTableService));
 builder.Services.AddSingleton<IPincodeTableService, PincodeTableService>();
 
 builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
-builder.Services.AddTransient<IGeminiRepository, GeminiRepository>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
