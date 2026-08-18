@@ -1,6 +1,8 @@
-// src/Valuation.Api/Controllers/VehiclePhotosController.cs
-using Microsoft.AspNetCore.Http.Features; // ✅ REQUIRED for RequestFormLimits
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Valuation.Api.Models;
 using Valuation.Api.Services;
 
@@ -17,29 +19,25 @@ namespace Valuation.Api.Controllers
             _photoService = photoService;
         }
 
-        /// <summary>
-        /// PUT /api/valuations/{valuationId}/photos
-        /// Accepts up to 19 IFormFile fields (photos) + 1 video field and updates Cosmos.
-        /// </summary>
         [HttpPut]
-        // ✅ 1. Allow total request size up to 100 MB
         [RequestSizeLimit(100 * 1024 * 1024)]
-        // ✅ 2. Allow specific multipart form sections (like the video file) up to 100 MB
         [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
         public async Task<IActionResult> UpdatePhotos(
             Guid valuationId,
             [FromForm] VehiclePhotosDto dto)
         {
-            // Ensure route and DTO match
             dto.ValuationId = valuationId.ToString();
-            var resultMap = await _photoService.UpdatePhotosAsync(dto);
-            return Ok(resultMap);
+            try
+            {
+                var resultMap = await _photoService.UpdatePhotosAsync(dto);
+                return Ok(resultMap);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        /// <summary>
-        /// GET  /api/valuations/{valuationId}/photos?vehicleNumber=…&applicantContact=…
-        /// Returns the existing PhotoUrls dictionary or 404 if none.
-        /// </summary>
         [HttpGet]
         public async Task<ActionResult<Dictionary<string, string>>> GetPhotoUrls(
             Guid valuationId,
@@ -51,17 +49,25 @@ namespace Valuation.Api.Controllers
                 vehicleNumber,
                 applicantContact);
 
-            if (map == null)
-                return NotFound();
-
+            if (map == null) return NotFound();
             return Ok(map);
         }
+        
+        // ✅ NEW: Endpoint for the PDF generator to retrieve dynamic custom images
+        [HttpGet("custom")]
+        public async Task<ActionResult<List<SavedCustomPhoto>>> GetCustomPhotos(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var customPhotos = await _photoService.GetCustomPhotosAsync(
+                valuationId.ToString(), 
+                vehicleNumber, 
+                applicantContact);
 
-        /// <summary>
-        /// GET  /api/valuations/{valuationId}/photos/validate?vehicleNumber=…&applicantContact=…
-        /// Returns { isComplete: bool, missingPhotos: string[] }
-        /// ✅ NOW ALSO CHECKS MANDATORY VIDEO
-        /// </summary>
+            return Ok(customPhotos);
+        }
+
         [HttpGet("validate")]
         public async Task<ActionResult<ValidatePhotosResponse>> ValidateMandatoryPhotos(
             Guid valuationId,
@@ -70,110 +76,56 @@ namespace Valuation.Api.Controllers
         {
             try
             {
-                // Get existing photos
-                var photoUrls = await _photoService.GetPhotoUrlsAsync(
-                    valuationId.ToString(),
-                    vehicleNumber,
-                    applicantContact);
+                var photoUrls = await _photoService.GetPhotoUrlsAsync(valuationId.ToString(), vehicleNumber, applicantContact);
+                var videoUrls = await _photoService.GetVideoUrlsAsync(valuationId.ToString(), vehicleNumber, applicantContact);
 
-                // ✅ GET VIDEOS TOO
-                var videoUrls = await _photoService.GetVideoUrlsAsync(
-                    valuationId.ToString(),
-                    vehicleNumber,
-                    applicantContact);
-
-                // Define mandatory photo fields (18 required)
                 var mandatoryPhotoFields = new List<string>
                 {
-                    "FrontLeftSide",
-                    "FrontRightSide",
-                    "RearLeftSide",
-                    "RearRightSide",
-                    "FrontViewGrille",
-                    "RearViewTailgate",
-                    "DriverSideProfile",
-                    "PassengerSideProfile",
-                    "Dashboard",
-                    "InstrumentCluster",
-                    "EngineBay",
-                    "ChassisNumberPlate",
-                    "ChassisImprint",
-                    "GearAndSeats",
-                    "DashboardCloseup",
-                    "Odometer",
-                    "SelfieWithVehicle",
-                    "TiresAndRims"
-                    // Note: "Underbody" is optional, NOT included
+                    "FrontLeftSide", "FrontRightSide", "RearLeftSide", "RearRightSide",
+                    "FrontViewGrille", "RearViewTailgate", "DriverSideProfile", "PassengerSideProfile",
+                    "EngineBay", "VinPlate", "ChassisImprint", "Odometer",
+                    "SelfieWithVehicle", "VehicleVideo",
+                    "ChassisVerification", "ChassisStencilTrace", "WorkingOperationPhoto"
                 };
 
-                // Display names for user-friendly error messages
                 var photoDisplayNames = new Dictionary<string, string>
                 {
-                    { "FrontLeftSide", "Front Left Side" },
-                    { "FrontRightSide", "Front Right Side" },
-                    { "RearLeftSide", "Rear Left Side" },
-                    { "RearRightSide", "Rear Right Side" },
-                    { "FrontViewGrille", "Front View (grille)" },
-                    { "RearViewTailgate", "Rear View (tailgate)" },
-                    { "DriverSideProfile", "Driver's Side Profile" },
-                    { "PassengerSideProfile", "Passenger Side Profile" },
-                    { "Dashboard", "Dashboard" },
-                    { "InstrumentCluster", "Instrument Cluster" },
-                    { "EngineBay", "Engine Bay" },
-                    { "ChassisNumberPlate", "Chassis Number Plate" },
+                    { "FrontLeftSide", "Front Left Side" }, { "FrontRightSide", "Front Right Side" },
+                    { "RearLeftSide", "Rear Left Side" }, { "RearRightSide", "Rear Right Side" },
+                    { "FrontViewGrille", "Front View (Grille)" }, { "RearViewTailgate", "Rear View (Tailgate)" },
+                    { "DriverSideProfile", "Driver's Side Profile" }, { "PassengerSideProfile", "Passenger Side Profile" },
+                    { "Dashboard", "Dashboard" }, { "InstrumentCluster", "Instrument Cluster" },
+                    { "EngineBay", "Engine Bay" }, { "VinPlate", "VIN Plate" },
                     { "ChassisImprint", "Chassis Imprint" },
-                    { "GearAndSeats", "Gear and Seats" },
-                    { "DashboardCloseup", "Dashboard Close-up" },
-                    { "Odometer", "Odometer" },
+                    { "GearInterior", "Gear (Interior)" }, { "FrontSeat", "Front Seat" }, { "RearSeat", "Rear Seat" },
+                    { "DashboardCloseup", "Dashboard Close-up" }, { "Odometer", "Odometer" },
                     { "SelfieWithVehicle", "Selfie with Vehicle" },
-                    { "TiresAndRims", "Tires and Rims" }
+                    { "TireFrontLeft", "Tire Front Left" }, { "TireFrontRight", "Tire Front Right" },
+                    { "TireRearLeft", "Tire Rear Left" }, { "TireRearRight", "Tire Rear Right" },
+                    { "Underbody", "Under Body" },
+                    { "ChassisVerification", "Chassis Verification" }, { "ChassisStencilTrace", "Chassis Stencil Trace" },
+                    { "WorkingOperationPhoto", "Working / Operation Photo" }
                 };
 
-                // Normalize photo keys for case-insensitive comparison
                 var normalizedPhotoUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (photoUrls != null)
-                {
-                    foreach (var kvp in photoUrls)
-                    {
-                        normalizedPhotoUrls[kvp.Key] = kvp.Value;
-                    }
-                }
+                if (photoUrls != null) foreach (var kvp in photoUrls) normalizedPhotoUrls[kvp.Key] = kvp.Value;
 
-                // ✅ NORMALIZE VIDEO KEYS
                 var normalizedVideoUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (videoUrls != null)
-                {
-                    foreach (var kvp in videoUrls)
-                    {
-                        normalizedVideoUrls[kvp.Key] = kvp.Value;
-                    }
-                }
+                if (videoUrls != null) foreach (var kvp in videoUrls) normalizedVideoUrls[kvp.Key] = kvp.Value;
 
-                // Check each mandatory field
                 var missingPhotos = new List<string>();
                 foreach (var field in mandatoryPhotoFields)
                 {
-                    // Check if photo exists and has a valid URL
-                    if (!normalizedPhotoUrls.ContainsKey(field) ||
-                        string.IsNullOrWhiteSpace(normalizedPhotoUrls[field]))
+                    if (!normalizedPhotoUrls.ContainsKey(field) || string.IsNullOrWhiteSpace(normalizedPhotoUrls[field]))
                     {
-                        var displayName = photoDisplayNames.ContainsKey(field)
-                            ? photoDisplayNames[field]
-                            : field;
+                        var displayName = photoDisplayNames.ContainsKey(field) ? photoDisplayNames[field] : field;
                         missingPhotos.Add(displayName);
                     }
                 }
 
-                // ✅ CHECK MANDATORY VIDEO
-                bool videoExists = normalizedVideoUrls.ContainsKey("VehicleVideo") &&
-                                   !string.IsNullOrWhiteSpace(normalizedVideoUrls["VehicleVideo"]);
+                bool videoExists = normalizedVideoUrls.ContainsKey("VehicleVideo") && !string.IsNullOrWhiteSpace(normalizedVideoUrls["VehicleVideo"]);
+                if (!videoExists) missingPhotos.Add("Vehicle Video");
 
-                if (!videoExists)
-                {
-                    missingPhotos.Add("Vehicle Video");
-                }
-
-                // Return response
                 var response = new ValidatePhotosResponse
                 {
                     IsComplete = missingPhotos.Count == 0,
@@ -187,40 +139,78 @@ namespace Valuation.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// DELETE /api/valuations/{valuationId}/photos?vehicleNumber=…&applicantContact=…
-        /// Deletes all blobs and clears PhotoUrls in Cosmos.
-        /// </summary>
+        // Gallery page photo selection (chosen by QC, consumed by the PDF generator)
+        [HttpGet("gallery-selection")]
+        public async Task<ActionResult<List<string>>> GetGallerySelection(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            var selection = await _photoService.GetGalleryPhotoSelectionAsync(valuationId.ToString(), vehicleNumber, applicantContact);
+            return Ok(selection);
+        }
+
+        [HttpPut("gallery-selection")]
+        public async Task<ActionResult<List<string>>> UpdateGallerySelection(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromBody] List<string> selectedKeys)
+        {
+            var result = await _photoService.UpdateGalleryPhotoSelectionAsync(
+                valuationId.ToString(), vehicleNumber, applicantContact, selectedKeys ?? new List<string>());
+            return Ok(result);
+        }
+
+        // Burns a text note onto an already-uploaded photo (fixed slot or custom photo)
+        // and replaces it in place. Compositing happens server-side to avoid Azure Blob
+        // Storage's lack of CORS headers, which would otherwise taint a client-side canvas.
+        [HttpPut("{photoKey}/annotate")]
+        public async Task<IActionResult> AnnotatePhoto(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            string photoKey,
+            [FromBody] AnnotatePhotoRequest request)
+        {
+            try
+            {
+                var result = await _photoService.AnnotatePhotoAsync(
+                    valuationId.ToString(), vehicleNumber, applicantContact, photoKey, request.Note);
+                return Ok(new { photoUrl = result.PhotoUrl, note = result.Note });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpDelete]
         public async Task<IActionResult> DeletePhotos(
             Guid valuationId,
             [FromQuery] string vehicleNumber,
             [FromQuery] string applicantContact)
         {
-            await _photoService.DeletePhotosAsync(
-                valuationId.ToString(),
-                vehicleNumber,
-                applicantContact);
+            await _photoService.DeletePhotosAsync(valuationId.ToString(), vehicleNumber, applicantContact);
             return NoContent();
         }
 
-        // =================================================================================
-        // ✅ NEW ENDPOINTS FOR EDITABLE METADATA
-        // =================================================================================
-
-        /// <summary>
-        /// PUT /api/valuations/{valuationId}/photos/{photoType}/metadata
-        /// Updates the Date/Location text for a specific photo without re-uploading the image.
-        /// </summary>
+        // ✅ UPDATED: Requires vehicleNumber and applicantContact for efficient DB routing
         [HttpPut("{photoType}/metadata")]
         public async Task<IActionResult> UpdateMetadata(
             Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
             string photoType,
             [FromBody] PhotoMetadataUpdateDto input)
         {
             try
             {
-                var result = await _photoService.UpdatePhotoMetadataAsync(valuationId.ToString(), photoType, input);
+                var result = await _photoService.UpdatePhotoMetadataAsync(valuationId.ToString(), vehicleNumber, applicantContact, photoType, input);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -229,14 +219,14 @@ namespace Valuation.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// GET /api/valuations/{valuationId}/photos/metadata
-        /// Retrieves the dictionary of metadata for all photos in this valuation.
-        /// </summary>
+        // ✅ UPDATED: Requires vehicleNumber and applicantContact for efficient DB routing
         [HttpGet("metadata")]
-        public async Task<IActionResult> GetMetadata(Guid valuationId)
+        public async Task<IActionResult> GetMetadata(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
         {
-            var result = await _photoService.GetPhotoMetadataAsync(valuationId.ToString());
+            var result = await _photoService.GetPhotoMetadataAsync(valuationId.ToString(), vehicleNumber, applicantContact);
             return Ok(result);
         }
     }

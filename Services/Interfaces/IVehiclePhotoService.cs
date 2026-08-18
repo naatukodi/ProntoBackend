@@ -1,48 +1,33 @@
-// src/Valuation.Api/Services/IVehiclePhotoService.cs
 using Valuation.Api.Models;
-using System.Collections.Generic; // Required for Dictionary
-using System.Threading.Tasks;     // Required for Task
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Valuation.Api.Services
 {
     public interface IVehiclePhotoService
     {
-        /// <summary>
-        /// Uploads any non‐null IFormFile in the DTO and updates/inserts the Cosmos document.
-        /// Returns the updated dictionary of PhotoUrls (fieldKey→URL) after upload.
-        /// </summary>
         Task<Dictionary<string, string>> UpdatePhotosAsync(VehiclePhotosDto dto);
 
-        /// <summary>
-        /// Returns the current map of PhotoUrls for a given valuationId / vehicleNumber / applicantContact.
-        /// </summary>
         Task<Dictionary<string, string>?> GetPhotoUrlsAsync(string valuationId, string vehicleNumber, string applicantContact);
 
-        /// <summary>
-        /// Deletes all photo URLs and (optionally) the blobs for a given valuationId/key if needed.
-        /// </summary>
         Task DeletePhotosAsync(string valuationId, string vehicleNumber, string applicantContact);
 
-        /// <summary>
-        /// ✅ Get all video URLs from database
-        /// </summary>
-        Task<Dictionary<string, string>?> GetVideoUrlsAsync(
-            string valuationId,
-            string vehicleNumber,
-            string applicantContact);
+        Task<Dictionary<string, string>?> GetVideoUrlsAsync(string valuationId, string vehicleNumber, string applicantContact);
 
-        // =========================================================================
-        // ✅ NEW METHODS FOR METADATA (Resolve CS1061 Error)
-        // =========================================================================
+        // ✅ NEW: Fetch custom photos for the PDF
+        Task<List<SavedCustomPhoto>> GetCustomPhotosAsync(string valuationId, string vehicleNumber, string applicantContact);
 
-        /// <summary>
-        /// Updates the Date/Time and Location text for a specific photo type.
-        /// </summary>
-        Task<PhotoMetadata> UpdatePhotoMetadataAsync(string valuationId, string photoType, PhotoMetadataUpdateDto input);
+        // ✅ UPDATED: Added vehicleNumber and applicantContact to prevent cross-partition queries
+        Task<PhotoMetadata> UpdatePhotoMetadataAsync(string valuationId, string vehicleNumber, string applicantContact, string photoType, PhotoMetadataUpdateDto input);
 
-        /// <summary>
-        /// Retrieves the dictionary of photo metadata (Dates/Locations).
-        /// </summary>
-        Task<Dictionary<string, PhotoMetadata>> GetPhotoMetadataAsync(string valuationId);
+        Task<Dictionary<string, PhotoMetadata>> GetPhotoMetadataAsync(string valuationId, string vehicleNumber, string applicantContact);
+
+        // Gallery page photo selection (used by QC + the PDF generator)
+        Task<List<string>> GetGalleryPhotoSelectionAsync(string valuationId, string vehicleNumber, string applicantContact);
+
+        Task<List<string>> UpdateGalleryPhotoSelectionAsync(string valuationId, string vehicleNumber, string applicantContact, List<string> selectedKeys);
+
+        // Burns a text note onto an already-uploaded photo and replaces it in place.
+        Task<(string PhotoUrl, string Note)> AnnotatePhotoAsync(string valuationId, string vehicleNumber, string applicantContact, string photoKey, string note);
     }
 }

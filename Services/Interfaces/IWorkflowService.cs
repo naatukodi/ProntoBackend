@@ -5,7 +5,8 @@ public interface IWorkflowService
 {
     Task<List<WorkflowStep>?> GetAsync(string valuationId, string vehicleNumber, string applicantContact);
     Task StartStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
-    Task CompleteStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
+    Task CompleteStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder, string? approvedBy = null);
     Task RejectStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
     Task DeleteAsync(string valuationId, string vehicleNumber, string applicantContact);
+    Task<List<WorkflowModel>> GetCompletedCasesAsync();
 }

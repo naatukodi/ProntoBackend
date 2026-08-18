@@ -72,6 +72,12 @@ public class QualityControlService : IQualityControlService
         if (dto.Remarks != null)
             doc.QualityControl.Remarks = dto.Remarks;
 
+        if (dto.QcChecklist != null)
+            doc.QualityControl.QcChecklist = dto.QcChecklist;
+
+        if (dto.QcChecklistRemarks != null)
+            doc.QualityControl.QcChecklistRemarks = dto.QcChecklistRemarks;
+
         // 3) Upsert
         await Container.UpsertItemAsync(doc, pk);
 

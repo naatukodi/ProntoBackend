@@ -83,25 +83,7 @@ namespace Valuation.Api.Services
             return valuation;
         }
 
-        private VehicleValuation ParseRanges(string text)
-        {
-            decimal ParseINR(string s)
-            {
-                var digitsOnly = Regex.Replace(s, @"[^\d]", "");
-                return decimal.TryParse(digitsOnly, out var d) ? d : 0m;
-            }
-
-            var lowMatch = Regex.Match(text, @"Low[:\s]*₹([\d,]+)");
-            var midMatch = Regex.Match(text, @"Mid[:\s]*₹([\d,]+)");
-            var highMatch = Regex.Match(text, @"High[:\s]*₹([\d,]+)");
-
-            return new VehicleValuation
-            {
-                LowRange = lowMatch.Success ? ParseINR(lowMatch.Groups[1].Value) : 0m,
-                MidRange = midMatch.Success ? ParseINR(midMatch.Groups[1].Value) : 0m,
-                HighRange = highMatch.Success ? ParseINR(highMatch.Groups[1].Value) : 0m,
-                RawResponse = text
-            };
-        }
+        private VehicleValuation ParseRanges(string text) =>
+            VehicleValuationParser.ParseRanges(text);
     }
 }

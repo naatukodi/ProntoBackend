@@ -11,11 +11,13 @@ namespace Valuation.Api.Services
         private const string CompletedTableName = "CompletedWorkflows";
         private const string LeadHistoryTableName = "LeadHistory";
         private const string UserTableName = "Users";
+        private const string UserRolesTableName = "UserRoles";
 
         private readonly TableClient _tableClient;
         private readonly TableClient _completedTableClient;
         private readonly TableClient _leadHistoryTableClient;
         private readonly TableClient _userTableClient;
+        private readonly TableClient _userRolesTableClient;
 
         public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
@@ -27,11 +29,13 @@ namespace Valuation.Api.Services
             _completedTableClient = serviceClient.GetTableClient(CompletedTableName);
             _leadHistoryTableClient = serviceClient.GetTableClient(LeadHistoryTableName);
             _userTableClient = serviceClient.GetTableClient(UserTableName);
+            _userRolesTableClient = serviceClient.GetTableClient(UserRolesTableName);
 
             _tableClient.CreateIfNotExists();
             _completedTableClient.CreateIfNotExists();
             _leadHistoryTableClient.CreateIfNotExists();
             _userTableClient.CreateIfNotExists();
+            _userRolesTableClient.CreateIfNotExists();
         }
 
         // ==============================================================================
@@ -860,17 +864,18 @@ namespace Valuation.Api.Services
 
                 var entity = response.Value;
 
-                entity.Status = "Status";
+                entity.Status = "Completed";
                 entity.CompletedAt = DateTime.UtcNow;
                 entity.UpdatedAt = DateTime.UtcNow;
-                entity.FinalReportAssignedTo = assignment.AssignedTo ?? "";
-                entity.FinalReportAssignedToPhoneNumber = assignment.AssignedToPhoneNumber ?? "";
-                entity.FinalReportAssignedToEmail = assignment.AssignedToEmail ?? "";
-                entity.FinalReportAssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
-                entity.AssignedTo = assignment.AssignedTo ?? "";
-                entity.AssignedToPhoneNumber = assignment.AssignedToPhoneNumber ?? "";
-                entity.AssignedToEmail = assignment.AssignedToEmail ?? "";
-                entity.AssignedToWhatsapp = assignment.AssignedToWhatsapp ?? "";
+                entity.CompletedBy = assignment.AssignedTo ?? "";
+                entity.FinalReportAssignedTo = entity.FinalReportAssignedTo ?? "";
+                entity.FinalReportAssignedToPhoneNumber = entity.FinalReportAssignedToPhoneNumber ?? "";
+                entity.FinalReportAssignedToEmail = entity.FinalReportAssignedToEmail ?? "";
+                entity.FinalReportAssignedToWhatsapp = entity.FinalReportAssignedToWhatsapp ?? "";
+                entity.AssignedTo = entity.AssignedTo ?? "";
+                entity.AssignedToPhoneNumber = entity.AssignedToPhoneNumber ?? "";
+                entity.AssignedToEmail = entity.AssignedToEmail ?? "";
+                entity.AssignedToWhatsapp = entity.AssignedToWhatsapp ?? "";
 
                 await _completedTableClient.CreateIfNotExistsAsync().ConfigureAwait(false);
                 await _completedTableClient.UpsertEntityAsync(entity, TableUpdateMode.Replace).ConfigureAwait(false);
@@ -1135,8 +1140,11 @@ namespace Valuation.Api.Services
                 else if (stepOrder == 5) entity.Workflow = "FinalReport";
 
                 // 3. Clear RedFlag (Important: removes the 'Rejected' banner)
-                entity.RedFlag = "false"; 
+                entity.RedFlag = "false";
                 entity.UpdatedAt = DateTime.UtcNow;
+
+                // 4. Auto-assign the step to its role user (best-effort, never blocks)
+                await AutoAssignStepUserAsync(entity, stepOrder);
 
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
             }
@@ -1145,6 +1153,119 @@ namespace Valuation.Api.Services
                 throw new Exception("Valuation record not found.");
             }
         }
+
+        /// <summary>
+        /// When a case arrives at a step: if a role-specific assignee already exists,
+        /// sync the current AssignedTo fields to them. Otherwise, if exactly one
+        /// serviceable user holds the role for that step, assign the case to them.
+        /// With zero or multiple candidates the case stays unclaimed (dashboard pool).
+        /// </summary>
+        private async Task AutoAssignStepUserAsync(WorkflowEntity entity, int stepOrder)
+        {
+            try
+            {
+                string? existingPhone = stepOrder switch
+                {
+                    1 => entity.StakeholderAssignedToPhoneNumber,
+                    2 => entity.BackEndAssignedToPhoneNumber,
+                    3 => entity.AVOAssignedToPhoneNumber,
+                    4 => entity.QualityControlAssignedToPhoneNumber,
+                    5 => entity.FinalReportAssignedToPhoneNumber,
+                    _ => null
+                };
+
+                UserEntity? target = null;
+
+                if (!string.IsNullOrEmpty(existingPhone))
+                {
+                    try
+                    {
+                        var resp = await _userTableClient.GetEntityAsync<UserEntity>("Users", existingPhone);
+                        target = resp.Value;
+                    }
+                    catch (RequestFailedException ex) when (ex.Status == 404)
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    var matchedUserIds = new HashSet<string>();
+                    await foreach (var ur in _userRolesTableClient.QueryAsync<UserRoleEntity>())
+                    {
+                        if (RoleMatchesStep(ur.RowKey, stepOrder))
+                            matchedUserIds.Add(ur.PartitionKey);
+                    }
+
+                    var candidates = new List<UserEntity>();
+                    foreach (var uid in matchedUserIds)
+                    {
+                        try
+                        {
+                            var resp = await _userTableClient.GetEntityAsync<UserEntity>("Users", uid);
+                            var u = resp.Value;
+                            if (u.ServiceStatus == "Serviceable" || u.ServiceStatus == "Servicable")
+                                candidates.Add(u);
+                        }
+                        catch (RequestFailedException ex) when (ex.Status == 404)
+                        {
+                        }
+                    }
+
+                    // Zero or multiple candidates → leave unclaimed, never guess
+                    if (candidates.Count != 1) return;
+                    target = candidates[0];
+                }
+
+                if (target == null) return;
+
+                entity.AssignedTo = target.Name;
+                entity.AssignedToPhoneNumber = target.PhoneNumber;
+                entity.AssignedToEmail = target.Email;
+                entity.AssignedToWhatsapp = target.Whatsapp;
+
+                switch (stepOrder)
+                {
+                    case 1:
+                        entity.StakeholderAssignedTo = target.Name;
+                        entity.StakeholderAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.StakeholderAssignedToEmail = target.Email;
+                        entity.StakeholderAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 2:
+                        entity.BackEndAssignedTo = target.Name;
+                        entity.BackEndAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.BackEndAssignedToEmail = target.Email;
+                        entity.BackEndAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 3:
+                        entity.AVOAssignedTo = target.Name;
+                        entity.AVOAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.AVOAssignedToEmail = target.Email;
+                        entity.AVOAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 4:
+                        entity.QualityControlAssignedTo = target.Name;
+                        entity.QualityControlAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.QualityControlAssignedToEmail = target.Email;
+                        entity.QualityControlAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                    case 5:
+                        entity.FinalReportAssignedTo = target.Name;
+                        entity.FinalReportAssignedToPhoneNumber = target.PhoneNumber;
+                        entity.FinalReportAssignedToEmail = target.Email;
+                        entity.FinalReportAssignedToWhatsapp = target.Whatsapp;
+                        break;
+                }
+            }
+            catch
+            {
+                // Auto-assignment is best-effort — a failure must never block the step transition
+            }
+        }
+
+        private static bool RoleMatchesStep(string? roleId, int stepOrder) =>
+            stepOrder > 0 && ResolveStepFromRole(roleId) == stepOrder;
 
         // ==============================================================================
         //  ✅ FIX 3: CompleteWorkflowStepAsync (Un-stuck the case)
@@ -1194,9 +1315,12 @@ namespace Valuation.Api.Services
             entity.PaymentMethod = dto.PaymentMethod;
             entity.PaymentReference = dto.PaymentReference;
             entity.PaymentDate = dto.PaymentDate;
-            entity.PaymentAmount = dto.PaymentAmount;
+            entity.PaymentAmount =
+                dto.PaymentAmount.HasValue ? (double)dto.PaymentAmount.Value : null;
             entity.UpdatedAt = DateTime.UtcNow;
             entity.PaymentNotes = dto.PaymentNotes;
+            entity.PaymentSavedBy = dto.SavedBy;
+            entity.PaymentSavedAt = DateTime.UtcNow;
 
             await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
         }
@@ -1215,12 +1339,249 @@ namespace Valuation.Api.Services
                     PaymentReference = entity.PaymentReference,
                     PaymentMethod = entity.PaymentMethod,
                     PaymentDate = entity.PaymentDate,
-                    PaymentAmount = entity.PaymentAmount,
-                    PaymentNotes = entity.PaymentNotes
+                    PaymentAmount = entity.PaymentAmount.HasValue
+                        ? (decimal)entity.PaymentAmount.Value
+                        : null,
+                    PaymentNotes = entity.PaymentNotes,
+                    SavedBy = entity.PaymentSavedBy,
+                    SavedAt = entity.PaymentSavedAt
                 };
             }
 
             return null;
+        }
+
+        public async Task<UserDashboardStatsDto> GetUserDashboardStatsAsync(string phoneNumber, string role)
+        {
+            var now = DateTime.UtcNow;
+            var agedThreshold = now.AddHours(-24);
+            var ph = Uri.UnescapeDataString(phoneNumber.Trim()).Replace("'", "''");
+
+            var (rolePhoneFieldEarly, userStepOrderEarly) = GetRolePhoneConfig(role);
+
+            // ── 1. OPEN: all cases at the user's step that are mine OR unclaimed ──
+            // A case is "mine" when the role-specific phone field or AssignedToPhoneNumber
+            // matches. A case is "unclaimed" when no role-specific assignee exists yet
+            // (e.g. Stakeholder forwarded to Backend without picking a Backend user) —
+            // every user of that role sees unclaimed cases and can pick them up.
+            var phRaw = Uri.UnescapeDataString(phoneNumber.Trim());
+            var openCases = new List<WorkflowModel>();
+
+            if (userStepOrderEarly > 0)
+            {
+                await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
+                    filter: $"WorkflowStepOrder eq {userStepOrderEarly}"))
+                {
+                    var rolePhone = GetRolePhoneValue(e, role);
+                    var isMine = rolePhone == phRaw || e.AssignedToPhoneNumber == phRaw;
+                    var isUnclaimed = string.IsNullOrEmpty(rolePhone);
+                    if (isMine || isUnclaimed)
+                        openCases.Add(MapWorkflowEntity(e));
+                }
+            }
+
+            // ── 2. AGED = open cases not updated in 24+ hours ─────────────
+            int agedCount = openCases.Count(c =>
+            {
+                var t = c.UpdatedAt ?? c.CreatedAt;
+                return t.HasValue && t.Value.ToUniversalTime() < agedThreshold;
+            });
+
+            // ── 3. COMPLETED by this user (cases they forwarded to next step) ───
+            var completedCases = new List<WorkflowModel>();
+
+            if (!string.IsNullOrEmpty(rolePhoneFieldEarly))
+            {
+                // Cases still active but past user's step
+                if (userStepOrderEarly < 5)
+                {
+                    await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
+                        filter: $"{rolePhoneFieldEarly} eq '{ph}' and WorkflowStepOrder gt {userStepOrderEarly}"))
+                    {
+                        completedCases.Add(MapWorkflowEntity(e));
+                    }
+                }
+
+                // Fully approved cases
+                await foreach (var e in _completedTableClient.QueryAsync<WorkflowEntity>(
+                    filter: $"{rolePhoneFieldEarly} eq '{ph}'"))
+                {
+                    completedCases.Add(MapWorkflowEntity(e));
+                }
+            }
+
+            // ── 4. AVG TAT from LeadHistory ────────────────────────────────
+            var tatHours = new List<double>();
+
+            // Collect all history entries performed by this user (one full scan)
+            var userHistory = new List<LeadHistoryEntity>();
+            await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                filter: $"PerformedByUserId eq '{ph}'"))
+            {
+                userHistory.Add(h);
+            }
+
+            // Filter to submission events from user's role
+            var submissions = userHistory
+                .Where(h => IsSubmissionFromRole(h.StatusFrom, role))
+                .OrderByDescending(h => h.DateTime)
+                .ToList();
+
+            // For each submission, find when the case arrived at user's step
+            var seenValuations = new HashSet<string>();
+            foreach (var sub in submissions)
+            {
+                if (seenValuations.Contains(sub.PartitionKey)) continue;
+                seenValuations.Add(sub.PartitionKey);
+
+                // Find arrival: most recent history entry for same case where StatusTo = user's role
+                DateTime? arrivalAt = null;
+                var vid = sub.PartitionKey.Replace("'", "''");
+                await foreach (var h in _leadHistoryTableClient.QueryAsync<LeadHistoryEntity>(
+                    filter: $"PartitionKey eq '{vid}'"))
+                {
+                    if (IsArrivalToRole(h.StatusTo, role) && h.DateTime < sub.DateTime)
+                    {
+                        if (arrivalAt == null || h.DateTime > arrivalAt.Value)
+                            arrivalAt = h.DateTime;
+                    }
+                }
+
+                if (arrivalAt.HasValue && sub.DateTime > arrivalAt.Value)
+                {
+                    tatHours.Add((sub.DateTime - arrivalAt.Value).TotalHours);
+                }
+                else if (sub.FirstDateTime.HasValue)
+                {
+                    var fallbackHours = (sub.DateTime - sub.FirstDateTime.Value).TotalHours;
+                    if (fallbackHours > 0) tatHours.Add(fallbackHours);
+                }
+            }
+
+            return new UserDashboardStatsDto
+            {
+                OpenCount      = openCases.Count,
+                AgedCount      = agedCount,
+                CompletedCount = completedCases.Count,
+                AvgTatHours    = tatHours.Any() ? Math.Round(tatHours.Average(), 1) : 0,
+                OpenCases      = openCases,
+                CompletedCases = completedCases
+            };
+        }
+
+        private WorkflowModel MapWorkflowEntity(WorkflowEntity e) => new WorkflowModel
+        {
+            ValuationId           = e.RowKey,
+            VehicleNumber         = e.VehicleNumber,
+            ApplicantName         = e.ApplicantName,
+            ApplicantContact      = e.ApplicantContact,
+            Workflow              = e.Workflow,
+            WorkflowStepOrder     = e.WorkflowStepOrder,
+            Status                = e.Status,
+            CreatedAt             = e.CreatedAt,
+            UpdatedAt             = e.UpdatedAt,
+            CompletedAt           = e.CompletedAt,
+            AssignedTo            = e.AssignedTo,
+            Location              = e.Location,
+            RedFlag               = e.RedFlag,
+            Remarks               = e.Remarks,
+            AssignedToPhoneNumber = e.AssignedToPhoneNumber,
+            AssignedToEmail       = e.AssignedToEmail,
+            AssignedToWhatsapp    = e.AssignedToWhatsapp,
+            Name                  = e.Name,
+            ValuationType         = e.ValuationType
+        };
+
+        /// <summary>
+        /// Resolve any role/status string to its workflow step. Tolerant of
+        /// permission-style role names like "CanCreateStakeholder" or
+        /// "CanEditQualityControl" as well as plain step names ("Backend", "QC").
+        /// Returns 0 when the string maps to no step (e.g. Admin).
+        /// </summary>
+        private static int ResolveStepFromRole(string? role)
+        {
+            if (string.IsNullOrWhiteSpace(role)) return 0;
+            var r = role.Trim().ToLowerInvariant().Replace(" ", "");
+            if (r.Contains("stakeholder"))               return 1;
+            if (r.Contains("backend"))                   return 2;
+            if (r == "avo")                              return 3;
+            if (r == "qc" || r.Contains("qualitycontrol")) return 4;
+            if (r.Contains("finalreport"))               return 5;
+            return 0;
+        }
+
+        private static (string phoneField, int stepOrder) GetRolePhoneConfig(string role) =>
+            ResolveStepFromRole(role) switch
+            {
+                1 => ("StakeholderAssignedToPhoneNumber",    1),
+                2 => ("BackEndAssignedToPhoneNumber",        2),
+                3 => ("AVOAssignedToPhoneNumber",            3),
+                4 => ("QualityControlAssignedToPhoneNumber", 4),
+                5 => ("FinalReportAssignedToPhoneNumber",    5),
+                _ => ("", 0)
+            };
+
+        private static string? GetRolePhoneValue(WorkflowEntity e, string role) =>
+            ResolveStepFromRole(role) switch
+            {
+                1 => e.StakeholderAssignedToPhoneNumber,
+                2 => e.BackEndAssignedToPhoneNumber,
+                3 => e.AVOAssignedToPhoneNumber,
+                4 => e.QualityControlAssignedToPhoneNumber,
+                5 => e.FinalReportAssignedToPhoneNumber,
+                _ => null
+            };
+
+        private static bool IsSubmissionFromRole(string? statusFrom, string role)
+        {
+            var step = ResolveStepFromRole(role);
+            return step > 0 && ResolveStepFromRole(statusFrom) == step;
+        }
+
+        private static bool IsArrivalToRole(string? statusTo, string role)
+        {
+            var step = ResolveStepFromRole(role);
+            return step > 0 && ResolveStepFromRole(statusTo) == step;
+        }
+
+        public async Task<int> GetCompletedCountAsync()
+        {
+            int count = 0;
+            await foreach (var _ in _completedTableClient.QueryAsync<Azure.Data.Tables.TableEntity>(select: new[] { "RowKey" }))
+                count++;
+            return count;
+        }
+
+        public async Task<List<WorkflowModel>> GetCompletedCasesAsync()
+        {
+            var results = new List<WorkflowModel>();
+
+            await foreach (var entity in _completedTableClient.QueryAsync<WorkflowEntity>())
+            {
+                results.Add(new WorkflowModel
+                {
+                    ValuationId = entity.RowKey,
+                    VehicleNumber = entity.VehicleNumber,
+                    ApplicantName = entity.ApplicantName,
+                    ApplicantContact = entity.ApplicantContact,
+                    Workflow = entity.Workflow,
+                    WorkflowStepOrder = entity.WorkflowStepOrder,
+                    Status = entity.Status,
+                    CreatedAt = entity.CreatedAt,
+                    CompletedAt = entity.CompletedAt,
+                    AssignedTo = entity.AssignedTo,
+                    Location = entity.Location,
+                    RedFlag = entity.RedFlag,
+                    Remarks = entity.Remarks,
+                    AssignedToPhoneNumber = entity.AssignedToPhoneNumber,
+                    AssignedToEmail = entity.AssignedToEmail,
+                    AssignedToWhatsapp = entity.AssignedToWhatsapp,
+                    Name = entity.Name,
+                    ValuationType = entity.ValuationType
+                });
+            }
+
+            return results;
         }
 
 

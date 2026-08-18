@@ -7,14 +7,15 @@ namespace Valuation.Api.Models
     {
         public string ValuationId { get; set; } = default!;
         // Location fields
-        public string Pincode { get; set; } = default!;
-        public string LocationName { get; set; } = default!;
-        public string Block { get; set; } = default!;
-        public string State { get; set; } = default!;
-        public string Country { get; set; } = default!;
+        public string? Pincode { get; set; }
+        public string? LocationName { get; set; }
+        public string? Block { get; set; }
+        public string? State { get; set; }
+        public string? Country { get; set; }
 
         // Stakeholder
         public string Name { get; set; } = default!;
+        public string? Branch { get; set; }
         public string ExecutiveName { get; set; } = default!;
         public string ExecutiveContact { get; set; } = default!;
         public string? ExecutiveWhatsapp { get; set; }
@@ -28,6 +29,7 @@ namespace Valuation.Api.Models
 
         public string ApplicantName { get; set; } = default!;
         public string ApplicantContact { get; set; } = default!;
+        public string? ApplicantAlternativeContact { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }

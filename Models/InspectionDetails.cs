@@ -50,6 +50,10 @@ namespace Valuation.Api.Models
         // Photo URLs (original multiple)
         public List<string>? Photos { get; set; }
 
+        // Named photo URLs
+        public string? ChassisVerificationPhotoUrl { get; set; }
+        public string? ChassisStencilTracePhotoUrl { get; set; }
+
 
         // --- Newly requested additional fields ---
         public string? FuelSystem { get; set; }
@@ -78,6 +82,9 @@ namespace Valuation.Api.Models
         public string? SwingUnit { get; set; }
         public string? Upholstery { get; set; }
         public string? InteriorTrims { get; set; }
+        public string? Front { get; set; }
+        public string? Rear { get; set; }
+        public string? Axles { get; set; }
         public string? SpeedoMeter { get; set; }
         public string? FrontAxles { get; set; }
         public string? RearAxles { get; set; }
@@ -87,6 +94,179 @@ namespace Valuation.Api.Models
         public string? LeftSideWing { get; set; }
         public string? TailGate { get; set; }
         public string? LoadFloor { get; set; }
+
+        // Brakes Additional
+        public string? ParkingBrake { get; set; }
+        public string? Abs { get; set; }
+
+        // Electrical Additional
+        public string? TailLightsIndicators { get; set; }
+        public string? WiringAssy { get; set; }
+
+        // Crash Guards
+        public string? FrontCrashGuard { get; set; }
+        public string? RearCrashGuard { get; set; }
+
+        // 4W Specific
+        public string? AirBags { get; set; }
+        public string? SunRoof { get; set; }
+        public string? SideFenders { get; set; }
+
+        // CV Specific
+        public string? HydraulicLift { get; set; }
+        public string? SideUnderRunProtection { get; set; }
+
+        // 2W Specific
+        public string? MainStand { get; set; }
+        public string? SideStand { get; set; }
+        public string? FrontMudGuard { get; set; }
+        public string? RearMudGuard { get; set; }
+        public string? FuelTankCondition { get; set; }
+        public string? ChainSprocket { get; set; }
+        public string? FrontBrakeCondition { get; set; }
+        public string? RearBrakeCondition { get; set; }
+        public string? HeadLight { get; set; }
+        public string? TailLight { get; set; }
+        public string? Indicators { get; set; }
+        public string? HornCondition { get; set; }
+        public string? MirrorCondition { get; set; }
+        public string? SeatCondition { get; set; }
+        public string? HandleBarGrips { get; set; }
+        public string? FootRest { get; set; }
+        public string? AlloyWheelRim { get; set; }
+
+        // CE Specific
+        public string? Retarder { get; set; }
+        public string? DifferentialLock { get; set; }
+        public string? Pto { get; set; }
+        public string? HydraulicSystem { get; set; }
+        public string? BoomArm { get; set; }
+        public string? BucketCondition { get; set; }
+        public string? BladeCondition { get; set; }
+        public string? LiftingCapacity { get; set; }
+        public string? TyreConditionCe { get; set; }
+        public string? UnderCarriage { get; set; }
+        public string? CrawlerTracks { get; set; }
+        public string? SteelRims { get; set; }
+        public string? AttachmentCondition { get; set; }
+        public string? CabCondition { get; set; }
+        public string? CounterWeight { get; set; }
+        public string? RockBreaker { get; set; }
+
+        // BUS Specific
+        public string? CoachCondition { get; set; }
+        public string? PassengerSeats { get; set; }
+        public string? EmergencyExits { get; set; }
+        public string? LuggageCompartment { get; set; }
+        public string? AcSystem { get; set; }
+        public string? DestinationBoard { get; set; }
+        public string? SideMirrors { get; set; }
+
+        // FE Specific
+        public string? RightIndividualBrakes { get; set; }
+        public string? LeftIndividualBrakes { get; set; }
+        public string? ThreePointLinkage { get; set; }
+        public string? PowerTakeOff { get; set; }
+        public string? HitchSystem { get; set; }
+        public string? HydraulicLiftFe { get; set; }
+        public string? FrontWeights { get; set; }
+        public string? RearWeights { get; set; }
+        public string? RopsCanopy { get; set; }
+        public string? FrontTyreCondition { get; set; }
+        public string? RearTyreCondition { get; set; }
+        public string? ImplementAttachments { get; set; }
+        public string? FuelTankFe { get; set; }
+        public string? FrontAxleFe { get; set; }
+        public string? RearDrawbar { get; set; }
+
+        // --- Excel-registry aligned fields ---
+        // Shared cross-type
+        public string? TyreCondition { get; set; }
+        public string? ElectricalSystem { get; set; }
+        public string? LoadBodyAssy { get; set; }
+        public string? BodyAssy { get; set; }
+        public string? CabinAssy { get; set; }
+        public string? FrontBrakes { get; set; }
+        public string? RearBrakes { get; set; }
+        public string? HeadLights { get; set; }
+        public string? FrontSuspension { get; set; }
+        public string? RearSuspension { get; set; }
+        public string? RightSideGate { get; set; }
+        public string? LeftSideGate { get; set; }
+
+        // 2W specific
+        public string? FrontScoop { get; set; }
+        public string? RvMirrors { get; set; }
+        public string? LockSet { get; set; }
+        public string? SideCovers { get; set; }
+        public string? BellyPanels { get; set; }
+        public string? BrakeLeversFluid { get; set; }
+        public string? Silencer { get; set; }
+        public string? SilencerCover { get; set; }
+        public string? Accelerator { get; set; }
+        public string? HandleBar { get; set; }
+        public string? SteeringStem { get; set; }
+        public string? FrontShockAbsorber { get; set; }
+        public string? RearShockAbsorber { get; set; }
+        public string? LegGuard { get; set; }
+        public string? SareeGuard { get; set; }
+        public string? ChainGuard { get; set; }
+        public string? SelfStart { get; set; }
+        public string? Horn { get; set; }
+        public string? KickPedalFootRest { get; set; }
+
+        // 3W specific
+        public string? FrontPanel { get; set; }
+        public string? FrontGlassFrame { get; set; }
+        public string? Switches { get; set; }
+        public string? LoadCarrier { get; set; }
+
+        // CE specific
+        public string? SteeringControlSystem { get; set; }
+        public string? CabinStructure { get; set; }
+        public string? DashboardControls { get; set; }
+        public string? GlassPanels { get; set; }
+        public string? BucketBlade { get; set; }
+        public string? PinsAndBushes { get; set; }
+        public string? ServiceBrake { get; set; }
+        public string? EmergencyStop { get; set; }
+        public string? Sensors { get; set; }
+        public string? SteeringControlLevers { get; set; }
+        public string? HydraulicSteeringPump { get; set; }
+        public string? SwivelJoints { get; set; }
+        public string? HydraulicOilCooler { get; set; }
+        public string? HydraulicPump { get; set; }
+        public string? HosesAndFittings { get; set; }
+        public string? SwingMechanism { get; set; }
+        public string? TrackChains { get; set; }
+        public string? Sprockets { get; set; }
+        public string? Rollers { get; set; }
+        public string? HourMeter { get; set; }
+        public string? BonnetGuard { get; set; }
+        public string? TorqueConverter { get; set; }
+        public string? FinalDrive { get; set; }
+
+        // BUS specific
+        public string? BodyStructure { get; set; }
+        public string? DriverCabin { get; set; }
+        public string? BumpersAndGrilles { get; set; }
+        public string? SeatsAndBerths { get; set; }
+        public string? SideBodyPanels { get; set; }
+        public string? RearBodyPanels { get; set; }
+
+        // FE/Tractor specific
+        public string? OperatorPlatform { get; set; }
+        public string? OperatorStation { get; set; }
+        public string? Canopy { get; set; }
+        public string? FrontGrilles { get; set; }
+        public string? BrakeEqualization { get; set; }
+        public string? FanAssy { get; set; }
+        public string? RearAxleFe { get; set; }
+        public string? TieRodsJoints { get; set; }
+        public string? Muffler { get; set; }
+        public string? AirFilter { get; set; }
+        public string? DropArm { get; set; }
+        public string? AttachmentHitch { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }

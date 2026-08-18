@@ -12,6 +12,7 @@ public interface IRoleService
     // User definitions
     Task<UserModel?> GetUserAsync(string userId);
     Task<IEnumerable<UserModel>> GetAllUsersAsync();
+    Task<UserModel?> ValidateAgencyLoginAsync(string userId, string password);
 
 
     // User–role assignments

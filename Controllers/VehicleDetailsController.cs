@@ -17,15 +17,22 @@ namespace Valuation.Api.Controllers
             [FromQuery] string vehicleNumber,
             [FromQuery] string applicantContact)
         {
-            var dto = await _svc.GetVehicleDetailsAsync(
-                valuationId.ToString(), vehicleNumber, applicantContact);
-            if (dto == null)
-                return Ok(new VehicleDetailsDto());
-            return Ok(dto);
+            try
+            {
+                var dto = await _svc.GetVehicleDetailsAsync(
+                    valuationId.ToString(), vehicleNumber, applicantContact);
+                if (dto == null)
+                    return Ok(new VehicleDetailsDto());
+                return Ok(dto);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message, type = ex.GetType().Name });
+            }
         }
 
         /// <summary>
-        /// Get the stored vehicle details AND enrich them with Attestr API RC data.
+        /// Get the stored vehicle details AND enrich them with Surepass RC data.
         /// </summary>
         [HttpGet("with-rc")]
         public async Task<ActionResult<VehicleDetailsDto>> GetWithRc(
@@ -111,7 +118,8 @@ namespace Valuation.Api.Controllers
         public async Task<ActionResult<VehicleDuplicateCheckResponse>> CheckDuplicateVehicle(
             [FromQuery] string? vehicleNumber = null,
             [FromQuery] string? engineNumber = null,
-            [FromQuery] string? chassisNumber = null)
+            [FromQuery] string? chassisNumber = null,
+            [FromQuery] string? excludeId = null)
         {
             try
             {
@@ -127,7 +135,7 @@ namespace Valuation.Api.Controllers
                 }
 
                 var response = await _svc.CheckDuplicateVehicleAsync(
-                    vehicleNumber, engineNumber, chassisNumber);
+                    vehicleNumber, engineNumber, chassisNumber, excludeId);
 
                 return Ok(response);
             }

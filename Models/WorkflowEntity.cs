@@ -69,8 +69,14 @@ namespace Valuation.Api.Models
         public string? PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }
         public DateTime? PaymentDate { get; set; }
-        public decimal? PaymentAmount { get; set; }
+
+        // Stored as double: Azure Table Storage has no decimal type, so a
+        // decimal property is silently dropped on write. The API contract
+        // stays decimal — conversion happens in WorkflowTableService.
+        public double? PaymentAmount { get; set; }
         public string? PaymentNotes { get; set; }
+        public string? PaymentSavedBy { get; set; }
+        public DateTime? PaymentSavedAt { get; set; }
 
 
     }

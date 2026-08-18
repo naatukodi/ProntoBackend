@@ -18,10 +18,11 @@ public class ValuationService : IValuationService
     private readonly string _dbId;
     private readonly string _containerId;
     private readonly string _blobContainerName;
+    private readonly string _cdnEndpoint;
     private readonly HttpClient _httpClient;
     private readonly string _basicAuthHeader;
-    private readonly string _attestrUrl;
-    private readonly string _attestrToken;
+    private readonly string _surepassUrl;
+    private readonly string _surepassToken;
     private readonly IWorkflowTableService _workflowTableService;
 
     public ValuationService(
@@ -35,11 +36,12 @@ public class ValuationService : IValuationService
         _blobService = blobService;
         _dbId = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
         _containerId = configuration["Cosmos:ContainerId"] ?? "Valuations";
-        _blobContainerName = configuration["Blob:ContainerName"] ?? "vehicle-documents";
+        _blobContainerName = configuration["Blob:ContainerName"] ?? "documents";
+        _cdnEndpoint = configuration["Blob:CdnEndpointHostname"] ?? "https://vehgablobs.blob.core.windows.net";
         _httpClient = httpClient;
         _basicAuthHeader = configuration["BasicAuth:Header"] ?? "";
-        _attestrUrl = configuration["Attestr:Url"] ?? "https://api.attestr.com/api/v2/public/checkx/rc";
-        _attestrToken = configuration["Attestr:Token"] ?? "";
+        _surepassUrl = configuration["Surepass:Url"] ?? "https://kyc-api.surepass.io/api/v1/rc/rc-text";
+        _surepassToken = configuration["Surepass:Token"] ?? "";
         _workflowTableService = workflowTableService;
     }
 
@@ -62,44 +64,23 @@ public class ValuationService : IValuationService
             if (doc.VehicleDetails is null)
                 return new VehicleDetailsDto();
 
-            return new VehicleDetailsDto
+            // Return the stored DTO as-is so every field (Rto, Lender, permit,
+            // pollution, tax, etc.) survives the round-trip; a hand-written
+            // field-by-field copy here kept drifting out of date.
+            var dto = doc.VehicleDetails;
+
+            // File streams are never returned on GET
+            dto.StencilTrace = null;
+            dto.ChassisNoPhoto = null;
+
+            // Older documents may lack mfg month/year — derive from registration date
+            if ((dto.YearOfMfg is null or 0) && dto.DateOfRegistration.HasValue)
             {
-                RegistrationNumber = doc.VehicleDetails.RegistrationNumber,
-                Make = doc.VehicleDetails.Make,
-                Model = doc.VehicleDetails.Model,
-                MonthOfMfg = doc.VehicleDetails.DateOfRegistration?.Month ?? 0,
-                YearOfMfg = doc.VehicleDetails.DateOfRegistration?.Year ?? 0,
-                BodyType = doc.VehicleDetails.BodyType,
-                ChassisNumber = doc.VehicleDetails.ChassisNumber,
-                EngineNumber = doc.VehicleDetails.EngineNumber,
-                Colour = doc.VehicleDetails.Colour,
-                Fuel = doc.VehicleDetails.Fuel,
-                OwnerName = doc.VehicleDetails.OwnerName,
-                PresentAddress = doc.VehicleDetails.PresentAddress,
-                PermanentAddress = doc.VehicleDetails.PermanentAddress,
-                Hypothecation = doc.VehicleDetails.Hypothecation,
-                Insurer = doc.VehicleDetails.Insurer,
-                DateOfRegistration = doc.VehicleDetails.DateOfRegistration,
-                ClassOfVehicle = doc.VehicleDetails.ClassOfVehicle,
-                EngineCC = doc.VehicleDetails.EngineCC,
-                GrossVehicleWeight = doc.VehicleDetails.GrossVehicleWeight,
-                OwnerSerialNo = doc.VehicleDetails.OwnerSerialNo,
-                SeatingCapacity = doc.VehicleDetails.SeatingCapacity,
-                InsurancePolicyNo = doc.VehicleDetails.InsurancePolicyNo,
-                InsuranceValidUpTo = doc.VehicleDetails.InsuranceValidUpTo,
-                IDV = doc.VehicleDetails.IDV,
-                PermitNo = doc.VehicleDetails.PermitNo,
-                PermitValidUpTo = doc.VehicleDetails.PermitValidUpTo,
-                FitnessNo = doc.VehicleDetails.FitnessNo,
-                FitnessValidTo = doc.VehicleDetails.FitnessValidTo,
-                BacklistStatus = doc.VehicleDetails.BacklistStatus,
-                RcStatus = doc.VehicleDetails.RcStatus,
-                StencilTrace = null,          // not used in GET
-                ChassisNoPhoto = null,        // not used in GET
-                StencilTraceUrl = doc.VehicleDetails.StencilTraceUrl,
-                ChassisNoPhotoUrl = doc.VehicleDetails.ChassisNoPhotoUrl,
-                Remarks = doc.VehicleDetails.Remarks
-            };
+                dto.YearOfMfg = dto.DateOfRegistration.Value.Year;
+                dto.MonthOfMfg = dto.DateOfRegistration.Value.Month;
+            }
+
+            return dto;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -138,6 +119,10 @@ public class ValuationService : IValuationService
                 Remarks = null
             };
         }
+        catch (CosmosException)
+        {
+            return new VehicleDetailsDto { RegistrationNumber = vehicleNumber };
+        }
     }
 
     public async Task<VehicleDetailsDto?> GetVehicleDetailsWithRcCheckAsync(
@@ -148,14 +133,14 @@ public class ValuationService : IValuationService
         // 1) fetch existing
         VehicleDetailsDto? dto = await GetVehicleDetailsAsync(valuationId, registrationNumber, applicantContact);
 
-        // 2) call Attestr API
+        // 2) call Surepass API
         var api = await GetVehicleInfoAsync(registrationNumber);
         if (api == null) return dto;
 
         // 3) map into DTO
         if (dto == null)
             dto = new VehicleDetailsDto();
-        MapAttestrToDto(api, dto);
+        MapSurepassToDto(api, dto);
 
         dto.RegistrationNumber = registrationNumber;
 
@@ -184,10 +169,34 @@ public class ValuationService : IValuationService
     {
         try
         {
+            var pk = GetPk(vehicleNumber, applicantContact);
             var resp = await Container.ReadItemAsync<ValuationDocument>(
                 id: valuationId,
-                partitionKey: GetPk(vehicleNumber, applicantContact));
-            return resp.Resource;
+                partitionKey: pk);
+            var doc = resp.Resource;
+
+            // Heal records where ranges were stored as 0 but RawResponse exists
+            var vr = doc.ValuationResponse;
+            if (vr != null
+                && !string.IsNullOrWhiteSpace(vr.RawResponse)
+                && (vr.LowRange == null || vr.LowRange == 0)
+                && (vr.MidRange == null || vr.MidRange == 0)
+                && (vr.HighRange == null || vr.HighRange == 0))
+            {
+                var parsed = VehicleValuationParser.ParseRanges(vr.RawResponse);
+                if (parsed.LowRange != 0 || parsed.MidRange != 0 || parsed.HighRange != 0)
+                {
+                    vr.LowRange  = parsed.LowRange;
+                    vr.MidRange  = parsed.MidRange;
+                    vr.HighRange = parsed.HighRange;
+                    doc.ValuationResponse = vr;
+                    await Container.UpsertItemAsync(doc, pk);
+                }
+            }
+
+            // Photo URLs are stored with their correct host in Cosmos DB — no rewriting needed.
+
+            return doc;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -308,122 +317,136 @@ public class ValuationService : IValuationService
         }
     }
 
-    public async Task<CheckXResponse?> GetVehicleInfoAsync(string registration)
+    public async Task<SurepassRcData?> GetVehicleInfoAsync(string registration)
     {
-
-        //var regNumber = registration.Replace(" ", "").ToUpper();
-        var regNumber = "TN12XX2345"; // Hardcoded for testing
+        var regNumber = registration.Replace(" ", "").ToUpper();
 
         using var client = new HttpClient();
 
-        // Set up Authorization and Accept headers
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", _attestrToken);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _surepassToken);
         client.DefaultRequestHeaders.Accept.Clear();
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        // Prepare JSON payload
-        var payload = new { reg = regNumber };
+        var payload = new { id_number = regNumber };
         var json = JsonSerializer.Serialize(payload);
 
-        // Create content WITHOUT charset in Content-Type
         using var content = new StringContent(json, Encoding.UTF8);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         try
         {
-            Console.WriteLine($"Sending POST to {_attestrUrl} with payload: {json}");
-            var response = await client.PostAsync(_attestrUrl, content);
+            Console.WriteLine($"Sending POST to {_surepassUrl} with payload: {json}");
+            var response = await client.PostAsync(_surepassUrl, content);
 
             var body = await response.Content.ReadAsStringAsync();
             Console.WriteLine($"Status: {(int)response.StatusCode} {response.ReasonPhrase}");
             Console.WriteLine("Response Body:");
             Console.WriteLine(body);
-            return JsonSerializer.Deserialize<CheckXResponse>(body);
+
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var wrapper = JsonSerializer.Deserialize<SurepassRcResponse>(body, options);
+            return wrapper?.Success == true ? wrapper.Data : null;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("Error while calling Attestr API:");
+            Console.Error.WriteLine("Error while calling Surepass API:");
             Console.Error.WriteLine(ex);
         }
         return null;
     }
 
 
-    private void MapAttestrToDto(CheckXResponse api, VehicleDetailsDto dto)
+    // Surepass sometimes returns invalid dates like "2099-09-00" (day=0) or "2099-00-04" (month=0).
+    // This helper replaces zeroed parts with 01 so DateTime.TryParse succeeds.
+    private static DateTime? SafeParseDate(string? dateStr)
     {
-        // ── Dates ────────────────────────────────────────────────────────────
-        if (DateTime.TryParse(api.Registered, out var regDt))
+        if (string.IsNullOrWhiteSpace(dateStr)) return null;
+        var parts = dateStr.Split('-');
+        if (parts.Length == 3)
+        {
+            if (parts[1] == "00") parts[1] = "01";
+            if (parts[2] == "00") parts[2] = "01";
+            dateStr = string.Join("-", parts);
+        }
+        return DateTime.TryParse(dateStr, out var dt) ? dt : null;
+    }
+
+    private void MapSurepassToDto(SurepassRcData api, VehicleDetailsDto dto)
+    {
+        // ── Registration date ─────────────────────────────────────────────────
+        var regDt = SafeParseDate(api.RegistrationDate);
+        if (regDt.HasValue)
         {
             dto.DateOfRegistration = regDt;
-            dto.YearOfMfg = regDt.Year;
-            dto.MonthOfMfg = regDt.Month;
+            dto.YearOfMfg = regDt.Value.Year;
+            dto.MonthOfMfg = regDt.Value.Month;
         }
 
-        if (!string.IsNullOrWhiteSpace(api.Manufactured))
+        // ── Manufacturing date ("M/YYYY" format) ──────────────────────────────
+        if (!string.IsNullOrWhiteSpace(api.ManufacturingDate))
         {
-            var parts = api.Manufactured.Split('/');
+            var parts = api.ManufacturingDate.Split('/');
             if (parts.Length == 2
-                && int.TryParse(parts[0], out var m)
-                && int.TryParse(parts[1], out var y))
+                && int.TryParse(parts[0], out var mfgMonth)
+                && int.TryParse(parts[1], out var mfgYear)
+                && mfgMonth >= 1 && mfgMonth <= 12
+                && mfgYear > 1900)
             {
-                dto.ManufacturedDate = new DateTime(y, m, 1);
+                dto.ManufacturedDate = new DateTime(mfgYear, mfgMonth, 1);
             }
         }
 
-        if (DateTime.TryParse(api.PollutionCertificateUpto, out var pollUpto))
-            dto.PollutionCertificateUpto = pollUpto;
+        // ── Other dates ───────────────────────────────────────────────────────
+        dto.PollutionCertificateUpto = SafeParseDate(api.PuccUpto);
+        dto.PermitIssued             = SafeParseDate(api.PermitIssueDate);
+        dto.PermitFrom               = SafeParseDate(api.PermitValidFrom);
+        dto.PermitValidUpTo          = SafeParseDate(api.PermitValidUpto);
+        dto.InsuranceValidUpTo       = SafeParseDate(api.InsuranceUpto);
+        dto.FitnessValidTo           = SafeParseDate(api.FitUpTo);
+        dto.TaxUpto                  = SafeParseDate(api.TaxUpto);
 
-        if (DateTime.TryParse(api.PermitIssued, out var permitIssued))
-            dto.PermitIssued = permitIssued;
-        if (DateTime.TryParse(api.PermitFrom, out var permitFrom))
-            dto.PermitFrom = permitFrom;
-        if (DateTime.TryParse(api.TaxUpto, out var taxUpto))
-            dto.TaxUpto = taxUpto;
-
-        // ── Numerics ─────────────────────────────────────────────────────────
+        // ── Numerics ──────────────────────────────────────────────────────────
         if (double.TryParse(api.CubicCapacity, out var cc))
             dto.EngineCC = Convert.ToInt32(Math.Round(cc));
 
-        if (double.TryParse(api.GrossWeight, out var gw))
+        if (double.TryParse(api.VehicleGrossWeight, out var gw))
             dto.GrossVehicleWeight = gw;
 
-        if (int.TryParse(api.SeatingCapacity, out var sc))
+        if (int.TryParse(api.SeatCapacity, out var sc))
             dto.SeatingCapacity = sc;
 
         // ── Simple field copies ───────────────────────────────────────────────
-        dto.Rto = api.Rto;
-        dto.Lender = api.Lender;
-        dto.ExShowroomPrice = api.ExShowroomPrice;
-        dto.CategoryCode = api.Category;
-        dto.ClassOfVehicle = api.CategoryDescription ?? dto.ClassOfVehicle;
-        dto.NormsType = api.NormsType;
-        dto.MakerVariant = api.MakerVariant;
-        dto.PollutionCertificateNumber = api.PollutionCertificateNumber;
-        dto.PermitType = api.PermitType;
-        dto.TaxPaidUpto = api.TaxPaidUpto;
+        dto.Rto                      = api.RegisteredAt;
+        dto.Lender                   = api.Financer;
+        dto.CategoryCode             = api.VehicleCategory;
+        dto.ClassOfVehicle           = api.VehicleCategoryDescription ?? dto.ClassOfVehicle;
+        dto.NormsType                = api.NormsType;
+        dto.MakerVariant             = api.Variant;
+        dto.PollutionCertificateNumber = api.PuccNumber;
+        dto.PermitType               = api.PermitType;
+        dto.PermitNo                 = api.PermitNumber;
+        dto.TaxPaidUpto              = api.TaxPaidUpto;
+        dto.OwnerSerialNo            = api.OwnerNumber;
 
-        // ── Boolean business logic ───────────────────────────────────────────
-        dto.RcStatus = api.Valid;
+        // ── Boolean business logic ────────────────────────────────────────────
+        // Surepass does not return a direct valid bool; use success from the wrapper (already filtered before this call)
+        dto.RcStatus      = true;
         dto.BacklistStatus = !string.IsNullOrWhiteSpace(api.BlacklistStatus);
 
-        // ── overwrite a few core fields if API gives better data ─────────────
-        dto.Make = api.MakerDescription ?? dto.Make;
-        dto.Model = api.MakerModel ?? dto.Model;
-        dto.ChassisNumber = api.ChassisNumber ?? dto.ChassisNumber;
-        dto.EngineNumber = api.EngineNumber ?? dto.EngineNumber;
-        dto.Colour = api.ColorType ?? dto.Colour;
-        dto.Fuel = api.FuelType ?? dto.Fuel;
-        dto.OwnerName = api.Owner ?? dto.OwnerName;
-        dto.PresentAddress = api.CurrentAddress ?? dto.PresentAddress;
-        dto.PermanentAddress = api.PermanentAddress ?? dto.PermanentAddress;
-        dto.Hypothecation = api.Financed;
-        dto.Insurer = api.InsuranceProvider ?? dto.Insurer;
+        // ── Core fields — only overwrite if Surepass returns a value ──────────
+        dto.Make             = api.MakerDescription      ?? dto.Make;
+        dto.Model            = api.MakerModel            ?? dto.Model;
+        dto.BodyType         = api.BodyType              ?? dto.BodyType;
+        dto.ChassisNumber    = api.VehicleChasisNumber   ?? dto.ChassisNumber;
+        dto.EngineNumber     = api.VehicleEngineNumber   ?? dto.EngineNumber;
+        dto.Colour           = api.Color                 ?? dto.Colour;
+        dto.Fuel             = api.FuelType              ?? dto.Fuel;
+        dto.OwnerName        = api.OwnerName             ?? dto.OwnerName;
+        dto.PresentAddress   = api.PresentAddress        ?? dto.PresentAddress;
+        dto.PermanentAddress = api.PermanentAddress      ?? dto.PermanentAddress;
+        dto.Hypothecation    = api.Financed;
+        dto.Insurer          = api.InsuranceCompany      ?? dto.Insurer;
         dto.InsurancePolicyNo = api.InsurancePolicyNumber ?? dto.InsurancePolicyNo;
-        if (DateTime.TryParse(api.InsuranceUpto, out var insUpto))
-            dto.InsuranceValidUpTo = insUpto;
-        // PRESERVE remarks so user edits are not lost
-        if (string.IsNullOrWhiteSpace(dto.Remarks))
-        dto.Remarks = dto.Remarks;
     }
 
     public async Task<List<OpenValuationDto>> GetOpenValuationsAsync()
@@ -482,14 +505,19 @@ public class ValuationService : IValuationService
         if (updatedDto == null)
             throw new InvalidOperationException("Could not fetch vehicle details DTO.");
 
-        // Preserve RC data by copying non-null values from updatedDto to dto
+        // Fill in blanks from RC/existing data; user-supplied values always win
         foreach (var prop in typeof(VehicleDetailsDto).GetProperties())
         {
-            var updatedValue = prop.GetValue(updatedDto);
-            if (updatedValue != null)
-            {
-                prop.SetValue(dto, updatedValue);
-            }
+            if (!prop.CanWrite) continue;
+            if (prop.PropertyType == typeof(IFormFile)) continue;
+
+            var userValue = prop.GetValue(dto);
+            var rcValue   = prop.GetValue(updatedDto);
+
+            bool userProvided = userValue != null &&
+                                !(userValue is string s && string.IsNullOrEmpty(s));
+            if (!userProvided && rcValue != null)
+                prop.SetValue(dto, rcValue);
         }
 
         //  RESTORE remarks after all updates
@@ -526,9 +554,12 @@ public class ValuationService : IValuationService
             };
         }
 
-        // 5) Upload images (if any) and update DTO URLs
-        dto.StencilTraceUrl = await UploadIfAsync(dto.StencilTrace, registrationNumber, applicantContact);
-        dto.ChassisNoPhotoUrl = await UploadIfAsync(dto.ChassisNoPhoto, registrationNumber, applicantContact);
+        // 5) Upload images only if a new file was supplied; never null-out an existing URL
+        var newStencilUrl = await UploadIfAsync(dto.StencilTrace, registrationNumber, applicantContact);
+        if (newStencilUrl != null) dto.StencilTraceUrl = newStencilUrl;
+
+        var newChassisUrl = await UploadIfAsync(dto.ChassisNoPhoto, registrationNumber, applicantContact);
+        if (newChassisUrl != null) dto.ChassisNoPhotoUrl = newChassisUrl;
 
         // 6) Patch the document’s VehicleDetails
         doc.VehicleDetails = dto;
@@ -684,7 +715,8 @@ public class ValuationService : IValuationService
     public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
         string? vehicleNumber,
         string? engineNumber,
-        string? chassisNumber)
+        string? chassisNumber,
+        string? excludeId = null)
     {
         // ✅ CATCH FRONTEND BUG: Stop Angular from searching for literal "undefined"
         string? CleanStr(string? val) =>
@@ -751,20 +783,26 @@ public class ValuationService : IValuationService
             // ================= SAFE VALUATION EXPRESSION =================
             string valuationExpression = @"
                 IIF(
-                    IS_DEFINED(c.FinalValuationAmount),
-                    c.FinalValuationAmount,
+                    IS_DEFINED(c.QualityControl) AND NOT IS_NULL(c.QualityControl) AND IS_DEFINED(c.QualityControl.ValuationAmount) AND NOT IS_NULL(c.QualityControl.ValuationAmount) AND c.QualityControl.ValuationAmount > 0,
+                    c.QualityControl.ValuationAmount,
                     IIF(
-                        IS_DEFINED(c.ValuationResponse) AND IS_DEFINED(c.ValuationResponse.MidRange),
-                        c.ValuationResponse.MidRange,
-                        null
+                        IS_DEFINED(c.FinalValuationAmount) AND NOT IS_NULL(c.FinalValuationAmount) AND c.FinalValuationAmount > 0,
+                        c.FinalValuationAmount,
+                        IIF(
+                            IS_DEFINED(c.ValuationResponse) AND NOT IS_NULL(c.ValuationResponse) AND IS_DEFINED(c.ValuationResponse.MidRange) AND NOT IS_NULL(c.ValuationResponse.MidRange) AND c.ValuationResponse.MidRange > 0,
+                            c.ValuationResponse.MidRange,
+                            null
+                        )
                     )
                 ) AS ValuationAmount";
+
+            string excludeClause = string.IsNullOrWhiteSpace(excludeId) ? "" : "AND c.id != @excludeId";
 
             // ================= VEHICLE NUMBER =================
             if (vehicleNumber != null)
             {
                 var vehicleQuery = new QueryDefinition($@"
-                    SELECT 
+                    SELECT
                         c.id,
                         c.VehicleNumber,
                         c.VehicleDetails.EngineNumber AS EngineNumber,
@@ -776,7 +814,9 @@ public class ValuationService : IValuationService
                     FROM c
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND UPPER(c.VehicleNumber) = @vehicleNumber
+                    {excludeClause}
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
+                if (!string.IsNullOrWhiteSpace(excludeId)) vehicleQuery = vehicleQuery.WithParameter("@excludeId", excludeId);
 
                 await ExecuteQuery(vehicleQuery, "Vehicle Number");
             }
@@ -785,7 +825,7 @@ public class ValuationService : IValuationService
             if (engineNumber != null)
             {
                 var engineQuery = new QueryDefinition($@"
-                    SELECT 
+                    SELECT
                         c.id,
                         c.VehicleNumber,
                         c.VehicleDetails.EngineNumber AS EngineNumber,
@@ -798,7 +838,9 @@ public class ValuationService : IValuationService
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.EngineNumber)
                     AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
+                    {excludeClause}
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
+                if (!string.IsNullOrWhiteSpace(excludeId)) engineQuery = engineQuery.WithParameter("@excludeId", excludeId);
 
                 await ExecuteQuery(engineQuery, "Engine Number");
             }
@@ -807,7 +849,7 @@ public class ValuationService : IValuationService
             if (chassisNumber != null)
             {
                 var chassisQuery = new QueryDefinition($@"
-                    SELECT 
+                    SELECT
                         c.id,
                         c.VehicleNumber,
                         c.VehicleDetails.EngineNumber AS EngineNumber,
@@ -820,7 +862,9 @@ public class ValuationService : IValuationService
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
                     AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
+                    {excludeClause}
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
+                if (!string.IsNullOrWhiteSpace(excludeId)) chassisQuery = chassisQuery.WithParameter("@excludeId", excludeId);
 
                 await ExecuteQuery(chassisQuery, "Chassis Number");
             }

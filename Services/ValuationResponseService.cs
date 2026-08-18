@@ -2,6 +2,7 @@
 using System.Net;
 using Microsoft.Azure.Cosmos;
 using Valuation.Api.Models;
+using Valuation.Api.Services;
 
 namespace Valuation.Api.Services
 {
@@ -37,7 +38,28 @@ namespace Valuation.Api.Services
                     id: valuationId,
                     partitionKey: pk);
 
-                return response.Resource.ValuationResponse;
+                var doc = response.Resource;
+                var vr = doc.ValuationResponse;
+
+                // Heal records where ranges were stored as 0 but RawResponse exists
+                if (vr != null
+                    && !string.IsNullOrWhiteSpace(vr.RawResponse)
+                    && (vr.LowRange == null || vr.LowRange == 0)
+                    && (vr.MidRange == null || vr.MidRange == 0)
+                    && (vr.HighRange == null || vr.HighRange == 0))
+                {
+                    var parsed = VehicleValuationParser.ParseRanges(vr.RawResponse);
+                    if (parsed.LowRange != 0 || parsed.MidRange != 0 || parsed.HighRange != 0)
+                    {
+                        vr.LowRange  = parsed.LowRange;
+                        vr.MidRange  = parsed.MidRange;
+                        vr.HighRange = parsed.HighRange;
+                        doc.ValuationResponse = vr;
+                        await _container.UpsertItemAsync(doc, pk);
+                    }
+                }
+
+                return vr;
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
             {

@@ -1,3 +1,6 @@
+# Claude Code working directory
+.claude/
+
 # .NET Core specific
 bin/
 obj/

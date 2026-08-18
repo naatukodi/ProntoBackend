@@ -15,6 +15,20 @@ public class UserController : ControllerBase
         _roleService = roleService;
     }
 
+    // Camera-app agency login: validates UserId + Password against the Users table
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] AgencyLoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.UserId) || string.IsNullOrWhiteSpace(request?.Password))
+            return BadRequest("UserId and Password are required.");
+
+        var user = await _roleService.ValidateAgencyLoginAsync(request.UserId.Trim(), request.Password);
+        if (user == null)
+            return Unauthorized(new { message = "Invalid user id or password." });
+
+        return Ok(user);
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateUser([FromBody] UserModel model)
     {
