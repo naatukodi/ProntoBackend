@@ -16,13 +16,17 @@ namespace Valuation.Api.Services
         private readonly string _blobContainerName;
 
         private readonly IWorkflowTableService _workflowTableService;
+        // Company this request belongs to; stamped onto any case created here.
+        private readonly IBrandContext _brand;
 
         public GetInspectionService(
             CosmosClient cosmos,
             BlobServiceClient blobService,
             IConfiguration configuration,
-            IWorkflowTableService workflowTableService)
+            IWorkflowTableService workflowTableService,
+            IBrandContext brand)
         {
+            _brand = brand;
             _cosmos = cosmos;
             _blobService = blobService;
             _dbId = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
@@ -75,6 +79,7 @@ namespace Valuation.Api.Services
             {
                 doc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = id,
                     CompositeKey = compositeKey,
                     VehicleNumber = vehicleNumber,
@@ -415,6 +420,7 @@ namespace Valuation.Api.Services
                 // If not found, create a new document
                 var newDoc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = valuationId,
                     CompositeKey = $"{vehicleNumber}|{applicantContact}",
                     VehicleNumber = vehicleNumber,

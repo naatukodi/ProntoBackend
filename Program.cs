@@ -114,6 +114,10 @@ builder.Services.AddSingleton(_ => new BlobServiceClient(blobConn));
 builder.Services.AddSingleton(_ => new BlobContainerClient(blobConn, blobContainer));
 
 // --- 6) Other app services & repositories ---
+// Which company the request belongs to. Scoped: it is derived per request.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IBrandContext, BrandContext>();
+
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
 builder.Services.AddScoped<IValuationService, ValuationService>();
 builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();

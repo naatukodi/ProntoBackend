@@ -11,8 +11,12 @@ namespace Valuation.Api.Services
         private readonly Container _container;
         private readonly IWorkflowTableService _workflowTableService;
 
-        public ValuationResponseService(CosmosClient cosmosClient, IConfiguration configuration, IWorkflowTableService workflowTableService)
+        // Company this request belongs to; stamped onto any case created here.
+        private readonly IBrandContext _brand;
+
+        public ValuationResponseService(CosmosClient cosmosClient, IConfiguration configuration, IWorkflowTableService workflowTableService, IBrandContext brand)
         {
+            _brand = brand;
             // Read database & container from environment variables or appsettings.json
             var databaseName = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
             var containerName = configuration["Cosmos:ContainerId"] ?? "Valuations";
@@ -90,6 +94,7 @@ namespace Valuation.Api.Services
                 // 2) If not found, create a fresh document shell
                 doc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = valuationId,
                     CompositeKey = $"{vehicleNumber}|{applicantContact}",
                     VehicleNumber = vehicleNumber,

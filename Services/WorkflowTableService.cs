@@ -19,8 +19,24 @@ namespace Valuation.Api.Services
         private readonly TableClient _userTableClient;
         private readonly TableClient _userRolesTableClient;
 
-        public WorkflowTableService(Microsoft.Extensions.Configuration.IConfiguration configuration)
+        // Company this request belongs to: stamped onto new workflow rows and used to
+        // narrow every case listing so Vehga and Pronto never see each other's work.
+        private readonly IBrandContext _brand;
+
+        /// <summary>
+        /// Whether a row belongs to the caller's company. Applied in code rather than in
+        /// the OData filter because Azure Table Storage cannot express "property is
+        /// missing", and every pre-multi-brand row has no Brand at all — a server-side
+        /// "Brand eq 'vehga'" would hide the entire existing case history from Vehga.
+        /// </summary>
+        private bool InBrand(WorkflowEntity e) =>
+            _brand.IsUnscoped || BrandContext.Matches(e.Brand, _brand.Current);
+
+        public WorkflowTableService(
+            Microsoft.Extensions.Configuration.IConfiguration configuration,
+            IBrandContext brand)
         {
+            _brand = brand;
             var connString = configuration.GetConnectionString("TableStorage")
                              ?? throw new InvalidOperationException("TableStorage connection string not configured.");
 
@@ -360,6 +376,7 @@ namespace Valuation.Api.Services
             {
                 entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     CreatedAt = DateTime.UtcNow
@@ -435,6 +452,8 @@ namespace Valuation.Api.Services
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: $"Status eq 'InProgress' or Status eq 'Rejected' or Status eq 'Returned'").ConfigureAwait(false))
                 {
+                    // Vehga and Pronto cases must never appear in one another's lists.
+                    if (!InBrand(entity)) continue;
                     results.Add(new WorkflowModel
                     {
                         ValuationId = entity.RowKey,
@@ -487,6 +506,8 @@ namespace Valuation.Api.Services
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: filter).ConfigureAwait(false))
                 {
+                    // Vehga and Pronto cases must never appear in one another's lists.
+                    if (!InBrand(entity)) continue;
                     results.Add(new WorkflowModel
                     {
                         ValuationId = entity.RowKey,
@@ -537,6 +558,8 @@ namespace Valuation.Api.Services
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: filter).ConfigureAwait(false))
                 {
+                    // Vehga and Pronto cases must never appear in one another's lists.
+                    if (!InBrand(entity)) continue;
                     results.Add(new WorkflowModel
                     {
                         ValuationId = entity.RowKey,
@@ -599,6 +622,7 @@ namespace Valuation.Api.Services
             {
                 var entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     VehicleNumber = vehicleNumber,
@@ -646,6 +670,7 @@ namespace Valuation.Api.Services
             {
                 var entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     VehicleNumber = VehicleNumber,
@@ -693,6 +718,7 @@ namespace Valuation.Api.Services
             {
                 var entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     VehicleNumber = VehicleNumber,
@@ -740,6 +766,7 @@ namespace Valuation.Api.Services
             {
                 var entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     VehicleNumber = VehicleNumber,
@@ -787,6 +814,7 @@ namespace Valuation.Api.Services
             {
                 var entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     VehicleNumber = VehicleNumber,
@@ -834,6 +862,7 @@ namespace Valuation.Api.Services
             {
                 var entity = new WorkflowEntity
                 {
+                    Brand = _brand.Current,
                     PartitionKey = partitionKey,
                     RowKey = rowKey,
                     VehicleNumber = VehicleNumber,
@@ -1038,6 +1067,8 @@ namespace Valuation.Api.Services
                 await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: $"AssignedToPhoneNumber eq '{phoneNumber}' and (Status eq 'InProgress' or Status eq 'Returned')").ConfigureAwait(false))
                 {
+                    // Vehga and Pronto cases must never appear in one another's lists.
+                    if (!InBrand(entity)) continue;
                     results.Add(new WorkflowModel
                     {
                         ValuationId = entity.RowKey,
@@ -1330,6 +1361,8 @@ namespace Valuation.Api.Services
             await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
                 filter: $"RowKey eq '{valuationId}'"))
             {
+                // Vehga and Pronto cases must never appear in one another's lists.
+                if (!InBrand(entity)) continue;
                 return new PaymentDto
                 {
                     ValuationId = entity.RowKey,
@@ -1372,6 +1405,8 @@ namespace Valuation.Api.Services
                 await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
                     filter: $"WorkflowStepOrder eq {userStepOrderEarly}"))
                 {
+                    // Vehga and Pronto cases must never appear in one another's lists.
+                    if (!InBrand(e)) continue;
                     var rolePhone = GetRolePhoneValue(e, role);
                     var isMine = rolePhone == phRaw || e.AssignedToPhoneNumber == phRaw;
                     var isUnclaimed = string.IsNullOrEmpty(rolePhone);
@@ -1398,6 +1433,8 @@ namespace Valuation.Api.Services
                     await foreach (var e in _tableClient.QueryAsync<WorkflowEntity>(
                         filter: $"{rolePhoneFieldEarly} eq '{ph}' and WorkflowStepOrder gt {userStepOrderEarly}"))
                     {
+                        // Vehga and Pronto cases must never appear in one another's lists.
+                        if (!InBrand(e)) continue;
                         completedCases.Add(MapWorkflowEntity(e));
                     }
                 }
@@ -1406,6 +1443,8 @@ namespace Valuation.Api.Services
                 await foreach (var e in _completedTableClient.QueryAsync<WorkflowEntity>(
                     filter: $"{rolePhoneFieldEarly} eq '{ph}'"))
                 {
+                    // Vehga and Pronto cases must never appear in one another's lists.
+                    if (!InBrand(e)) continue;
                     completedCases.Add(MapWorkflowEntity(e));
                 }
             }
@@ -1558,6 +1597,8 @@ namespace Valuation.Api.Services
 
             await foreach (var entity in _completedTableClient.QueryAsync<WorkflowEntity>())
             {
+                // Vehga and Pronto cases must never appear in one another's lists.
+                if (!InBrand(entity)) continue;
                 results.Add(new WorkflowModel
                 {
                     ValuationId = entity.RowKey,

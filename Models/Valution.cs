@@ -6,6 +6,17 @@ namespace Valuation.Api.Models
     public class ValuationDocument
     {
         public string id { get; set; } = string.Empty;
+
+        // Which company the case belongs to: "vehga" or "pronto". Stamped once at
+        // creation from the caller's brand and never changed afterwards — every case
+        // list is scoped by it, so flipping it would move a case between companies.
+        // Null on documents created before multi-brand shipped, i.e. Vehga.
+        public string? Brand { get; set; }
+
+        // Assigned by ProntoPDFGeneration on first PDF generation and persisted, so
+        // the QR code and blob path stay stable for the life of the report.
+        public string? ReferenceNumber { get; set; }
+
         public Stakeholder? Stakeholder { get; set; }
         public string? CompositeKey { get; set; }
         public string? VehicleNumber { get; set; }

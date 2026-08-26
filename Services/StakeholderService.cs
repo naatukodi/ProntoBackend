@@ -15,13 +15,17 @@ namespace Valuation.Api.Services
         private readonly BlobServiceClient _blobService;
         private readonly string _blobContainerName;
         private readonly IWorkflowTableService _workflowTableService;
+        // Company this request belongs to; stamped onto any case created here.
+        private readonly IBrandContext _brand;
 
         public StakeholderService(
             CosmosClient cosmos,
             BlobServiceClient blobService,
             IWorkflowTableService workflowTableService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IBrandContext brand)
         {
+            _brand = brand;
             _cosmos = cosmos;
             _blobService = blobService;
             _workflowTableService = workflowTableService;
@@ -101,6 +105,7 @@ namespace Valuation.Api.Services
             {
                 doc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = dto.ValuationId,
                     CompositeKey = compositeKey,
                     VehicleNumber = dto.VehicleNumber,
@@ -274,6 +279,7 @@ namespace Valuation.Api.Services
                 // If not found, create a new document
                 doc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = valuationId,
                     CompositeKey = compositeKey,
                     VehicleNumber = vehicleNumber,

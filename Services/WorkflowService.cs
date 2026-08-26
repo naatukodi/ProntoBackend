@@ -1,4 +1,5 @@
 // Services/WorkflowService.cs
+using Valuation.Api.Services;
 using Microsoft.Azure.Cosmos;
 using System;
 using System.Collections.Generic;
@@ -11,8 +12,12 @@ using Valuation.Api.Models;
 public class WorkflowService : IWorkflowService
 {
     private readonly Container _container;
-    public WorkflowService(CosmosClient client, IConfiguration cfg)
+    // Company this request belongs to; case listings are narrowed to it.
+    private readonly IBrandContext _brand;
+
+    public WorkflowService(CosmosClient client, IConfiguration cfg, IBrandContext brand)
     {
+        _brand = brand;
         _container = client
            .GetDatabase(cfg["Cosmos:DatabaseId"])
            .GetContainer(cfg["Cosmos:ContainerId"]);
@@ -134,12 +139,15 @@ public class WorkflowService : IWorkflowService
     {
         var results = new List<WorkflowModel>();
 
-        var query = new Microsoft.Azure.Cosmos.QueryDefinition(
-            "SELECT * FROM c WHERE EXISTS(" +
-            "SELECT VALUE wf FROM wf IN c.Workflow " +
-            "WHERE wf.StepOrder = 5 AND wf.Status = 'Completed'" +
-            ")"
-        );
+        // Vehga and Pronto cases must never appear in one another's lists.
+        var sql = "SELECT * FROM c WHERE EXISTS(" +
+                  "SELECT VALUE wf FROM wf IN c.Workflow " +
+                  "WHERE wf.StepOrder = 5 AND wf.Status = 'Completed'" +
+                  ")";
+        if (!_brand.IsUnscoped) sql += $" AND {BrandContext.SqlFilter}";
+
+        var query = new Microsoft.Azure.Cosmos.QueryDefinition(sql);
+        if (!_brand.IsUnscoped) query = query.WithParameter(BrandContext.SqlParam, _brand.Current);
 
         using var iter = _container.GetItemQueryIterator<Valuation.Api.Models.ValuationDocument>(query);
         while (iter.HasMoreResults)
