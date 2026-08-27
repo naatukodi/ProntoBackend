@@ -12,8 +12,12 @@ namespace Valuation.Api.Services
         private readonly TableClient? _workflowsTable;
         private readonly TableClient? _completedWorkflowsTable;
 
-        public MisService(CosmosClient client, IConfiguration cfg)
+        // Company this request belongs to; the MIS report is narrowed to it.
+        private readonly IBrandContext _brand;
+
+        public MisService(CosmosClient client, IConfiguration cfg, IBrandContext brand)
         {
+            _brand = brand;
             _container = client
                 .GetDatabase(cfg["Cosmos:DatabaseId"] ?? "ValuationsDb")
                 .GetContainer(cfg["Cosmos:ContainerId"] ?? "Valuations");
@@ -93,10 +97,13 @@ namespace Valuation.Api.Services
             var sql = "SELECT * FROM c WHERE 1=1";
             if (from.HasValue) sql += " AND c.CreatedAt >= @from";
             if (to.HasValue) sql += " AND c.CreatedAt <= @to";
+            // One company's MIS must never include the other's cases.
+            if (!_brand.IsUnscoped) sql += $" AND {BrandContext.SqlFilter}";
 
             var qd = new QueryDefinition(sql);
             if (from.HasValue) qd = qd.WithParameter("@from", from.Value);
             if (to.HasValue) qd = qd.WithParameter("@to", to.Value);
+            if (!_brand.IsUnscoped) qd = qd.WithParameter(BrandContext.SqlParam, _brand.Current);
 
             var payments = await LoadPaymentsAsync();
             var rows = new List<MisRowDto>();

@@ -16,13 +16,17 @@ namespace Valuation.Api.Services
         private readonly string _databaseName;
         private readonly string _containerName;
         private readonly string _cdnEndpoint;
+        // Company this request belongs to; stamped onto any case created here.
+        private readonly IBrandContext _brand;
 
         public VehiclePhotoService(
             CosmosClient cosmosClient,
             BlobServiceClient blobServiceClient,
             IHttpClientFactory httpClientFactory,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IBrandContext brand)
         {
+            _brand = brand;
             _cosmosClient = cosmosClient;
             _blobServiceClient = blobServiceClient;
             _httpClientFactory = httpClientFactory;
@@ -91,6 +95,7 @@ namespace Valuation.Api.Services
             {
                 doc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = dto.ValuationId,
                     CompositeKey = compositeKey,
                     VehicleNumber = dto.VehicleNumber,

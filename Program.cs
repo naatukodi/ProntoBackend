@@ -114,6 +114,10 @@ builder.Services.AddSingleton(_ => new BlobServiceClient(blobConn));
 builder.Services.AddSingleton(_ => new BlobContainerClient(blobConn, blobContainer));
 
 // --- 6) Other app services & repositories ---
+// Which company the request belongs to. Scoped: it is derived per request.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IBrandContext, BrandContext>();
+
 builder.Services.AddScoped<IStakeholderService, StakeholderService>();
 builder.Services.AddScoped<IValuationService, ValuationService>();
 builder.Services.AddScoped<IGetInspectionService, GetInspectionService>();
@@ -126,6 +130,9 @@ builder.Services.AddHttpClient(nameof(PincodeTableService));
 builder.Services.AddSingleton<IPincodeTableService, PincodeTableService>();
 
 builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
+
+// Reads a case's inspection photos and turns them into QC checklist verdicts.
+builder.Services.AddScoped<IQcVisionAuditService, QcVisionAuditService>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();

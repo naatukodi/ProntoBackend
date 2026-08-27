@@ -29,6 +29,14 @@ namespace Valuation.Api.Models
         public string? District { get; set; } = default!;
 
         public string? AssignedToRole { get; set; } = default!;
+
+        // Company this case belongs to: "vehga" or "pronto". Mirrors ValuationDocument.Brand
+        // in Cosmos — the case document lives there, but the operational lists the dashboard
+        // renders come from this table, so the brand has to exist in both.
+        // Null on every row written before multi-brand, which is Vehga by definition.
+        // Note Azure Table filters cannot test for a missing property, so brand filtering
+        // happens in code after the query rather than in the OData filter string.
+        public string? Brand { get; set; }
         public string? CompletedBy { get; set; } = default!;
         public string? CreatedBy { get; set; } = default!;
         public string? AssignedToPhoneNumber { get; set; }

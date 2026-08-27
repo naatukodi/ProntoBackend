@@ -31,6 +31,12 @@ namespace Valuation.Api.Models
         public string? assignedStates { get; set; } // Comma-separated list of state keys
         public string? assignedDistricts { get; set; } // Comma-separated list of district keys
 
+        // Which companies this user may work for, comma-separated ("vehga", "pronto"),
+        // following the same convention as assignedStates. Empty/null means Vehga only,
+        // which is every user that predates multi-brand. The login brand picker offers
+        // exactly these, and a user with one entry never sees the picker.
+        public string? AllowedBrands { get; set; }
+
         // Credential for camera-app agency login
         public string? Password { get; set; }
 

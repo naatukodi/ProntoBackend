@@ -24,14 +24,18 @@ public class ValuationService : IValuationService
     private readonly string _surepassUrl;
     private readonly string _surepassToken;
     private readonly IWorkflowTableService _workflowTableService;
+    // Company this request belongs to; stamped onto any case created here.
+    private readonly IBrandContext _brand;
 
     public ValuationService(
         CosmosClient cosmos,
         BlobServiceClient blobService,
         IConfiguration configuration,
         IWorkflowTableService workflowTableService,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        IBrandContext brand)
     {
+        _brand = brand;
         _cosmos = cosmos;
         _blobService = blobService;
         _dbId = configuration["Cosmos:DatabaseId"] ?? "ValuationsDb";
@@ -281,6 +285,7 @@ public class ValuationService : IValuationService
             {
                 doc = new ValuationDocument
                 {
+                    Brand = _brand.Current,
                     id = valuationId,
                     CompositeKey = $"{vehicleNumber}|{applicantContact}",
                     VehicleNumber = vehicleNumber,
@@ -466,7 +471,11 @@ public class ValuationService : IValuationService
                 ) AS inProgressWorkflow
             FROM c
             WHERE c.Status = 'Open'
-        ");
+        " + (_brand.IsUnscoped ? "" : $" AND {BrandContext.SqlFilter}"));
+
+        // Open cases are the main dashboard list — the one place the two companies
+        // would most visibly bleed into each other.
+        if (!_brand.IsUnscoped) query = query.WithParameter(BrandContext.SqlParam, _brand.Current);
 
         var result = new List<OpenValuationDto>();
         using var iterator = Container.GetItemQueryIterator<OpenValuationDto>(query);
@@ -626,6 +635,7 @@ public class ValuationService : IValuationService
             // If not found, create a new document
             doc = new ValuationDocument
             {
+                Brand = _brand.Current,
                 id = valuationId,
                 CompositeKey = compositeKey,
                 VehicleNumber = vehicleNumber,
@@ -798,6 +808,14 @@ public class ValuationService : IValuationService
 
             string excludeClause = string.IsNullOrWhiteSpace(excludeId) ? "" : "AND c.id != @excludeId";
 
+            // Duplicate detection is per-company. The same vehicle legitimately has a case
+            // in both Vehga and Pronto, and without this a Pronto case is flagged as a
+            // duplicate of a Vehga one and surfaces in the other company's dedupe list.
+            string brandClause = _brand.IsUnscoped ? "" : $"AND {BrandContext.SqlFilter}";
+
+            QueryDefinition WithBrand(QueryDefinition q) =>
+                _brand.IsUnscoped ? q : q.WithParameter(BrandContext.SqlParam, _brand.Current);
+
             // ================= VEHICLE NUMBER =================
             if (vehicleNumber != null)
             {
@@ -814,10 +832,12 @@ public class ValuationService : IValuationService
                     FROM c
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND UPPER(c.VehicleNumber) = @vehicleNumber
-                    {excludeClause}
+                    {brandClause}
+                {excludeClause}
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
                 if (!string.IsNullOrWhiteSpace(excludeId)) vehicleQuery = vehicleQuery.WithParameter("@excludeId", excludeId);
 
+                vehicleQuery = WithBrand(vehicleQuery);
                 await ExecuteQuery(vehicleQuery, "Vehicle Number");
             }
 
@@ -838,10 +858,12 @@ public class ValuationService : IValuationService
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.EngineNumber)
                     AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
-                    {excludeClause}
+                    {brandClause}
+                {excludeClause}
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
                 if (!string.IsNullOrWhiteSpace(excludeId)) engineQuery = engineQuery.WithParameter("@excludeId", excludeId);
 
+                engineQuery = WithBrand(engineQuery);
                 await ExecuteQuery(engineQuery, "Engine Number");
             }
 
@@ -862,10 +884,12 @@ public class ValuationService : IValuationService
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
                     AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
-                    {excludeClause}
+                    {brandClause}
+                {excludeClause}
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
                 if (!string.IsNullOrWhiteSpace(excludeId)) chassisQuery = chassisQuery.WithParameter("@excludeId", excludeId);
 
+                chassisQuery = WithBrand(chassisQuery);
                 await ExecuteQuery(chassisQuery, "Chassis Number");
             }
 
