@@ -130,6 +130,9 @@ builder.Services.AddHttpClient(nameof(PincodeTableService));
 builder.Services.AddSingleton<IPincodeTableService, PincodeTableService>();
 
 builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
+
+// Reads a case's inspection photos and turns them into QC checklist verdicts.
+builder.Services.AddScoped<IQcVisionAuditService, QcVisionAuditService>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();

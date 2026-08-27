@@ -28,6 +28,10 @@ namespace Valuation.Api.Models
         public DateTime UpdatedAt { get; set; }
         public InspectionDetails? InspectionDetails { get; set; }
         public QualityControl? QualityControl { get; set; }
+
+        // What the photo reader found, kept so opening a case does not pay for the
+        // same reading twice. Re-read only when the photo set itself changes.
+        public QcAiAuditRecord? QcAiAudit { get; set; }
         public ValuationResponse? ValuationResponse { get; set; }
         
         public Dictionary<string, string> PhotoUrls { get; set; } = new();
