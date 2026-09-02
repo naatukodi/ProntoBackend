@@ -107,6 +107,39 @@ namespace Valuation.Api.Controllers
         }
 
         /// <summary>
+        /// Runs the duplicate check for one case and records the outcome on it.
+        ///
+        /// Same query as check-duplicate, but keyed to a case: engine and chassis
+        /// are read server-side from the case itself, so the caller needs one
+        /// request rather than two, and the result is stored so the printed
+        /// report can state what was found.
+        /// </summary>
+        [HttpPost("{valuationId:guid}/dedupe")]
+        public async Task<ActionResult<VehicleDuplicateCheckResponse>> RunDedupe(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact)
+        {
+            if (string.IsNullOrWhiteSpace(vehicleNumber) || string.IsNullOrWhiteSpace(applicantContact))
+                return BadRequest(new { message = "vehicleNumber and applicantContact are required." });
+
+            try
+            {
+                var result = await _svc.RunAndStoreDedupeAsync(
+                    valuationId.ToString(), vehicleNumber, applicantContact);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "An error occurred while checking for duplicates",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
         /// Check if vehicle number, engine number, or chassis number already exists in the system
         /// Used before registering a new case to prevent duplicates
         /// </summary>

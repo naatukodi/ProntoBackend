@@ -127,6 +127,8 @@ namespace Valuation.Api.Services
                 doc.InspectionDetails.VinPlate = dto.VinPlate;
             if (dto.BodyType != null)
                 doc.InspectionDetails.BodyType = dto.BodyType;
+            if (dto.TransmissionType != null)
+                doc.InspectionDetails.TransmissionType = dto.TransmissionType;
             if (dto.OverallTyreCondition != null)
                 doc.InspectionDetails.OverallTyreCondition = dto.OverallTyreCondition;
             if (dto.OtherAccessoryFitment != null)
