@@ -1356,33 +1356,56 @@ namespace Valuation.Api.Services
             await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge);
         }
 
+        /// <summary>
+        /// Payment recorded against a case.
+        ///
+        /// Reads BOTH workflow tables. Completing step 5 moves the row out of
+        /// "Workflows" into "CompletedWorkflows" and deletes the original, so a
+        /// Workflows-only lookup reported "no payment" for every approved case —
+        /// which is precisely the point at which someone wants to check whether
+        /// the fee was collected. Live rows are checked first: a case is only in
+        /// one table at a time, and that is the common path.
+        /// </summary>
         public async Task<PaymentDto?> GetPaymentAsync(string valuationId)
         {
-            await foreach (var entity in _tableClient.QueryAsync<WorkflowEntity>(
-                filter: $"RowKey eq '{valuationId}'"))
+            var filter = $"RowKey eq '{valuationId.Replace("'", "''")}'";
+
+            foreach (var table in new[] { _tableClient, _completedTableClient })
             {
-                // Vehga and Pronto cases must never appear in one another's lists.
-                if (!InBrand(entity)) continue;
-                return new PaymentDto
+                try
                 {
-                    ValuationId = entity.RowKey,
-                    VehicleNumber = entity.VehicleNumber,
-                    ApplicantContact = entity.ApplicantContact,
-                    PaymentStatus = entity.PaymentStatus,
-                    PaymentReference = entity.PaymentReference,
-                    PaymentMethod = entity.PaymentMethod,
-                    PaymentDate = entity.PaymentDate,
-                    PaymentAmount = entity.PaymentAmount.HasValue
-                        ? (decimal)entity.PaymentAmount.Value
-                        : null,
-                    PaymentNotes = entity.PaymentNotes,
-                    SavedBy = entity.PaymentSavedBy,
-                    SavedAt = entity.PaymentSavedAt
-                };
+                    await foreach (var entity in table.QueryAsync<WorkflowEntity>(filter: filter))
+                    {
+                        // Vehga and Pronto cases must never appear in one another's lists.
+                        if (!InBrand(entity)) continue;
+                        return MapPayment(entity);
+                    }
+                }
+                catch (RequestFailedException ex) when (ex.Status == 404)
+                {
+                    // Table not created yet — try the other one rather than failing.
+                }
             }
 
             return null;
         }
+
+        private static PaymentDto MapPayment(WorkflowEntity entity) => new PaymentDto
+        {
+            ValuationId = entity.RowKey,
+            VehicleNumber = entity.VehicleNumber,
+            ApplicantContact = entity.ApplicantContact,
+            PaymentStatus = entity.PaymentStatus,
+            PaymentReference = entity.PaymentReference,
+            PaymentMethod = entity.PaymentMethod,
+            PaymentDate = entity.PaymentDate,
+            PaymentAmount = entity.PaymentAmount.HasValue
+                ? (decimal)entity.PaymentAmount.Value
+                : null,
+            PaymentNotes = entity.PaymentNotes,
+            SavedBy = entity.PaymentSavedBy,
+            SavedAt = entity.PaymentSavedAt
+        };
 
         public async Task<UserDashboardStatsDto> GetUserDashboardStatsAsync(string phoneNumber, string role)
         {

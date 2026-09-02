@@ -12,13 +12,16 @@ namespace Valuation.Api.Repositories
         private readonly string? _openAiApiKey;
         private readonly string? _googleApiKey;
         private readonly string? _googleCseId;
+        private readonly ILogger<ChatGptRepository> _logger;
         private const int MaxRetries = 5;
 
         // We now inject IConfiguration so we can read the keys from appsettings.json (or environment variables).
         public ChatGptRepository(
             IHttpClientFactory httpClientFactory,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILogger<ChatGptRepository> logger)
         {
+            _logger = logger;
             _openAiClient = httpClientFactory.CreateClient("OpenAI");
             _googleCseClient = httpClientFactory.CreateClient("GoogleCSE");
 
@@ -290,14 +293,18 @@ namespace Valuation.Api.Repositories
             var result = JsonSerializer.Deserialize<QcAiVisionResult>(text,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            // Token usage is logged so the real per-case cost is measurable instead of
-            // estimated — the first live case settles it better than any arithmetic.
+            // Token usage goes to the log, not to Observations. Observations is
+            // reviewer-facing text stored on the case and shown in the QC notes —
+            // an accounting line has no business there, and it was surfacing as
+            // "[usage] prompt=205150 …" on the QC page. Cost stays measurable.
             if (result != null && doc.RootElement.TryGetProperty("usage", out var usage))
             {
-                result.Observations.Add(
-                    $"[usage] prompt={usage.GetProperty("prompt_tokens").GetInt32()} " +
-                    $"completion={usage.GetProperty("completion_tokens").GetInt32()} " +
-                    $"images={photos.Count} closeUp={closeUpKeys.Count(k => photos.ContainsKey(k))}");
+                _logger.LogInformation(
+                    "QC photo read: prompt={Prompt} completion={Completion} images={Images} closeUp={CloseUp}",
+                    usage.GetProperty("prompt_tokens").GetInt32(),
+                    usage.GetProperty("completion_tokens").GetInt32(),
+                    photos.Count,
+                    closeUpKeys.Count(k => photos.ContainsKey(k)));
             }
 
             return result;

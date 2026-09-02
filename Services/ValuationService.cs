@@ -722,6 +722,57 @@ public class ValuationService : IValuationService
         public double? ValuationAmount { get; set; } 
     }
 
+    /// <inheritdoc />
+    public async Task<VehicleDuplicateCheckResponse> RunAndStoreDedupeAsync(
+        string valuationId, string vehicleNumber, string applicantContact)
+    {
+        var pk = GetPk(vehicleNumber, applicantContact);
+
+        ValuationDocument? doc = null;
+        try
+        {
+            var resp = await Container.ReadItemAsync<ValuationDocument>(valuationId, pk);
+            doc = resp.Resource;
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // No case yet — still answer the caller, just with nothing to store against.
+        }
+
+        var result = await CheckDuplicateVehicleAsync(
+            doc?.VehicleNumber ?? vehicleNumber,
+            doc?.VehicleDetails?.EngineNumber,
+            doc?.VehicleDetails?.ChassisNumber,
+            valuationId);
+
+        if (doc == null) return result;
+
+        doc.DedupeCheck = new DedupeCheckRecord
+        {
+            MatchCount = result.TotalDuplicatesFound,
+            MatchedOn = string.Join(", ", result.ExistingRecords
+                .SelectMany(r => (r.MatchedField ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+                .Select(f => f.Trim())
+                .Where(f => f.Length > 0)
+                .Distinct()),
+            CheckedAt = DateTime.UtcNow
+        };
+
+        try
+        {
+            await Container.PatchItemAsync<ValuationDocument>(
+                valuationId, pk,
+                new[] { PatchOperation.Set("/DedupeCheck", doc.DedupeCheck) });
+        }
+        catch (CosmosException)
+        {
+            // Storing the outcome must never fail the check the caller asked for;
+            // the next run writes it again.
+        }
+
+        return result;
+    }
+
     public async Task<VehicleDuplicateCheckResponse> CheckDuplicateVehicleAsync(
         string? vehicleNumber,
         string? engineNumber,

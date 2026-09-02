@@ -41,6 +41,10 @@ namespace Valuation.Api.Models
         // ✅ NEW: Array for dynamic custom images
         public List<SavedCustomPhoto> CustomPhotos { get; set; } = new();
 
+        // Result of the duplicate check, stored so the printed report can state it.
+        // Written whenever the case flow runs the check; null on cases that predate this.
+        public DedupeCheckRecord? DedupeCheck { get; set; }
+
         // Keys (from PhotoUrls) QC chose to include in the PDF gallery page.
         // Null/empty means "not set" — PDF generator falls back to including everything available.
         public List<string>? SelectedGalleryPhotos { get; set; }
