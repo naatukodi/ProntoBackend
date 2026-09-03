@@ -72,6 +72,21 @@ namespace Valuation.Api.Services
         /// <summary>Two photos further apart than this are not the same inspection site.</summary>
         private const double SameSiteMetres = 250;
 
+        /// <summary>
+        /// Reads currently running, by case.
+        ///
+        /// AVO submit starts a read and then sends the reviewer straight to QC, whose
+        /// page reads on open. Without this the second caller would find nothing stored
+        /// yet, start its own read of the same photos, and both would pay. Joining the
+        /// running task instead costs one call and gives both callers the same answer.
+        ///
+        /// Static because the service is scoped — a per-instance dictionary would be a
+        /// fresh empty one on every request. Process-local, so on a multi-instance
+        /// deployment two instances can still double up; that is the old behaviour, not
+        /// a regression, and it costs a duplicate call rather than a wrong answer.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<QcAiAuditDto>> InFlight = new();
+
         public QcVisionAuditService(CosmosClient cosmos, IChatGptRepository ai, IConfiguration config)
         {
             _cosmos = cosmos;
@@ -82,9 +97,33 @@ namespace Valuation.Api.Services
 
         private Container Container => _cosmos.GetDatabase(_dbId).GetContainer(_containerId);
 
-        public async Task<QcAiAuditDto> AuditAsync(string valuationId, string vehicleNumber,
-                                                   string applicantContact, bool force = false,
-                                                   CancellationToken ct = default)
+        public Task<QcAiAuditDto> AuditAsync(string valuationId, string vehicleNumber,
+                                             string applicantContact, bool force = false,
+                                             CancellationToken ct = default)
+        {
+            // One read per case at a time. A caller arriving while another is running
+            // waits for that one rather than starting a second read of the same photos.
+            //
+            // The shared read deliberately ignores the caller's cancellation token: it
+            // is shared, so the first caller giving up — the AVO officer's browser
+            // moving on to QC — must not abort the read the next caller is waiting on.
+            // An abandoned read still finishes and stores its answer, which is the
+            // point of starting it early.
+            var key = $"{valuationId}|{vehicleNumber}|{applicantContact}";
+            var task = InFlight.GetOrAdd(key, _ =>
+                RunAuditAsync(valuationId, vehicleNumber, applicantContact, force, CancellationToken.None));
+            return AwaitAndRelease(key, task);
+        }
+
+        private static async Task<QcAiAuditDto> AwaitAndRelease(string key, Task<QcAiAuditDto> task)
+        {
+            try { return await task; }
+            finally { InFlight.TryRemove(key, out _); }
+        }
+
+        private async Task<QcAiAuditDto> RunAuditAsync(string valuationId, string vehicleNumber,
+                                                       string applicantContact, bool force,
+                                                       CancellationToken ct)
         {
             var outp = new QcAiAuditDto();
 
