@@ -25,5 +25,12 @@ namespace Valuation.Api.Models
         public string? District { get; set; } = default!;
         public string? Name { get; set; } = default!;
         public string? ValuationType { get; set; } = default!;
+
+        // Company the case belongs to, carried straight from WorkflowEntity.Brand.
+        // The camera app has no brand of its own: it looks a vehicle number up in the
+        // unscoped open-case list and takes the brand from whichever case comes back,
+        // so this is how a capture ends up filed under the right company.
+        // Null on rows written before multi-brand, which is Vehga by definition.
+        public string? Brand { get; set; }
     }
 }

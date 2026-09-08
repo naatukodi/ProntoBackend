@@ -475,7 +475,8 @@ namespace Valuation.Api.Services
                         AssignedToEmail = entity.AssignedToEmail,
                         AssignedToWhatsapp = entity.AssignedToWhatsapp,
                         Name = entity.Name,
-                        ValuationType = entity.ValuationType
+                        ValuationType = entity.ValuationType,
+                        Brand = entity.Brand
                     });
                 }
             }
@@ -527,7 +528,8 @@ namespace Valuation.Api.Services
                         AssignedToEmail = entity.AssignedToEmail,
                         AssignedToWhatsapp = entity.AssignedToWhatsapp,
                         Name = entity.Name,
-                        ValuationType = entity.ValuationType
+                        ValuationType = entity.ValuationType,
+                        Brand = entity.Brand
                     });
                 }
             }
@@ -579,7 +581,8 @@ namespace Valuation.Api.Services
                         AssignedToEmail = entity.AssignedToEmail,
                         AssignedToWhatsapp = entity.AssignedToWhatsapp,
                         Name = entity.Name,
-                        ValuationType = entity.ValuationType
+                        ValuationType = entity.ValuationType,
+                        Brand = entity.Brand
                     });
                 }
             }
@@ -958,7 +961,8 @@ namespace Valuation.Api.Services
                     AssignedToEmail = e.AssignedToEmail,
                     AssignedToWhatsapp = e.AssignedToWhatsapp,
                     Name = e.Name,
-                    ValuationType = e.ValuationType
+                    ValuationType = e.ValuationType,
+                    Brand = e.Brand
                 };
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
@@ -989,7 +993,8 @@ namespace Valuation.Api.Services
                         AssignedToEmail = e.AssignedToEmail,
                         AssignedToWhatsapp = e.AssignedToWhatsapp,
                         Name = e.Name,
-                        ValuationType = e.ValuationType
+                        ValuationType = e.ValuationType,
+                        Brand = e.Brand
                     };
                 }
                 catch (RequestFailedException ex2) when (ex2.Status == 404)
@@ -1088,7 +1093,8 @@ namespace Valuation.Api.Services
                         AssignedToEmail = entity.AssignedToEmail,
                         AssignedToWhatsapp = entity.AssignedToWhatsapp,
                         Name = entity.Name,
-                        ValuationType = entity.ValuationType
+                        ValuationType = entity.ValuationType,
+                        Brand = entity.Brand
                     });
                 }
             }
@@ -1551,7 +1557,8 @@ namespace Valuation.Api.Services
             AssignedToEmail       = e.AssignedToEmail,
             AssignedToWhatsapp    = e.AssignedToWhatsapp,
             Name                  = e.Name,
-            ValuationType         = e.ValuationType
+            ValuationType         = e.ValuationType,
+            Brand                 = e.Brand
         };
 
         /// <summary>
@@ -1641,7 +1648,8 @@ namespace Valuation.Api.Services
                     AssignedToEmail = entity.AssignedToEmail,
                     AssignedToWhatsapp = entity.AssignedToWhatsapp,
                     Name = entity.Name,
-                    ValuationType = entity.ValuationType
+                    ValuationType = entity.ValuationType,
+                    Brand = entity.Brand
                 });
             }
 
