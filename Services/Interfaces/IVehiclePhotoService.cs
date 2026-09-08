@@ -29,5 +29,17 @@ namespace Valuation.Api.Services
 
         // Burns a text note onto an already-uploaded photo and replaces it in place.
         Task<(string PhotoUrl, string Note)> AnnotatePhotoAsync(string valuationId, string vehicleNumber, string applicantContact, string photoKey, string note);
+
+        // Stamps (or removes) the case's own company wordmark on every photo. The brand
+        // comes from the case, not the caller, and photos already in the requested state
+        // are skipped, so this is safe to run again after more photos arrive.
+        Task<BrandLogoResult> ApplyBrandLogoAsync(string valuationId, string vehicleNumber, string applicantContact, bool apply);
+
+        // Every photo on the case, named for the .zip. Null means the case does not exist,
+        // which the caller must answer before a single archive byte is on the wire.
+        Task<List<PhotoArchiveEntry>?> GetPhotoArchiveEntriesAsync(string valuationId, string vehicleNumber, string applicantContact);
+
+        // Fetches those photos and writes them into destination as a .zip.
+        Task WritePhotoArchiveAsync(IReadOnlyList<PhotoArchiveEntry> entries, Stream destination, CancellationToken ct = default);
     }
 }

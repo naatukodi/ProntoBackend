@@ -12,6 +12,13 @@
 
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'https' " />
   <PropertyGroup Condition=" '$(RunConfiguration)' == 'http' " />
+
+  <ItemGroup>
+    <!-- Company wordmarks stamped onto inspection photos at the AVO stage. The camera
+         app captures without a logo because a case's company is not known at capture
+         time, so the mark is burned on here instead. Same files the report PDF uses. -->
+    <Content Include="png\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Azure.Data.Tables" Version="12.11.0" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.24.0" />
