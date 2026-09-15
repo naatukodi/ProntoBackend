@@ -10,7 +10,7 @@ namespace Valuation.Api.Repositories
         /// </summary>
         string ModelName { get; }
 
-        Task<string> GetVehicleValuationAsync(VehicleDetailsAIDto details);
+        Task<VehicleValuationAi?> GetVehicleValuationAsync(VehicleDetailsAIDto details);
 
         /// <summary>
         /// Single-paragraph market valuation for the "Instant AI Value" screen.

@@ -43,16 +43,24 @@ namespace Valuation.Api.Repositories
         /// <inheritdoc />
         public string ModelName => Model;
 
-        public async Task<string> GetVehicleValuationAsync(VehicleDetailsAIDto d)
+        public async Task<VehicleValuationAi?> GetVehicleValuationAsync(VehicleDetailsAIDto d)
         {
-            // 1) Build system prompt
+            // 1) Build system prompt.
+            //    Whole rupees as integers, deliberately: asking for "₹7.5 L" put a
+            //    lakh/crore abbreviation between the model and the number, which then had
+            //    to be parsed back. Structured output removes the parsing step entirely.
             var system = new
             {
                 role = "system",
                 content =
                     "You are a vehicle-valuation assistant for the Indian market. " +
-                    "Given vehicle details, return EXACTLY three INR price ranges: low, mid, and high, " +
-                    "each formatted like “₹7.5 L – ₹8 L”, plus a 1–2 sentence rationale for each."
+                    "Given vehicle details, return three resale price points for the Indian " +
+                    "used-vehicle market: low, mid and high. " +
+                    "Give each as a whole number of rupees, e.g. 750000 — never a lakh or " +
+                    "crore abbreviation, never a range, never a currency symbol. " +
+                    "low <= mid <= high. Add a short rationale. " +
+                    "If the details are too thin to value the vehicle, return nulls rather " +
+                    "than a guess."
             };
 
             // 2) Build a single user message embedding all fields
@@ -78,13 +86,26 @@ namespace Valuation.Api.Repositories
                 content = userSb.ToString()
             };
 
-            // 3) Assemble request
+            // 3) Assemble request.
+            //    temperature 0 because this is a lookup, not a composition, and 200 tokens
+            //    used to truncate the answer mid-sentence — which the old regex then read
+            //    as "no ranges found" and stored as three zeros.
             var payload = new
             {
                 model = Model,
                 messages = new[] { system, user },
-                temperature = 0.2,
-                max_tokens = 200   // adjust upward if you need longer rationale
+                temperature = 0,
+                max_tokens = 800,
+                response_format = new
+                {
+                    type = "json_schema",
+                    json_schema = new
+                    {
+                        name = "vehicle_valuation",
+                        strict = true,
+                        schema = ValuationSchema()
+                    }
+                }
             };
 
             var json = JsonSerializer.Serialize(payload);
@@ -93,12 +114,20 @@ namespace Valuation.Api.Repositories
             resp.EnsureSuccessStatusCode();
 
             var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            return doc.RootElement
-                      .GetProperty("choices")[0]
-                      .GetProperty("message")
-                      .GetProperty("content")
-                      .GetString()!
-                      .Trim();
+            var raw = doc.RootElement
+                         .GetProperty("choices")[0]
+                         .GetProperty("message")
+                         .GetProperty("content")
+                         .GetString();
+
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+
+            var parsed = JsonSerializer.Deserialize<VehicleValuationAi>(
+                raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (parsed is null) return null;
+
+            parsed.Raw = raw;
+            return parsed;
         }
 
         /// <summary>
