@@ -1,4 +1,4 @@
-namespace Valuation.Api.Models;
+﻿namespace Valuation.Api.Models;
 
 public class QualityControlDto
 {
@@ -16,4 +16,7 @@ public class QualityControlDto
 
     public Dictionary<string, string?>? QcChecklist { get; set; }
     public Dictionary<string, string?>? QcChecklistRemarks { get; set; }
+
+    /// <summary>Checklist keys the reviewer decided themselves. See QualityControl.</summary>
+    public List<string>? QcChecklistReviewerKeys { get; set; }
 }

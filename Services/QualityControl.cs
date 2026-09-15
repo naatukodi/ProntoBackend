@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using Microsoft.Azure.Cosmos;
 using Valuation.Api.Models;
 
@@ -77,6 +77,9 @@ public class QualityControlService : IQualityControlService
 
         if (dto.QcChecklistRemarks != null)
             doc.QualityControl.QcChecklistRemarks = dto.QcChecklistRemarks;
+
+        if (dto.QcChecklistReviewerKeys != null)
+            doc.QualityControl.QcChecklistReviewerKeys = dto.QcChecklistReviewerKeys;
 
         // 3) Upsert
         await Container.UpsertItemAsync(doc, pk);
