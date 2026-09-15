@@ -1,10 +1,11 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using Valuation.Api.Repositories;
 using Valuation.Api.Services;
+using Valuation.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
@@ -130,6 +131,12 @@ builder.Services.AddHttpClient(nameof(PincodeTableService));
 builder.Services.AddSingleton<IPincodeTableService, PincodeTableService>();
 
 builder.Services.AddTransient<IChatGptRepository, ChatGptRepository>();
+
+// Case lookup by reference / vehicle / chassis / engine, across closed cases too.
+builder.Services.AddScoped<ICaseSearchService, CaseSearchService>();
+
+// Assigns the human-readable case reference (VG-######-X) at registration.
+builder.Services.AddScoped<IReferenceNumberService, ReferenceNumberService>();
 
 // Reads a case's inspection photos and turns them into QC checklist verdicts.
 builder.Services.AddScoped<IQcVisionAuditService, QcVisionAuditService>();

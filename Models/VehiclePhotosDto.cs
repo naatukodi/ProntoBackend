@@ -47,4 +47,11 @@ namespace Valuation.Api.Models
     {
         public string Note { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// One file in the media archive: the name it is written under inside the .zip, the
+    /// blob it is fetched from, and whether it is the walkaround video -- which is read
+    /// as a stream rather than buffered, since it runs to 100 MB.
+    /// </summary>
+    public sealed record PhotoArchiveEntry(string FileName, string Url, bool IsVideo = false);
 }

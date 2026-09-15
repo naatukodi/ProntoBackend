@@ -1,7 +1,9 @@
-using Azure.Storage.Blobs;
+﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Azure.Cosmos;
 using SkiaSharp;
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using Valuation.Api.Models;
 
@@ -323,6 +325,16 @@ namespace Valuation.Api.Services
             return doc.SelectedGalleryPhotos;
         }
 
+        /// <summary>
+        /// Photos the company wordmark is never drawn on.
+        ///
+        /// These two are the evidence for the chassis number: the report leans on them
+        /// to show the stamping is genuine, and the QC reader judges the punch off them.
+        /// A mark laid over the characters weakens both, so they stay as captured.
+        /// </summary>
+        private static readonly HashSet<string> UnbrandedSlots =
+            new(StringComparer.OrdinalIgnoreCase) { "ChassisVerification", "ChassisStencilTrace" };
+
         // Burns a text note onto a photo, in the same "white text, dark outline, no
         // background box" style the capture-time watermark already uses. Always redraws
         // from the untouched pre-annotation original (captured once, on first use) so
@@ -362,7 +374,12 @@ namespace Valuation.Api.Services
             var httpClient = _httpClientFactory.CreateClient();
             var baseBytes = await httpClient.GetByteArrayAsync(originalUrl);
             var noteTrimmed = note?.Trim() ?? string.Empty;
-            var annotatedBytes = BurnNoteOntoImage(baseBytes, noteTrimmed);
+
+            // Redraw whatever the photo already carries alongside the new note. If the
+            // logo has been stamped, editing a note must not scrub it off.
+            var logoApplied = isFixedSlot ? fixedMeta!.LogoApplied : customMatch!.LogoApplied;
+            var annotatedBytes = ComposePhoto(
+                baseBytes, noteTrimmed, logoApplied ? BrandContext.Of(doc.Brand) : null);
 
             using var uploadStream = new MemoryStream(annotatedBytes);
             var newUrl = await UploadBytesAndGenerateUrlAsync(uploadStream, ".jpg", "image/jpeg", vehicleNumber, applicantContact);
@@ -392,21 +409,97 @@ namespace Valuation.Api.Services
             return (newUrl, noteTrimmed);
         }
 
-        // Draws white bold text with a dark stroked outline (no background box),
-        // matching the existing camera-app capture-time watermark style. Positioned
-        // bottom-right, above where the existing date/location stamp typically sits.
-        // Falls back to the untouched original if anything goes wrong.
-        private static byte[] BurnNoteOntoImage(byte[] imageBytes, string note)
+        /// <summary>
+        /// Redraws a photo from its clean original with whichever layers the case
+        /// currently wants: the AVO's note (bottom-right) and the company wordmark
+        /// (bottom-left).
+        ///
+        /// Both layers go through this one pass on purpose. They are independent
+        /// decisions over the same original, so stamping a logo has to redraw the note
+        /// and vice versa — otherwise whichever ran second would silently drop the
+        /// other. Drawing them together also means one decode and one JPEG encode, so
+        /// adding a logo to an annotated photo does not re-compress it twice.
+        ///
+        /// Returns the input untouched if there is nothing to draw or anything fails.
+        /// </summary>
+        private static byte[] ComposePhoto(byte[] originalBytes, string? note, string? logoBrand)
         {
-            if (string.IsNullOrWhiteSpace(note)) return imageBytes;
+            var hasNote = !string.IsNullOrWhiteSpace(note);
+            var hasLogo = !string.IsNullOrWhiteSpace(logoBrand);
+            if (!hasNote && !hasLogo) return originalBytes;
 
             try
             {
-                using var bitmap = SKBitmap.Decode(imageBytes);
-                if (bitmap == null) return imageBytes;
+                using var bitmap = SKBitmap.Decode(originalBytes);
+                if (bitmap == null) return originalBytes;
 
                 using var canvas = new SKCanvas(bitmap);
 
+                if (hasLogo) DrawBrandLogo(canvas, bitmap, logoBrand!);
+                if (hasNote) DrawNote(canvas, bitmap, note!);
+
+                using var image = SKImage.FromBitmap(bitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+                return data.ToArray();
+            }
+            catch
+            {
+                return originalBytes;
+            }
+        }
+
+        // Decoded wordmarks, kept for the life of the process: every photo on every case
+        // draws the same two files, and decoding a PNG per photo would dominate the cost
+        // of stamping a 28-photo case. Drawing from a bitmap only reads it.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SKBitmap?> BrandLogoCache = new();
+
+        private static SKBitmap? LoadBrandLogo(string brand) =>
+            BrandLogoCache.GetOrAdd(brand, key =>
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, "png", $"{key}-logo-trimmed.png");
+                return File.Exists(path) ? SKBitmap.Decode(path) : null;
+            });
+
+        /// <summary>
+        /// Bottom-left wordmark, in the position and proportion the camera app used to
+        /// burn in at capture time — 20% of the frame width, inset by 2%, over a white
+        /// glow so it stays legible on a dark vehicle. Reproducing it here keeps photos
+        /// taken before and after the capture-time logo was removed looking the same.
+        /// </summary>
+        private static void DrawBrandLogo(SKCanvas canvas, SKBitmap bitmap, string brand)
+        {
+            var logo = LoadBrandLogo(brand);
+            if (logo == null) return;
+
+            float pad = bitmap.Width * 0.02f;
+            float width = bitmap.Width * 0.20f;
+            float height = width * logo.Height / logo.Width;
+            var dest = SKRect.Create(pad, bitmap.Height - height - pad, width, height);
+
+            // Blur radius scales with the image so the glow reads the same on a 1920px
+            // capture and on a smaller one, rather than being a fixed pixel count.
+            float sigma = bitmap.Width * 0.003f;
+            using var glow = new SKPaint
+            {
+                IsAntialias = true,
+                ColorFilter = SKColorFilter.CreateBlendMode(SKColors.White, SKBlendMode.SrcATop),
+                ImageFilter = SKImageFilter.CreateBlur(sigma, sigma),
+            };
+            // Twice, as the camera app did: one pass is too faint to separate a dark
+            // logo from a dark photo.
+            canvas.DrawBitmap(logo, dest, glow);
+            canvas.DrawBitmap(logo, dest, glow);
+
+            using var plain = new SKPaint { IsAntialias = true };
+            canvas.DrawBitmap(logo, dest, plain);
+        }
+
+        // Draws white bold text with a dark stroked outline (no background box),
+        // matching the existing camera-app capture-time watermark style. Positioned
+        // bottom-right, above where the existing date/location stamp typically sits.
+        private static void DrawNote(SKCanvas canvas, SKBitmap bitmap, string note)
+        {
+            {
                 float textSize = bitmap.Width * 0.032f;
                 using var typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold);
 
@@ -441,14 +534,6 @@ namespace Valuation.Api.Services
 
                 canvas.DrawText(note, x, y, strokePaint);
                 canvas.DrawText(note, x, y, fillPaint);
-
-                using var image = SKImage.FromBitmap(bitmap);
-                using var data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
-                return data.ToArray();
-            }
-            catch
-            {
-                return imageBytes;
             }
         }
 
@@ -550,6 +635,341 @@ namespace Valuation.Api.Services
             {
                 return new Dictionary<string, PhotoMetadata>();
             }
+        }
+
+        // -- Company wordmark (AVO stage) ----------------------------------------
+        // The camera app captures without a logo: which company a case belongs to is
+        // only settled when its vehicle number is looked up, and an offline capture
+        // never settles it at all, so a mark burned in at capture time would be
+        // permanent and sometimes wrong. It is stamped here instead, from the case's
+        // own Brand, once the answer is certain.
+
+        // Photos redrawn at once. Serial is far too slow for a 28-photo case (each is a
+        // blob download, a composite and a blob upload); unbounded would hold the whole
+        // case in memory. Matches the archive downloader's batch size.
+        private const int LogoStampBatchSize = 4;
+
+        public async Task<BrandLogoResult> ApplyBrandLogoAsync(
+            string valuationId, string vehicleNumber, string applicantContact, bool apply)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+            var doc = response.Resource;
+
+            // The case decides the brand, not the caller. A Pronto case gets the Pronto
+            // wordmark even when a Vehga operator is the one clicking the button.
+            var brand = BrandContext.Of(doc.Brand);
+            var result = new BrandLogoResult { Brand = brand, Applied = apply };
+
+            // One work item per photo, so fixed slots and custom photos share a code path.
+            // Skipping the chassis evidence slots below, so nothing is drawn over them.
+            var targets = new List<(string Key, string Displayed, string Original, string? Note, bool LogoApplied)>();
+
+            if (doc.PhotoUrls != null)
+            {
+                doc.PhotoMetadata ??= new Dictionary<string, PhotoMetadata>();
+                foreach (var kv in doc.PhotoUrls)
+                {
+                    if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                    if (UnbrandedSlots.Contains(kv.Key)) continue;
+                    if (!doc.PhotoMetadata.TryGetValue(kv.Key, out var meta) || meta == null)
+                    {
+                        meta = new PhotoMetadata();
+                        doc.PhotoMetadata[kv.Key] = meta;
+                    }
+                    var original = !string.IsNullOrWhiteSpace(meta.OriginalPhotoUrl) ? meta.OriginalPhotoUrl! : kv.Value;
+                    targets.Add((kv.Key, kv.Value, original, meta.AnnotationNote, meta.LogoApplied));
+                }
+            }
+
+            foreach (var photo in doc.CustomPhotos ?? new List<SavedCustomPhoto>())
+            {
+                if (string.IsNullOrWhiteSpace(photo.PhotoUrl)) continue;
+                var original = !string.IsNullOrWhiteSpace(photo.OriginalPhotoUrl) ? photo.OriginalPhotoUrl! : photo.PhotoUrl;
+                targets.Add((photo.Id, photo.PhotoUrl, original, photo.AnnotationNote, photo.LogoApplied));
+            }
+
+            // Already in the requested state: nothing to redraw. This is what makes the
+            // button safe to press twice, and makes a second press after new photos
+            // arrive stamp only those.
+            var pending = targets.Where(t => t.LogoApplied != apply).ToList();
+
+            var httpClient = _httpClientFactory.CreateClient();
+            var updates = new List<(string Key, string NewUrl, string Original, string Displaced)>();
+
+            for (var i = 0; i < pending.Count; i += LogoStampBatchSize)
+            {
+                var batch = pending.Skip(i).Take(LogoStampBatchSize).ToList();
+                var done = await Task.WhenAll(batch.Select(async t =>
+                {
+                    try
+                    {
+                        var originalBytes = await httpClient.GetByteArrayAsync(t.Original);
+                        var composed = ComposePhoto(originalBytes, t.Note, apply ? brand : null);
+
+                        // Taking the logo off a photo with no note reproduces the clean
+                        // original exactly, so point back at it rather than uploading a
+                        // byte-identical copy and leaving the old one behind.
+                        if (ReferenceEquals(composed, originalBytes))
+                            return (t.Key, NewUrl: t.Original, t.Original, Displaced: t.Displayed, Ok: true);
+
+                        using var stream = new MemoryStream(composed);
+                        var newUrl = await UploadBytesAndGenerateUrlAsync(
+                            stream, ".jpg", "image/jpeg", vehicleNumber, applicantContact);
+                        return (t.Key, NewUrl: newUrl, t.Original, Displaced: t.Displayed, Ok: true);
+                    }
+                    catch
+                    {
+                        // One unreachable blob must not cost the operator the other 27.
+                        return (t.Key, NewUrl: string.Empty, t.Original, Displaced: string.Empty, Ok: false);
+                    }
+                }));
+
+                foreach (var d in done)
+                {
+                    if (!d.Ok) { result.Failed++; continue; }
+                    updates.Add((d.Key, d.NewUrl, d.Original, d.Displaced));
+                }
+            }
+
+            foreach (var (key, newUrl, original, _) in updates)
+            {
+                if (doc.PhotoUrls != null && doc.PhotoUrls.ContainsKey(key))
+                {
+                    doc.PhotoUrls[key] = newUrl;
+                    var meta = doc.PhotoMetadata![key];
+                    meta.OriginalPhotoUrl = original;
+                    meta.LogoApplied = apply;
+                }
+                else
+                {
+                    var custom = doc.CustomPhotos?.FirstOrDefault(p => p.Id == key);
+                    if (custom == null) continue;
+                    custom.PhotoUrl = newUrl;
+                    custom.OriginalPhotoUrl = original;
+                    custom.LogoApplied = apply;
+                }
+                result.PhotoUrls[key] = newUrl;
+                result.Changed++;
+            }
+
+            await container.UpsertItemAsync(doc, pk);
+
+            // Only after the document points somewhere else. Deleting first would leave
+            // the case showing a dead URL if the write failed. The clean original is
+            // never deleted — it is what every future redraw starts from.
+            foreach (var (_, newUrl, original, displaced) in updates)
+            {
+                if (string.IsNullOrWhiteSpace(displaced)) continue;
+                if (string.Equals(displaced, original, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(displaced, newUrl, StringComparison.OrdinalIgnoreCase)) continue;
+                await DeleteBlobByUrlAsync(displaced);
+            }
+
+            return result;
+        }
+
+        // -- Photo archive (bulk download) ---------------------------------------
+        // The AVO page cannot zip these in the browser: the blob container serves no
+        // CORS headers, so a fetch() from the portal is refused and <a download> is
+        // ignored cross-origin. Fetching server-side sidesteps both -- the same reason
+        // annotation composites here rather than on a canvas.
+
+        // How many photos are fetched at once. Serial fetches make a 28-photo case feel
+        // broken; unbounded ones hold the whole case in memory at once.
+        private const int ArchiveFetchBatchSize = 4;
+
+        private static readonly string[] ArchiveImageExtensions =
+            { ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".bmp", ".gif" };
+
+        private static readonly string[] ArchiveVideoExtensions =
+            { ".mp4", ".mov", ".avi", ".mkv", ".webm", ".mpeg", ".mpg" };
+
+        public async Task<List<PhotoArchiveEntry>?> GetPhotoArchiveEntriesAsync(string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            ValuationDocument doc;
+            try
+            {
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                doc = response.Resource;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            var entries = new List<PhotoArchiveEntry>();
+            var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void Add(string name, string? url, bool isVideo = false)
+            {
+                if (string.IsNullOrWhiteSpace(url)) return;
+
+                var slug = ArchiveSlug(name);
+                if (slug.Length == 0) slug = isVideo ? "video" : "photo";
+
+                var extension = ArchiveExtension(url, isVideo);
+                var fileName = slug + extension;
+                for (var n = 2; !taken.Add(fileName); n++) fileName = $"{slug}-{n}{extension}";
+
+                entries.Add(new PhotoArchiveEntry(fileName, url, isVideo));
+            }
+
+            // Fixed checklist slots. The key is the file name: "FrontLeftSide" reads as
+            // front-left-side.jpg, so there is no label table here to fall out of step
+            // with the ones the portal and the report already keep.
+            if (doc.PhotoUrls != null)
+                foreach (var kv in doc.PhotoUrls) Add(kv.Key, kv.Value);
+
+            // Extra shots the AVO added, under the name they were given.
+            if (doc.CustomPhotos != null)
+                foreach (var photo in doc.CustomPhotos)
+                    Add(string.IsNullOrWhiteSpace(photo.Name) ? photo.Id : photo.Name, photo.PhotoUrl);
+
+            // The walkaround video. It is most of the download on its own, which is why
+            // the writer streams it instead of holding it in memory like the photos.
+            if (doc.VideoUrls != null)
+                foreach (var kv in doc.VideoUrls) Add(kv.Key, kv.Value, isVideo: true);
+
+            // Alphabetical, so unzipping the same case twice puts every file in the same
+            // place.
+            entries.Sort((a, b) => string.Compare(a.FileName, b.FileName, StringComparison.OrdinalIgnoreCase));
+            return entries;
+        }
+
+        public async Task WritePhotoArchiveAsync(IReadOnlyList<PhotoArchiveEntry> entries, Stream destination, CancellationToken ct = default)
+        {
+            var httpClient = _httpClientFactory.CreateClient();
+            var skipped = new List<string>();
+
+            // Photos are small enough to fetch several at a time and hand over as bytes;
+            // videos are not, so they are streamed afterwards, one at a time. That puts
+            // the video last in the archive rather than in its sorted position, which no
+            // file manager cares about -- they all sort by name on the way out.
+            var photos = entries.Where(e => !e.IsVideo).ToList();
+            var videos = entries.Where(e => e.IsVideo).ToList();
+
+            // leaveOpen: the response body belongs to the caller. Disposal still has to
+            // happen here though -- it is what writes the zip's central directory.
+            using var archive = new ZipArchive(destination, ZipArchiveMode.Create, leaveOpen: true);
+
+            for (var i = 0; i < photos.Count; i += ArchiveFetchBatchSize)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var batch = photos.Skip(i).Take(ArchiveFetchBatchSize).ToList();
+                var downloads = await Task.WhenAll(batch.Select(async entry =>
+                {
+                    try
+                    {
+                        return (Entry: entry, Bytes: (byte[]?)await httpClient.GetByteArrayAsync(entry.Url, ct));
+                    }
+                    catch (Exception) when (!ct.IsCancellationRequested)
+                    {
+                        // One dead blob must not cost the operator the other 27 photos.
+                        return (Entry: entry, Bytes: (byte[]?)null);
+                    }
+                }));
+
+                foreach (var (entry, bytes) in downloads)
+                {
+                    if (bytes == null)
+                    {
+                        skipped.Add(entry.FileName);
+                        continue;
+                    }
+
+                    // Stored, not deflated: these are already JPEGs, so compressing them
+                    // again burns CPU on every download to save almost nothing.
+                    var zipEntry = archive.CreateEntry(entry.FileName, CompressionLevel.NoCompression);
+                    using var zipStream = zipEntry.Open();
+                    await zipStream.WriteAsync(bytes, ct);
+                }
+            }
+
+            foreach (var entry in videos)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                try
+                {
+                    // Copied through rather than buffered: a walkaround video is allowed
+                    // up to 100 MB, and holding one of those as a single byte[] per
+                    // request is how a shared API runs out of memory. The stream is
+                    // opened before the entry so a failed fetch -- which throws on the
+                    // response status, before any bytes -- leaves no half-written file.
+                    using var source = await httpClient.GetStreamAsync(entry.Url, ct);
+
+                    var zipEntry = archive.CreateEntry(entry.FileName, CompressionLevel.NoCompression);
+                    using var zipStream = zipEntry.Open();
+                    await source.CopyToAsync(zipStream, ct);
+                }
+                catch (Exception) when (!ct.IsCancellationRequested)
+                {
+                    skipped.Add(entry.FileName);
+                }
+            }
+
+            // The status code is long gone by the time a fetch fails, so a short archive
+            // says so in a file rather than arriving silently incomplete.
+            if (skipped.Count > 0)
+            {
+                var note = new StringBuilder()
+                    .AppendLine("These photos could not be downloaded and are missing from this archive:")
+                    .AppendLine();
+                foreach (var name in skipped) note.AppendLine("  " + name);
+
+                var errorEntry = archive.CreateEntry("MISSING-PHOTOS.txt", CompressionLevel.Optimal);
+                using var errorStream = errorEntry.Open();
+                await errorStream.WriteAsync(Encoding.UTF8.GetBytes(note.ToString()), ct);
+            }
+        }
+
+        /// <summary>
+        /// "FrontLeftSide" becomes "front-left-side", "Chassis imprint (rear)" becomes
+        /// "chassis-imprint-rear". Splits PascalCase so slot keys read as file names, and
+        /// drops anything a file system would rather not see.
+        /// </summary>
+        private static string ArchiveSlug(string value)
+        {
+            var sb = new StringBuilder(value.Length + 8);
+            var previous = '\0';
+
+            foreach (var ch in value)
+            {
+                if (char.IsLetterOrDigit(ch))
+                {
+                    if (char.IsUpper(ch) && sb.Length > 0 && (char.IsLower(previous) || char.IsDigit(previous)))
+                        sb.Append('-');
+                    sb.Append(char.ToLowerInvariant(ch));
+                }
+                else if (sb.Length > 0 && sb[^1] != '-')
+                {
+                    sb.Append('-');
+                }
+                previous = ch;
+            }
+
+            return sb.ToString().Trim('-');
+        }
+
+        /// <summary>
+        /// Blob names keep the extension they were uploaded with. Anything unrecognised
+        /// falls back to what that kind of capture normally is: .jpg for a photo, which is
+        /// what the camera app and the annotator both produce, and .mp4 for a video.
+        /// </summary>
+        private static string ArchiveExtension(string url, bool isVideo)
+        {
+            var path = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.AbsolutePath : url;
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+
+            var allowed = isVideo ? ArchiveVideoExtensions : ArchiveImageExtensions;
+            return allowed.Contains(extension) ? extension : (isVideo ? ".mp4" : ".jpg");
         }
     }
 }

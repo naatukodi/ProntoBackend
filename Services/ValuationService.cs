@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using System.Net;
 using Microsoft.Azure.Cosmos;
 using Microsoft.AspNetCore.Mvc;
@@ -373,7 +374,11 @@ public class ValuationService : IValuationService
             if (parts[2] == "00") parts[2] = "01";
             dateStr = string.Join("-", parts);
         }
-        return DateTime.TryParse(dateStr, out var dt) ? dt : null;
+        // Invariant culture: the server culture decides how "03-04-2026" is read, so
+        // without pinning it the same Surepass payload parses as 3 April on one host
+        // and 4 March on another.
+        return DateTime.TryParse(dateStr, CultureInfo.InvariantCulture,
+                                 DateTimeStyles.None, out var dt) ? dt : null;
     }
 
     private void MapSurepassToDto(SurepassRcData api, VehicleDetailsDto dto)
@@ -426,7 +431,11 @@ public class ValuationService : IValuationService
         dto.CategoryCode             = api.VehicleCategory;
         dto.ClassOfVehicle           = api.VehicleCategoryDescription ?? dto.ClassOfVehicle;
         dto.NormsType                = api.NormsType;
-        dto.MakerVariant             = api.Variant;
+        // Preserved rather than overwritten: Surepass frequently omits `variant`, and an
+        // unconditional assign blanked a value an earlier fetch had captured. Same shape as
+        // the core fields below. NOTE: the other assignments in this block still overwrite
+        // with null and have the same latent bug.
+        dto.MakerVariant             = api.Variant ?? dto.MakerVariant;
         dto.PollutionCertificateNumber = api.PuccNumber;
         dto.PermitType               = api.PermitType;
         dto.PermitNo                 = api.PermitNumber;
@@ -436,6 +445,9 @@ public class ValuationService : IValuationService
         // ── Boolean business logic ────────────────────────────────────────────
         // Surepass does not return a direct valid bool; use success from the wrapper (already filtered before this call)
         dto.RcStatus      = true;
+        // The status string VAHAN returned was read into the model and thrown away.
+        // Only overwrite when Surepass actually says something, as with the core fields.
+        dto.RcStatusText  = string.IsNullOrWhiteSpace(api.RcStatus) ? dto.RcStatusText : api.RcStatus!.Trim();
         dto.BacklistStatus = !string.IsNullOrWhiteSpace(api.BlacklistStatus);
 
         // ── Core fields — only overwrite if Surepass returns a value ──────────
@@ -719,7 +731,10 @@ public class ValuationService : IValuationService
         public string? Status { get; set; }
         public DateTime? CreatedAt { get; set; }
         public string? Company { get; set; }
-        public double? ValuationAmount { get; set; } 
+        // Which company the matching case belongs to. Not the same thing as Company
+        // above, which is the stakeholder's name.
+        public string? Brand { get; set; }
+        public double? ValuationAmount { get; set; }
     }
 
     /// <inheritdoc />
@@ -827,6 +842,9 @@ public class ValuationService : IValuationService
                                 CreatedDate = item.CreatedAt ?? DateTime.MinValue,
                                 MatchedField = matchedField,
                                 Company = item.Company,
+                                // Normalised here rather than in the UI: a case written
+                                // before multi-brand has no Brand at all and is Vehga.
+                                Brand = BrandContext.Of(item.Brand),
                                 ValuationAmount = item.ValuationAmount.HasValue ? (decimal)item.ValuationAmount.Value : null
                             };
                         }
@@ -859,13 +877,19 @@ public class ValuationService : IValuationService
 
             string excludeClause = string.IsNullOrWhiteSpace(excludeId) ? "" : "AND c.id != @excludeId";
 
-            // Duplicate detection is per-company. The same vehicle legitimately has a case
-            // in both Vehga and Pronto, and without this a Pronto case is flagged as a
-            // duplicate of a Vehga one and surfaces in the other company's dedupe list.
-            string brandClause = _brand.IsUnscoped ? "" : $"AND {BrandContext.SqlFilter}";
-
-            QueryDefinition WithBrand(QueryDefinition q) =>
-                _brand.IsUnscoped ? q : q.WithParameter(BrandContext.SqlParam, _brand.Current);
+            // Duplicate detection deliberately spans BOTH companies, unlike every other
+            // listing in this service.
+            //
+            // It was scoped per-company when multi-brand shipped, on the grounds that the
+            // same vehicle legitimately has a case in both. That is true, and rare — but
+            // scoping meant the report could print VERIFIED CLEAN over a vehicle with an
+            // open case at the sibling brand, which is a claim the check had not made.
+            // It also left the blind spot exactly where the risk is: a valuation shopped
+            // between the two companies is invisible to a search that only looks at one.
+            //
+            // Matches carry their Brand so the portal can say which company a case sits
+            // in. The count is not split by company: a match is a match, and the report
+            // states a number rather than accusing anyone.
 
             // ================= VEHICLE NUMBER =================
             if (vehicleNumber != null)
@@ -879,16 +903,15 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        c.Brand,
                         {valuationExpression}
                     FROM c
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND UPPER(c.VehicleNumber) = @vehicleNumber
-                    {brandClause}
                 {excludeClause}
                 ").WithParameter("@vehicleNumber", vehicleNumber.Trim().ToUpper());
                 if (!string.IsNullOrWhiteSpace(excludeId)) vehicleQuery = vehicleQuery.WithParameter("@excludeId", excludeId);
 
-                vehicleQuery = WithBrand(vehicleQuery);
                 await ExecuteQuery(vehicleQuery, "Vehicle Number");
             }
 
@@ -904,17 +927,16 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        c.Brand,
                         {valuationExpression}
                     FROM c
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.EngineNumber)
                     AND UPPER(c.VehicleDetails.EngineNumber) = @engineNumber
-                    {brandClause}
                 {excludeClause}
                 ").WithParameter("@engineNumber", engineNumber.Trim().ToUpper());
                 if (!string.IsNullOrWhiteSpace(excludeId)) engineQuery = engineQuery.WithParameter("@excludeId", excludeId);
 
-                engineQuery = WithBrand(engineQuery);
                 await ExecuteQuery(engineQuery, "Engine Number");
             }
 
@@ -930,17 +952,16 @@ public class ValuationService : IValuationService
                         c.Status,
                         c.CreatedAt,
                         IIF(IS_DEFINED(c.Stakeholder.Name), c.Stakeholder.Name, null) AS Company,
+                        c.Brand,
                         {valuationExpression}
                     FROM c
                     WHERE (NOT IS_DEFINED(c.DeletedAt) OR IS_NULL(c.DeletedAt))
                     AND IS_DEFINED(c.VehicleDetails.ChassisNumber)
                     AND UPPER(c.VehicleDetails.ChassisNumber) = @chassisNumber
-                    {brandClause}
                 {excludeClause}
                 ").WithParameter("@chassisNumber", chassisNumber.Trim().ToUpper());
                 if (!string.IsNullOrWhiteSpace(excludeId)) chassisQuery = chassisQuery.WithParameter("@excludeId", excludeId);
 
-                chassisQuery = WithBrand(chassisQuery);
                 await ExecuteQuery(chassisQuery, "Chassis Number");
             }
 

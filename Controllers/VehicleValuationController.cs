@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Valuation.Api.Models;
 using Valuation.Api.Services;
 
@@ -15,12 +15,16 @@ namespace Valuation.Api.Controllers
         public async Task<ActionResult<VehicleValuation>> Get(
             Guid id,
             [FromQuery] string vehicleNumber,
-            [FromQuery] string applicantContact)
+            [FromQuery] string applicantContact,
+            [FromQuery] bool force = false,
+            CancellationToken ct = default)
         {
-            var result = await _svc.GetVehicleValuationAsync(
+            var result = await _svc.EnsureAsync(
                 id.ToString(),
                 vehicleNumber,
-                applicantContact);
+                applicantContact,
+                force,
+                ct);
 
             if (result == null) return NotFound();
             return Ok(result);

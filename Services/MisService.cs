@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Azure.Data.Tables;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Configuration;
@@ -148,11 +148,20 @@ namespace Valuation.Api.Services
 
             var created = doc.CreatedAt;
 
-            // UNIQ ID: {segment}{clientCode}{DDMMYY of creation}{HHMM of approved time}
-            var uniq = segment
-                + ClientCode(sh?.Name)
-                + created.ToString("ddMMyy", CultureInfo.InvariantCulture)
-                + (approvedAt?.ToString("HHmm", CultureInfo.InvariantCulture) ?? "");
+            // UNIQ ID is the case reference the rest of the system quotes — VG-######-X,
+            // the same value printed on the report and shown in Workflow Status. It used
+            // to be a composite built here ({segment}{clientCode}{ddMMyy}{HHmm}) that
+            // existed nowhere else, so an MIS row could not be matched to a report.
+            //
+            // Cases from before the reference was minted at registration have none until
+            // their first PDF is generated, so the old composite remains as a fallback
+            // rather than leaving those rows blank.
+            var uniq = !string.IsNullOrWhiteSpace(doc.ReferenceNumber)
+                ? doc.ReferenceNumber!
+                : segment
+                  + ClientCode(sh?.Name)
+                  + created.ToString("ddMMyy", CultureInfo.InvariantCulture)
+                  + (approvedAt?.ToString("HHmm", CultureInfo.InvariantCulture) ?? "");
 
             // TAT: creation → approval (or "now" while open).
             var end = approvedAt ?? DateTime.UtcNow;

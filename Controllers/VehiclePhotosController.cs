@@ -1,7 +1,9 @@
-using Microsoft.AspNetCore.Http.Features;
+﻿using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Valuation.Api.Models;
 using Valuation.Api.Services;
@@ -66,6 +68,59 @@ namespace Valuation.Api.Controllers
                 applicantContact);
 
             return Ok(customPhotos);
+        }
+
+        // Streams every photo on the case, and the walkaround video, as one .zip attachment.
+        //
+        // The bytes are fetched server-side on purpose: the blob container serves no CORS
+        // headers, so the portal cannot fetch() the images to zip them in the browser, and
+        // a cross-origin <a download> is ignored -- the image would simply open in a tab.
+        // Content-Disposition on this response makes the browser save the file instead,
+        // and because that is a plain navigation it needs no CORS entry of its own.
+        [HttpGet("download")]
+        public async Task<IActionResult> DownloadPhotosArchive(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            CancellationToken ct)
+        {
+            var entries = await _photoService.GetPhotoArchiveEntriesAsync(
+                valuationId.ToString(), vehicleNumber, applicantContact);
+
+            // Both answers have to be settled before the first archive byte is written:
+            // once the body is streaming the status code is already on the wire, and a
+            // failure after that can only be reported inside the file itself.
+            if (entries == null)
+                return NotFound(new { message = "Case not found." });
+            if (entries.Count == 0)
+                return NotFound(new { message = "This case has no photos or video to download." });
+
+            var fileName = $"{ArchiveFileNamePart(vehicleNumber)}-media.zip";
+            Response.ContentType = "application/zip";
+            Response.Headers["Content-Disposition"] = $"attachment; filename=\"{fileName}\"";
+
+            // ZipArchive writes its central directory synchronously when it is disposed,
+            // and Kestrel refuses synchronous writes on a response body by default. Without
+            // this the archive streams every photo and then dies on the last few bytes with
+            // "Synchronous operations are disallowed". Scoped to this one response.
+            var bodyControl = HttpContext.Features.Get<IHttpBodyControlFeature>();
+            if (bodyControl != null) bodyControl.AllowSynchronousIO = true;
+
+            await _photoService.WritePhotoArchiveAsync(entries, Response.Body, ct);
+            return new EmptyResult();
+        }
+
+        // Keeps the download name to characters that survive a Content-Disposition header
+        // and every file system it might land on. A registration that sanitises away to
+        // nothing still yields "case-photos.zip".
+        private static string ArchiveFileNamePart(string? vehicleNumber)
+        {
+            var cleaned = new string((vehicleNumber ?? string.Empty)
+                .Select(ch => char.IsLetterOrDigit(ch) ? char.ToUpperInvariant(ch) : '-')
+                .ToArray())
+                .Trim('-');
+
+            return string.IsNullOrEmpty(cleaned) ? "case" : cleaned;
         }
 
         [HttpGet("validate")]
@@ -182,6 +237,34 @@ namespace Valuation.Api.Controllers
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // Stamps the case's company wordmark onto every photo, or takes it back off.
+        // Which company is read from the case itself, so a Pronto case gets the Pronto
+        // mark whoever presses the button. Compositing is server-side for the same
+        // reason annotation is: Azure Blob Storage serves no CORS headers, so a
+        // browser canvas drawing these images would be tainted and unreadable.
+        [HttpPut("logo")]
+        public async Task<IActionResult> ApplyBrandLogo(
+            Guid valuationId,
+            [FromQuery] string vehicleNumber,
+            [FromQuery] string applicantContact,
+            [FromBody] BrandLogoRequest? request)
+        {
+            try
+            {
+                var result = await _photoService.ApplyBrandLogoAsync(
+                    valuationId.ToString(), vehicleNumber, applicantContact, request?.Apply ?? true);
+                return Ok(result);
+            }
+            catch (Microsoft.Azure.Cosmos.CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return NotFound(new { message = "Case not found." });
             }
             catch (Exception ex)
             {
