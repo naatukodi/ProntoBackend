@@ -1,4 +1,4 @@
-using Azure.Storage.Blobs;
+﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Azure.Cosmos;
 using SkiaSharp;
@@ -324,6 +324,16 @@ namespace Valuation.Api.Services
 
             return doc.SelectedGalleryPhotos;
         }
+
+        /// <summary>
+        /// Photos the company wordmark is never drawn on.
+        ///
+        /// These two are the evidence for the chassis number: the report leans on them
+        /// to show the stamping is genuine, and the QC reader judges the punch off them.
+        /// A mark laid over the characters weakens both, so they stay as captured.
+        /// </summary>
+        private static readonly HashSet<string> UnbrandedSlots =
+            new(StringComparer.OrdinalIgnoreCase) { "ChassisVerification", "ChassisStencilTrace" };
 
         // Burns a text note onto a photo, in the same "white text, dark outline, no
         // background box" style the capture-time watermark already uses. Always redraws
@@ -654,6 +664,7 @@ namespace Valuation.Api.Services
             var result = new BrandLogoResult { Brand = brand, Applied = apply };
 
             // One work item per photo, so fixed slots and custom photos share a code path.
+            // Skipping the chassis evidence slots below, so nothing is drawn over them.
             var targets = new List<(string Key, string Displayed, string Original, string? Note, bool LogoApplied)>();
 
             if (doc.PhotoUrls != null)
@@ -662,6 +673,7 @@ namespace Valuation.Api.Services
                 foreach (var kv in doc.PhotoUrls)
                 {
                     if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                    if (UnbrandedSlots.Contains(kv.Key)) continue;
                     if (!doc.PhotoMetadata.TryGetValue(kv.Key, out var meta) || meta == null)
                     {
                         meta = new PhotoMetadata();

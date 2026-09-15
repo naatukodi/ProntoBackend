@@ -27,6 +27,14 @@ namespace Valuation.Api.Models
         // NEW FIELDS
         public string? Company { get; set; }
         public decimal? ValuationAmount { get; set; }
+
+        /// <summary>
+        /// Company the matching case belongs to, "vehga" or "pronto". Dedupe searches
+        /// across both, so a match is not necessarily in the caller's own company, and
+        /// the list has to say which. Distinct from <see cref="Company"/>, which is the
+        /// stakeholder's name. Null on cases written before multi-brand, i.e. Vehga.
+        /// </summary>
+        public string? Brand { get; set; }
     }
 }
 
