@@ -664,8 +664,11 @@ namespace Valuation.Api.Services
             var result = new BrandLogoResult { Brand = brand, Applied = apply };
 
             // One work item per photo, so fixed slots and custom photos share a code path.
-            // Skipping the chassis evidence slots below, so nothing is drawn over them.
-            var targets = new List<(string Key, string Displayed, string Original, string? Note, bool LogoApplied)>();
+            // Want is where each photo should end up: the requested state everywhere
+            // except the chassis evidence slots, which are never marked. Carrying it per
+            // photo rather than skipping those slots is what lets a case stamped before
+            // they were exempted have the mark taken back off.
+            var targets = new List<(string Key, string Displayed, string Original, string? Note, bool LogoApplied, bool Want)>();
 
             if (doc.PhotoUrls != null)
             {
@@ -673,14 +676,14 @@ namespace Valuation.Api.Services
                 foreach (var kv in doc.PhotoUrls)
                 {
                     if (string.IsNullOrWhiteSpace(kv.Value)) continue;
-                    if (UnbrandedSlots.Contains(kv.Key)) continue;
                     if (!doc.PhotoMetadata.TryGetValue(kv.Key, out var meta) || meta == null)
                     {
                         meta = new PhotoMetadata();
                         doc.PhotoMetadata[kv.Key] = meta;
                     }
                     var original = !string.IsNullOrWhiteSpace(meta.OriginalPhotoUrl) ? meta.OriginalPhotoUrl! : kv.Value;
-                    targets.Add((kv.Key, kv.Value, original, meta.AnnotationNote, meta.LogoApplied));
+                    var want = apply && !UnbrandedSlots.Contains(kv.Key);
+                    targets.Add((kv.Key, kv.Value, original, meta.AnnotationNote, meta.LogoApplied, want));
                 }
             }
 
@@ -688,16 +691,33 @@ namespace Valuation.Api.Services
             {
                 if (string.IsNullOrWhiteSpace(photo.PhotoUrl)) continue;
                 var original = !string.IsNullOrWhiteSpace(photo.OriginalPhotoUrl) ? photo.OriginalPhotoUrl! : photo.PhotoUrl;
-                targets.Add((photo.Id, photo.PhotoUrl, original, photo.AnnotationNote, photo.LogoApplied));
+                targets.Add((photo.Id, photo.PhotoUrl, original, photo.AnnotationNote, photo.LogoApplied, apply));
             }
 
+            await RedrawTargetsAsync(doc, pk, container, brand, vehicleNumber, applicantContact, targets, result);
+            return result;
+        }
+
+        /// <summary>
+        /// Redraws every photo that is not already in its wanted state, writes the case,
+        /// then drops the blobs it displaced. Shared by the AVO button and the chassis
+        /// sweep so both get the same batching, the same "compose from the clean
+        /// original" rule and the same delete-after-write ordering.
+        /// </summary>
+        private async Task RedrawTargetsAsync(
+            ValuationDocument doc, PartitionKey pk, Container container, string brand,
+            string vehicleNumber, string applicantContact,
+            List<(string Key, string Displayed, string Original, string? Note, bool LogoApplied, bool Want)> targets,
+            BrandLogoResult result)
+        {
             // Already in the requested state: nothing to redraw. This is what makes the
             // button safe to press twice, and makes a second press after new photos
             // arrive stamp only those.
-            var pending = targets.Where(t => t.LogoApplied != apply).ToList();
+            var pending = targets.Where(t => t.LogoApplied != t.Want).ToList();
+            if (pending.Count == 0) return;
 
             var httpClient = _httpClientFactory.CreateClient();
-            var updates = new List<(string Key, string NewUrl, string Original, string Displaced)>();
+            var updates = new List<(string Key, string NewUrl, string Original, string Displaced, bool Want)>();
 
             for (var i = 0; i < pending.Count; i += LogoStampBatchSize)
             {
@@ -707,41 +727,41 @@ namespace Valuation.Api.Services
                     try
                     {
                         var originalBytes = await httpClient.GetByteArrayAsync(t.Original);
-                        var composed = ComposePhoto(originalBytes, t.Note, apply ? brand : null);
+                        var composed = ComposePhoto(originalBytes, t.Note, t.Want ? brand : null);
 
                         // Taking the logo off a photo with no note reproduces the clean
                         // original exactly, so point back at it rather than uploading a
                         // byte-identical copy and leaving the old one behind.
                         if (ReferenceEquals(composed, originalBytes))
-                            return (t.Key, NewUrl: t.Original, t.Original, Displaced: t.Displayed, Ok: true);
+                            return (t.Key, NewUrl: t.Original, t.Original, Displaced: t.Displayed, t.Want, Ok: true);
 
                         using var stream = new MemoryStream(composed);
                         var newUrl = await UploadBytesAndGenerateUrlAsync(
                             stream, ".jpg", "image/jpeg", vehicleNumber, applicantContact);
-                        return (t.Key, NewUrl: newUrl, t.Original, Displaced: t.Displayed, Ok: true);
+                        return (t.Key, NewUrl: newUrl, t.Original, Displaced: t.Displayed, t.Want, Ok: true);
                     }
                     catch
                     {
                         // One unreachable blob must not cost the operator the other 27.
-                        return (t.Key, NewUrl: string.Empty, t.Original, Displaced: string.Empty, Ok: false);
+                        return (t.Key, NewUrl: string.Empty, t.Original, Displaced: string.Empty, t.Want, Ok: false);
                     }
                 }));
 
                 foreach (var d in done)
                 {
                     if (!d.Ok) { result.Failed++; continue; }
-                    updates.Add((d.Key, d.NewUrl, d.Original, d.Displaced));
+                    updates.Add((d.Key, d.NewUrl, d.Original, d.Displaced, d.Want));
                 }
             }
 
-            foreach (var (key, newUrl, original, _) in updates)
+            foreach (var (key, newUrl, original, _, want) in updates)
             {
                 if (doc.PhotoUrls != null && doc.PhotoUrls.ContainsKey(key))
                 {
                     doc.PhotoUrls[key] = newUrl;
                     var meta = doc.PhotoMetadata![key];
                     meta.OriginalPhotoUrl = original;
-                    meta.LogoApplied = apply;
+                    meta.LogoApplied = want;
                 }
                 else
                 {
@@ -749,7 +769,7 @@ namespace Valuation.Api.Services
                     if (custom == null) continue;
                     custom.PhotoUrl = newUrl;
                     custom.OriginalPhotoUrl = original;
-                    custom.LogoApplied = apply;
+                    custom.LogoApplied = want;
                 }
                 result.PhotoUrls[key] = newUrl;
                 result.Changed++;
@@ -760,15 +780,108 @@ namespace Valuation.Api.Services
             // Only after the document points somewhere else. Deleting first would leave
             // the case showing a dead URL if the write failed. The clean original is
             // never deleted — it is what every future redraw starts from.
-            foreach (var (_, newUrl, original, displaced) in updates)
+            foreach (var (_, newUrl, original, displaced, _) in updates)
             {
                 if (string.IsNullOrWhiteSpace(displaced)) continue;
                 if (string.Equals(displaced, original, StringComparison.OrdinalIgnoreCase)) continue;
                 if (string.Equals(displaced, newUrl, StringComparison.OrdinalIgnoreCase)) continue;
                 await DeleteBlobByUrlAsync(displaced);
             }
+        }
 
-            return result;
+        /// <summary>
+        /// One-shot repair: takes the company wordmark back off the chassis evidence on
+        /// every case still carrying it.
+        ///
+        /// Those two slots were exempted after cases had already been stamped, and the
+        /// exemption only stops the mark going on — a case marked before it landed would
+        /// otherwise keep the mark until someone happened to press the button on it
+        /// again. Unscoped by brand on purpose: the mark comes off by redrawing from the
+        /// clean original, so whose wordmark it was does not change the work.
+        /// </summary>
+        public async Task<UnbrandSweepResult> StripChassisWordmarkAsync(bool dryRun)
+        {
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+            var outcome = new UnbrandSweepResult { DryRun = dryRun };
+
+            // Cosmos treats a missing path as undefined rather than erroring, so a case
+            // with no metadata for these slots simply does not match.
+            var query = new QueryDefinition(@"
+                SELECT c.id, c.VehicleNumber, c.ApplicantContact
+                FROM c
+                WHERE c.PhotoMetadata.ChassisVerification.LogoApplied = true
+                   OR c.PhotoMetadata.ChassisStencilTrace.LogoApplied = true");
+
+            var cases = new List<MarkedChassisCase>();
+            using (var iterator = container.GetItemQueryIterator<MarkedChassisCase>(query))
+            {
+                while (iterator.HasMoreResults)
+                    cases.AddRange((await iterator.ReadNextAsync()).Resource);
+            }
+
+            outcome.CasesMatched = cases.Count;
+
+            foreach (var c in cases)
+            {
+                if (string.IsNullOrWhiteSpace(c.id) ||
+                    string.IsNullOrWhiteSpace(c.VehicleNumber) ||
+                    string.IsNullOrWhiteSpace(c.ApplicantContact))
+                {
+                    outcome.CasesFailed++;
+                    continue;
+                }
+
+                outcome.Vehicles.Add(c.VehicleNumber!);
+                if (dryRun) continue;
+
+                try
+                {
+                    var pk = new PartitionKey($"{c.VehicleNumber}|{c.ApplicantContact}");
+                    var doc = (await container.ReadItemAsync<ValuationDocument>(c.id!, pk)).Resource;
+                    var brand = BrandContext.Of(doc.Brand);
+                    var result = new BrandLogoResult { Brand = brand, Applied = false };
+
+                    // Only the two evidence slots. Every other photo keeps the state the
+                    // case already had it in — a sweep that also un-stamped the vehicle
+                    // shots would undo work nobody asked to undo.
+                    var targets = new List<(string Key, string Displayed, string Original, string? Note, bool LogoApplied, bool Want)>();
+                    doc.PhotoMetadata ??= new Dictionary<string, PhotoMetadata>();
+
+                    foreach (var slot in UnbrandedSlots)
+                    {
+                        if (doc.PhotoUrls == null ||
+                            !doc.PhotoUrls.TryGetValue(slot, out var displayed) ||
+                            string.IsNullOrWhiteSpace(displayed)) continue;
+                        if (!doc.PhotoMetadata.TryGetValue(slot, out var meta) || meta == null) continue;
+
+                        var original = !string.IsNullOrWhiteSpace(meta.OriginalPhotoUrl) ? meta.OriginalPhotoUrl! : displayed;
+                        targets.Add((slot, displayed, original, meta.AnnotationNote, meta.LogoApplied, false));
+                    }
+
+                    await RedrawTargetsAsync(doc, pk, container, brand,
+                        c.VehicleNumber!, c.ApplicantContact!, targets, result);
+
+                    outcome.PhotosCleared += result.Changed;
+                    outcome.PhotosFailed += result.Failed;
+                    outcome.CasesChanged++;
+                }
+                catch
+                {
+                    // One bad case must not strand the rest of the backlog. It stays
+                    // matched, so a second run picks it up again.
+                    outcome.CasesFailed++;
+                }
+            }
+
+            return outcome;
+        }
+
+        // Just enough of a case to reopen it by partition key.
+        private class MarkedChassisCase
+        {
+            public string? id { get; set; }
+            public string? VehicleNumber { get; set; }
+            public string? ApplicantContact { get; set; }
         }
 
         // -- Photo archive (bulk download) ---------------------------------------

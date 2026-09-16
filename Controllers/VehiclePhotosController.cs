@@ -272,6 +272,23 @@ namespace Valuation.Api.Controllers
             }
         }
 
+        // One-shot repair for cases stamped before the chassis slots were exempted.
+        // Off the controller's route on purpose: this one sweeps every case, so it has
+        // no valuationId to sit under. Previews by default — dryRun=false is the caller
+        // saying they have read the list of vehicles first.
+        [HttpPut("~/api/photo-maintenance/chassis-wordmark")]
+        public async Task<IActionResult> StripChassisWordmark([FromQuery] bool dryRun = true)
+        {
+            try
+            {
+                return Ok(await _photoService.StripChassisWordmarkAsync(dryRun));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpDelete]
         public async Task<IActionResult> DeletePhotos(
             Guid valuationId,

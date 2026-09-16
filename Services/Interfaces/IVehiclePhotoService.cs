@@ -35,6 +35,11 @@ namespace Valuation.Api.Services
         // are skipped, so this is safe to run again after more photos arrive.
         Task<BrandLogoResult> ApplyBrandLogoAsync(string valuationId, string vehicleNumber, string applicantContact, bool apply);
 
+        // One-shot repair across every case: takes the wordmark back off the two chassis
+        // evidence slots, which were exempted only after some cases had been stamped.
+        // dryRun reports what it would clear without writing anything.
+        Task<UnbrandSweepResult> StripChassisWordmarkAsync(bool dryRun);
+
         // Every photo on the case, named for the .zip. Null means the case does not exist,
         // which the caller must answer before a single archive byte is on the wire.
         Task<List<PhotoArchiveEntry>?> GetPhotoArchiveEntriesAsync(string valuationId, string vehicleNumber, string applicantContact);
