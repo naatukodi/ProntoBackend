@@ -7,8 +7,16 @@ namespace Valuation.Api.Models
         public string VehicleInspectedBy { get; set; } = default!;
         public DateTime? DateOfInspection { get; set; }
         public string? InspectionLocation { get; set; }
-        public bool? VehicleMoved { get; set; }
-        public bool? EngineStarted { get; set; }
+
+        /// <summary>FUNCTIONALITY answers, from the same GOOD … YES / NO list as every other
+        /// checklist item. Cases inspected before 2026-09 stored true/false, and the mobile app
+        /// still sends it, so the setter turns those into YES / NO whether they arrive from Cosmos
+        /// or from a form post — every endpoint that returns this model gets the new values.</summary>
+        public string? VehicleMoved { get => _vehicleMoved; set => _vehicleMoved = FromLegacyBool(value); }
+        public string? EngineStarted { get => _engineStarted; set => _engineStarted = FromLegacyBool(value); }
+        private string? _vehicleMoved;
+        private string? _engineStarted;
+
         public long? Odometer { get; set; }
         public bool? VinPlate { get; set; }
         public string? BodyType { get; set; }
@@ -272,6 +280,17 @@ namespace Valuation.Api.Models
         public string? DropArm { get; set; }
         public string? AttachmentHitch { get; set; }
 
+        // --- 2026-09 checklist (VEHGA_REPORT_ALL_SEGMENTS_UPDATED) ---
+        public string? FluidLeaks { get; set; }              // ENGINE CONDITION — NO is the good answer
+        public string? ClusterUnit { get; set; }             // CV, 4W, BUS
+        public string? WarningIndicatorLights { get; set; }  // CE electrical
+        // Tyre counts are typed into a number box but kept as text, like every other
+        // answer, so the registry and the scoring read all fields the same way.
+        public string? NumberOfTyres { get; set; }
+        public string? MissingTyres { get; set; }
+        public string? TestDrive { get; set; }               // 2W "Test Ride", CE "Functional Test", FE "Field Function Test"
+        public string? WarningLights { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
         public string? AssignedTo { get; set; }
@@ -279,5 +298,13 @@ namespace Valuation.Api.Models
         public string? AssignedToEmail { get; set; }
         public string? AssignedToWhatsapp { get; set; }
         public string? Remarks { get; set; }
+
+        /// <summary>A stored or posted true/false as the checklist's YES / NO; anything else unchanged.</summary>
+        private static string? FromLegacyBool(string? value) => value?.Trim().ToLowerInvariant() switch
+        {
+            "true"  => "YES",
+            "false" => "NO",
+            _       => value,
+        };
     }
 }

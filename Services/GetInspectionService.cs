@@ -372,6 +372,15 @@ namespace Valuation.Api.Services
             if (dto.DropArm != null) doc.InspectionDetails.DropArm = dto.DropArm;
             if (dto.AttachmentHitch != null) doc.InspectionDetails.AttachmentHitch = dto.AttachmentHitch;
 
+            // 2026-09 checklist
+            if (dto.FluidLeaks != null) doc.InspectionDetails.FluidLeaks = dto.FluidLeaks;
+            if (dto.ClusterUnit != null) doc.InspectionDetails.ClusterUnit = dto.ClusterUnit;
+            if (dto.WarningIndicatorLights != null) doc.InspectionDetails.WarningIndicatorLights = dto.WarningIndicatorLights;
+            if (dto.NumberOfTyres != null) doc.InspectionDetails.NumberOfTyres = dto.NumberOfTyres;
+            if (dto.MissingTyres != null) doc.InspectionDetails.MissingTyres = dto.MissingTyres;
+            if (dto.TestDrive != null) doc.InspectionDetails.TestDrive = dto.TestDrive;
+            if (dto.WarningLights != null) doc.InspectionDetails.WarningLights = dto.WarningLights;
+
             // 4) Upsert
             await container.UpsertItemAsync(doc, pk);
 
