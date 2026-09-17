@@ -8,8 +8,10 @@ namespace Valuation.Api.Models
         public string VehicleInspectedBy { get; set; } = default!;
         public DateTime? DateOfInspection { get; set; }
         public string? InspectionLocation { get; set; }
-        public bool? VehicleMoved { get; set; }
-        public bool? EngineStarted { get; set; }
+        // Text, not bool: the portal now posts YES / NO / GOOD …; older clients' "true"/"false"
+        // still bind here and InspectionDetails turns them into YES / NO.
+        public string? VehicleMoved { get; set; }
+        public string? EngineStarted { get; set; }
         public long? Odometer { get; set; }
         public bool? VinPlate { get; set; }
         public string? BodyType { get; set; }
@@ -258,6 +260,15 @@ namespace Valuation.Api.Models
         public string? AirFilter { get; set; }
         public string? DropArm { get; set; }
         public string? AttachmentHitch { get; set; }
+
+        // --- 2026-09 checklist (VEHGA_REPORT_ALL_SEGMENTS_UPDATED) ---
+        public string? FluidLeaks { get; set; }
+        public string? ClusterUnit { get; set; }
+        public string? WarningIndicatorLights { get; set; }
+        public string? NumberOfTyres { get; set; }
+        public string? MissingTyres { get; set; }
+        public string? TestDrive { get; set; }
+        public string? WarningLights { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
