@@ -83,4 +83,29 @@ namespace Valuation.Api.Models
         // New URL per photo key (fixed slot name, or custom photo id).
         public Dictionary<string, string> PhotoUrls { get; set; } = new();
     }
+
+    // Outcome of the one-shot sweep that takes the wordmark back off chassis evidence
+    // across every case still carrying it.
+    public class UnbrandSweepResult
+    {
+        // True means nothing was written: the counts below are what a real run would do.
+        public bool DryRun { get; set; }
+
+        // Cases the query found still carrying a mark on either chassis slot.
+        public int CasesMatched { get; set; }
+
+        public int CasesChanged { get; set; }
+
+        // Cases that threw partway. They stay matched, so a second run retries them.
+        public int CasesFailed { get; set; }
+
+        // Individual photos redrawn, and photos whose blob could not be read.
+        public int PhotosCleared { get; set; }
+
+        public int PhotosFailed { get; set; }
+
+        // Vehicle numbers of the matched cases, so a dry run says which cases it means
+        // rather than only how many.
+        public List<string> Vehicles { get; set; } = new();
+    }
 }

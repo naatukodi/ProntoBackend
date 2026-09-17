@@ -336,7 +336,8 @@ namespace Valuation.Api.Services
                 {
                     // A failed read must leave every check unresolved rather than passing
                     // or failing it — the reviewer needs to know nothing was verified.
-                    outp.Error = $"Photo reading failed: {ex.Message}";
+                    _logger.LogError(ex, "QC read {Case}: the identity pass failed", valuationId);
+                    outp.Error = $"Photo reading failed: {Describe(ex)}.";
                     return outp;
                 }
 
@@ -852,7 +853,7 @@ namespace Valuation.Api.Services
         /// exception. Losing the exterior band is worth far less than losing the chassis
         /// and odometer readings alongside it.
         /// </summary>
-        private static async Task<(QcAiVisionResult?, string)> TryPassAsync(
+        private async Task<(QcAiVisionResult?, string)> TryPassAsync(
             Func<Task<QcAiVisionResult?>> pass, string whatFailed)
         {
             try
@@ -865,9 +866,36 @@ namespace Valuation.Api.Services
             }
             catch (Exception ex)
             {
-                return (null, $"{whatFailed} ({ex.Message}). The other checks are unaffected.");
+                _logger.LogError(ex, "QC read: {WhatFailed}", whatFailed);
+                return (null, $"{whatFailed} ({Describe(ex)}). The other checks are unaffected.");
             }
         }
+
+        /// <summary>
+        /// Turns an upstream failure into a line a reviewer can be shown.
+        ///
+        /// The exception carries OpenAI's raw response body, and on an auth failure that
+        /// body quotes the key back with its opening and closing characters intact. A QC
+        /// screen gets screenshotted and pasted into chat, so the body belongs in the log
+        /// and only this belongs on the page. The status code is kept: it is the one part
+        /// that tells whoever gets called about it which knob to turn.
+        /// </summary>
+        private static string Describe(Exception ex) => ex switch
+        {
+            HttpRequestException { StatusCode: HttpStatusCode.Unauthorized }
+                => "the photo reader rejected our credentials (401)",
+            HttpRequestException { StatusCode: HttpStatusCode.Forbidden }
+                => "the photo reader refused the request (403)",
+            HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests }
+                => "the photo reader is rate limited (429)",
+            HttpRequestException { StatusCode: >= (HttpStatusCode)500 } h
+                => $"the photo reader is temporarily unavailable ({(int)h.StatusCode!.Value})",
+            HttpRequestException { StatusCode: not null } h
+                => $"the photo reader returned {(int)h.StatusCode!.Value}",
+            TaskCanceledException or OperationCanceledException
+                => "the photo reader timed out",
+            _ => "the photo reader could not be reached",
+        };
 
         /// <summary>
         /// Combines the three passes into the one result the checks below consume.
