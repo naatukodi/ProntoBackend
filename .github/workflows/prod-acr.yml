@@ -1,4 +1,4 @@
-name: Build and push production image to ACR
+name: Build, push and deploy production image
 
 on:
   push:
@@ -25,6 +25,13 @@ jobs:
       ACR_NAME: vehgaacr
       ACR_LOGIN_SERVER: vehgaacr.azurecr.io
       IMAGE_NAME: valuation-api
+      # The production web app. The Azure identity needs Website Contributor on it.
+      RESOURCE_GROUP: vehgaprod
+      WEBAPP_NAME: vehgaprd
+      # Client ID of the managed identity the app pulls images with (ua-id-9170).
+      PULL_IDENTITY_CLIENT_ID: 6ffe7996-2c71-4974-b985-0e1eb7b10fbb
+      # Touches Cosmos, so a 200 means the container is up and connected.
+      SMOKE_URL: https://vehgaprd-ech3ewccc8dxcgcz.centralindia-01.azurewebsites.net/api/valuations/search?q=zzhealthzz
 
     steps:
       - name: Check out repository
@@ -64,3 +71,32 @@ jobs:
             ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:prod
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The app is pinned to an exact image, so a new push changes nothing until
+      # this points it at the new tag. Every setting is passed explicitly so an
+      # update can never drop the port or the pull identity.
+      - name: Point vehgaprd at the new image
+        shell: bash
+        run: |
+          az webapp sitecontainers update \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$WEBAPP_NAME" \
+            --container-name main \
+            --image "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}" \
+            --target-port 8080 \
+            --is-main true \
+            --user-assigned-identity "$PULL_IDENTITY_CLIENT_ID" \
+            --output none
+
+      - name: Wait for vehgaprd to answer
+        shell: bash
+        run: |
+          sleep 45
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$SMOKE_URL" || true)
+            if [ "$code" = "200" ]; then echo "vehgaprd is serving (HTTP 200)"; exit 0; fi
+            echo "attempt $i: HTTP $code"
+            sleep 20
+          done
+          echo "::error::vehgaprd did not answer 200 within about 11 minutes"
+          exit 1

@@ -1,7 +1,6 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using Valuation.Api.Models;  // ← adjust to your actual models namespace
-using QuestPDF.Companion;
 
 namespace Valuation.Api.Services
 {
@@ -260,10 +259,7 @@ namespace Valuation.Api.Services
                 });
             });
 
-            // 3) Show a live preview in Companion before generating the bytes
-            document.ShowInCompanion();
-
-            // 4) Generate PDF bytes
+            // 3) Generate PDF bytes
             byte[] pdfBytes = document.GeneratePdf();
 
             return pdfBytes;
