@@ -3,10 +3,12 @@
 
 name: Build and deploy ASP.Net Core app to Azure Web App - prontobackend
 
+# prontobackend is the OLD app. Production moved to vehgaprd on 2026-09-22
+# (see prod-acr.yml, which deploys from the Prod branch), and prontobackend is
+# stopped. Deploying to it would restart it, and work saved there would be lost
+# from production, so this no longer runs on a push. Start it by hand only.
+# When the old app comes back as staging, restore the push trigger for `release`.
 on:
-  push:
-    branches:
-      - release
   workflow_dispatch:
 
 jobs:

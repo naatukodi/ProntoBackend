@@ -1,12 +1,11 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy ASP.Net Core app to Azure Web App - prontobackend
+name: Build and deploy ASP.Net Core app to Azure Web App - prontobackend (from main)
 
+# Same as release.yml: prontobackend is the OLD, stopped app. main is now only a
+# review step on the way to Prod, which deploys production (prod-acr.yml).
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
