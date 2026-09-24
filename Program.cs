@@ -51,11 +51,6 @@ builder.Services.AddHttpClient("OpenAI", client =>
     client.DefaultRequestHeaders.Accept.Add(
         new MediaTypeWithQualityHeaderValue("application/json"));
 });
-builder.Services.AddHttpClient("GoogleCSE", client =>
-{
-    client.BaseAddress = new Uri("https://www.googleapis.com/");
-    client.Timeout = TimeSpan.FromSeconds(10);
-});
 
 // --- 3) Cosmos DB setup ---
 var cosmosCfg  = builder.Configuration.GetSection("Cosmos");
