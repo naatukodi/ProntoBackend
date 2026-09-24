@@ -8,10 +8,7 @@ namespace Valuation.Api.Repositories
     public class ChatGptRepository : IChatGptRepository
     {
         private readonly HttpClient _openAiClient;
-        private readonly HttpClient _googleCseClient;
         private readonly string? _openAiApiKey;
-        private readonly string? _googleApiKey;
-        private readonly string? _googleCseId;
         private readonly ILogger<ChatGptRepository> _logger;
         private const int MaxRetries = 5;
 
@@ -23,19 +20,11 @@ namespace Valuation.Api.Repositories
         {
             _logger = logger;
             _openAiClient = httpClientFactory.CreateClient("OpenAI");
-            _googleCseClient = httpClientFactory.CreateClient("GoogleCSE");
 
             // The named client already carries the key as its Authorization header;
             // this copy only exists so a missing key can be reported as "not
             // configured" instead of coming back from OpenAI as a bare 401.
             _openAiApiKey = configuration["OpenAI:ApiKey"];
-
-            // Read Google credentials from configuration. Missing values are checked
-            // in the CSE call itself rather than here — every other feature on this
-            // repository (valuation, market value) works without them, and failing
-            // in the constructor would take those down too.
-            _googleApiKey = configuration["GoogleCSE:ApiKey"];
-            _googleCseId = configuration["GoogleCSE:CseId"];
         }
 
         private const string Model = "gpt-4o-mini";
@@ -225,56 +214,6 @@ namespace Valuation.Api.Repositories
             }
 
             return string.Empty;
-        }
-
-        /// <summary>
-        /// Calls Google Custom Search JSON API and returns up to top 3 results (title, snippet, link).
-        /// </summary>
-        private async Task<List<GoogleResult>> GetTopGoogleSnippetsAsync(VehicleDetailsAIDto details)
-        {
-            if (string.IsNullOrWhiteSpace(_googleApiKey))
-                throw new InvalidOperationException(
-                    "Missing Google API Key. Please set `GoogleCSE:ApiKey` in appsettings.json or as an environment variable.");
-            if (string.IsNullOrWhiteSpace(_googleCseId))
-                throw new InvalidOperationException(
-                    "Missing Google CSE ID. Please set `GoogleCSE:CseId` in appsettings.json or as an environment variable.");
-
-            // 1) Build a query string from VehicleDetailsAIDto
-            //    e.g. "2018 Honda City Mumbai resale value"
-            var query = $"{details.YearOfMfg} {details.Model} {details.Make} {details.Odometer}  india resale value";
-
-            // 2) Call Google CSE endpoint:
-            //    GET /customsearch/v1?key={API_KEY}&cx={CSE_ID}&q={query}&num=3
-            var requestUri = $"customsearch/v1?key={WebUtility.UrlEncode(_googleApiKey)}" +
-                             $"&cx={WebUtility.UrlEncode(_googleCseId)}" +
-                             $"&q={WebUtility.UrlEncode(query)}" +
-                             $"&num=3";
-
-            var response = await _googleCseClient.GetAsync(requestUri);
-            response.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-
-            var results = new List<GoogleResult>();
-            if (doc.RootElement.TryGetProperty("items", out var items))
-            {
-                foreach (var item in items.EnumerateArray())
-                {
-                    var title = item.GetProperty("title").GetString() ?? string.Empty;
-                    var snippet = item.GetProperty("snippet").GetString() ?? string.Empty;
-                    var link = item.GetProperty("link").GetString() ?? string.Empty;
-
-                    results.Add(new GoogleResult
-                    {
-                        Title = title,
-                        Snippet = snippet,
-                        Link = link
-                    });
-                }
-            }
-
-            return results;
         }
 
         /// <summary>
@@ -756,14 +695,5 @@ namespace Valuation.Api.Repositories
             };
         }
 
-        /// <summary>
-        /// Simple DTO for holding Google CSE output
-        /// </summary>
-        private class GoogleResult
-        {
-            public string Title { get; set; } = string.Empty;
-            public string Snippet { get; set; } = string.Empty;
-            public string Link { get; set; } = string.Empty;
-        }
     }
 }
