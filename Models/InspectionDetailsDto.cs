@@ -14,6 +14,8 @@ namespace Valuation.Api.Models
         public string? EngineStarted { get; set; }
         public long? Odometer { get; set; }
         public bool? VinPlate { get; set; }
+        public bool? Accidental { get; set; }
+        public bool? SeizedByOtherFinancier { get; set; }
         public string? BodyType { get; set; }
         /// <summary>Gearbox type as observed by the AVO — VAHAN does not return it.
         /// Printed on the report cover, which used to hard-code "MANUAL".</summary>

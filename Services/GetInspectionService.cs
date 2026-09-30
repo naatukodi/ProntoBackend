@@ -125,6 +125,10 @@ namespace Valuation.Api.Services
                 doc.InspectionDetails.Odometer = dto.Odometer;
             if (dto.VinPlate != null)
                 doc.InspectionDetails.VinPlate = dto.VinPlate;
+            if (dto.Accidental != null)
+                doc.InspectionDetails.Accidental = dto.Accidental;
+            if (dto.SeizedByOtherFinancier != null)
+                doc.InspectionDetails.SeizedByOtherFinancier = dto.SeizedByOtherFinancier;
             if (dto.BodyType != null)
                 doc.InspectionDetails.BodyType = dto.BodyType;
             if (dto.TransmissionType != null)

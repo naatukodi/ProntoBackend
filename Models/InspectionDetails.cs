@@ -19,6 +19,12 @@ namespace Valuation.Api.Models
 
         public long? Odometer { get; set; }
         public bool? VinPlate { get; set; }
+        /// <summary>Whether the vehicle has been in an accident, as the AVO found it. Printed on
+        /// the report cover beside DEDUPE; QC used to type it into REMARKS.</summary>
+        public bool? Accidental { get; set; }
+        /// <summary>Whether another finance company has seized the vehicle. Asked, and printed
+        /// on page 3, only when the client is TVS Credit.</summary>
+        public bool? SeizedByOtherFinancier { get; set; }
         public string? BodyType { get; set; }
         /// <summary>Gearbox type as observed by the AVO — VAHAN does not return it.
         /// Printed on the report cover, which used to hard-code "MANUAL".</summary>
