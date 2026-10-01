@@ -117,6 +117,10 @@ namespace Valuation.Api.Services
 
         Task CompleteWorkflowStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
 
+        /// <summary>Keeps the dashboard row in step with a step the case has just started,
+        /// moving an approved case's row back to the open table when it is reopened.</summary>
+        Task SyncStartedStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder);
+
         Task<int> GetCompletedCountAsync();
 
         Task<List<WorkflowModel>> GetCompletedCasesAsync();
