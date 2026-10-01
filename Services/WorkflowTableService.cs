@@ -363,6 +363,7 @@ namespace Valuation.Api.Services
             var rowKey = dto.ValuationId;
 
             WorkflowEntity entity;
+            var table = _tableClient;
 
             try
             {
@@ -374,13 +375,25 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
-                entity = new WorkflowEntity
+                // An approved case keeps its row in CompletedWorkflows: edit it there.
+                // A new row here would have no Status, and no dashboard list shows that
+                // (see UpdateCompletedRowAsync). Reopening it is SyncStartedStepAsync's job.
+                try
                 {
-                    Brand = _brand.Current,
-                    PartitionKey = partitionKey,
-                    RowKey = rowKey,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    entity = (await _completedTableClient.GetEntityAsync<WorkflowEntity>(
+                        partitionKey, rowKey).ConfigureAwait(false)).Value;
+                    table = _completedTableClient;
+                }
+                catch (RequestFailedException ex2) when (ex2.Status == 404)
+                {
+                    entity = new WorkflowEntity
+                    {
+                        Brand = _brand.Current,
+                        PartitionKey = partitionKey,
+                        RowKey = rowKey,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                }
             }
 
             // ✅ Capture previous status BEFORE modifying
@@ -439,7 +452,7 @@ namespace Valuation.Api.Services
 
             entity.UpdatedAt = DateTime.UtcNow;
 
-            await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            await table.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
         }
 
         public async Task<List<WorkflowModel?>> GetWorkflowInProgressAsync()
@@ -623,6 +636,14 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                if (await UpdateCompletedRowAsync(partitionKey, rowKey, e =>
+                    {
+                        e.AssignedTo = assignedTo ?? e.AssignedTo;
+                        e.AssignedToPhoneNumber = assignedToPhoneNumber ?? e.AssignedToPhoneNumber;
+                        e.AssignedToEmail = assignedToEmail ?? e.AssignedToEmail;
+                        e.AssignedToWhatsapp = assignedToWhatsapp ?? e.AssignedToWhatsapp;
+                    }).ConfigureAwait(false)) return;
+
                 var entity = new WorkflowEntity
                 {
                     Brand = _brand.Current,
@@ -671,6 +692,14 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                if (await UpdateCompletedRowAsync(partitionKey, rowKey, e =>
+                    {
+                        e.StakeholderAssignedTo = AssignedTo ?? "";
+                        e.StakeholderAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                        e.StakeholderAssignedToEmail = AssignedToEmail ?? "";
+                        e.StakeholderAssignedToWhatsapp = AssignedToWhatsapp ?? "";
+                    }).ConfigureAwait(false)) return;
+
                 var entity = new WorkflowEntity
                 {
                     Brand = _brand.Current,
@@ -719,6 +748,14 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                if (await UpdateCompletedRowAsync(partitionKey, rowKey, e =>
+                    {
+                        e.BackEndAssignedTo = AssignedTo ?? "";
+                        e.BackEndAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                        e.BackEndAssignedToEmail = AssignedToEmail ?? "";
+                        e.BackEndAssignedToWhatsapp = AssignedToWhatsapp ?? "";
+                    }).ConfigureAwait(false)) return;
+
                 var entity = new WorkflowEntity
                 {
                     Brand = _brand.Current,
@@ -767,6 +804,14 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                if (await UpdateCompletedRowAsync(partitionKey, rowKey, e =>
+                    {
+                        e.AVOAssignedTo = AssignedTo ?? "";
+                        e.AVOAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                        e.AVOAssignedToEmail = AssignedToEmail ?? "";
+                        e.AVOAssignedToWhatsapp = AssignedToWhatsapp ?? "";
+                    }).ConfigureAwait(false)) return;
+
                 var entity = new WorkflowEntity
                 {
                     Brand = _brand.Current,
@@ -815,6 +860,14 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                if (await UpdateCompletedRowAsync(partitionKey, rowKey, e =>
+                    {
+                        e.QualityControlAssignedTo = AssignedTo ?? "";
+                        e.QualityControlAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                        e.QualityControlAssignedToEmail = AssignedToEmail ?? "";
+                        e.QualityControlAssignedToWhatsapp = AssignedToWhatsapp ?? "";
+                    }).ConfigureAwait(false)) return;
+
                 var entity = new WorkflowEntity
                 {
                     Brand = _brand.Current,
@@ -863,6 +916,14 @@ namespace Valuation.Api.Services
             }
             catch (RequestFailedException ex) when (ex.Status == 404)
             {
+                if (await UpdateCompletedRowAsync(partitionKey, rowKey, e =>
+                    {
+                        e.FinalReportAssignedTo = AssignedTo ?? "";
+                        e.FinalReportAssignedToPhoneNumber = AssignedToPhoneNumber ?? "";
+                        e.FinalReportAssignedToEmail = AssignedToEmail ?? "";
+                        e.FinalReportAssignedToWhatsapp = AssignedToWhatsapp ?? "";
+                    }).ConfigureAwait(false)) return;
+
                 var entity = new WorkflowEntity
                 {
                     Brand = _brand.Current,
@@ -878,6 +939,103 @@ namespace Valuation.Api.Services
                     UpdatedAt = DateTime.UtcNow
                 };
 
+                await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Applies an edit to the case's CompletedWorkflows row when final approval has
+        /// already moved it there. Returns false when there is no such row.
+        ///
+        /// The open-table updates used to answer a 404 by writing a fresh row with no
+        /// Status. Editing an approved case therefore created a row that no dashboard
+        /// list shows (the open list wants InProgress / Rejected / Returned), and once
+        /// the case was resubmitted its step 5 was no longer Completed either, so it
+        /// vanished from both lists (TS26T9993, TS08UF1873, AP31TF3979).
+        /// </summary>
+        private async Task<bool> UpdateCompletedRowAsync(string partitionKey, string rowKey, Action<WorkflowEntity> edit)
+        {
+            try
+            {
+                var response = await _completedTableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey).ConfigureAwait(false);
+                var entity = response.Value;
+                edit(entity);
+                entity.UpdatedAt = DateTime.UtcNow;
+                await _completedTableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
+                return true;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+                return false;
+            }
+        }
+
+        private static string StepName(int stepOrder) => stepOrder switch
+        {
+            1 => "Stakeholder",
+            2 => "Backend",
+            3 => "AVO",
+            4 => "QualityControl",
+            5 => "FinalReport",
+            _ => "",
+        };
+
+        /// <summary>
+        /// Keeps the dashboard row in step with a workflow step the case has just
+        /// started (WorkflowController.Start), which otherwise only touches the Cosmos
+        /// document.
+        ///
+        /// - Row in CompletedWorkflows only: the approved case is being changed again,
+        ///   so it moves back to the open table as InProgress at this step. Final
+        ///   approval moves it back (CompleteFinalReportWFAsync).
+        /// - Row with no Status: give it InProgress at this step, so it is listed.
+        /// - Any other status (InProgress, Returned, Rejected) is left alone: the
+        ///   portal's own table update after the start handles those.
+        /// </summary>
+        public async Task SyncStartedStepAsync(string valuationId, string vehicleNumber, string applicantContact, int stepOrder)
+        {
+            var partitionKey = $"{vehicleNumber}|{applicantContact}";
+            var rowKey = valuationId;
+
+            WorkflowEntity? entity = null;
+            try
+            {
+                entity = (await _tableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey).ConfigureAwait(false)).Value;
+            }
+            catch (RequestFailedException ex) when (ex.Status == 404)
+            {
+            }
+
+            if (entity == null)
+            {
+                WorkflowEntity completed;
+                try
+                {
+                    completed = (await _completedTableClient.GetEntityAsync<WorkflowEntity>(partitionKey, rowKey).ConfigureAwait(false)).Value;
+                }
+                catch (RequestFailedException ex) when (ex.Status == 404)
+                {
+                    return;   // no row anywhere; nothing to keep in step
+                }
+
+                completed.Status = "InProgress";
+                completed.CompletedAt = null;
+                completed.WorkflowStepOrder = stepOrder;
+                completed.Workflow = StepName(stepOrder);
+                completed.RedFlag = "false";
+                completed.UpdatedAt = DateTime.UtcNow;
+                completed.ETag = default;
+                await _tableClient.UpsertEntityAsync(completed, TableUpdateMode.Replace).ConfigureAwait(false);
+                await _completedTableClient.DeleteEntityAsync(partitionKey, rowKey).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(entity.Status) || entity.Status == "Completed")
+            {
+                entity.Status = "InProgress";
+                entity.WorkflowStepOrder = stepOrder;
+                entity.Workflow = StepName(stepOrder);
+                entity.UpdatedAt = DateTime.UtcNow;
                 await _tableClient.UpsertEntityAsync(entity, TableUpdateMode.Merge).ConfigureAwait(false);
             }
         }

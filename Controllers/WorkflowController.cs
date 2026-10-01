@@ -47,6 +47,12 @@ public class WorkflowController : ControllerBase
         try
         {
             await _svc.StartStepAsync(valuationId.ToString(), vehicleNumber, applicantContact, stepOrder);
+
+            // StartStepAsync only touches the Cosmos document. Without this, an approved
+            // case sent back through QC had step 5 in progress again but a dashboard row
+            // with no status, and dropped out of both the open and the completed list.
+            await _tableSvc.SyncStartedStepAsync(valuationId.ToString(), vehicleNumber,
+                                                 Uri.UnescapeDataString(applicantContact), stepOrder);
             return NoContent();
         }
         catch (Exception ex)
