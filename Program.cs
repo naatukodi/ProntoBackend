@@ -144,6 +144,13 @@ builder.Services.AddScoped<IRoleService, TableRoleService>();
 builder.Services.AddScoped<TableRoleService>();
 builder.Services.AddScoped<ICommonNoteService, CommonNoteService>();
 
+// Nightly copy of every Table into the private "backups" blob container (Cosmos has its own
+// continuous backup). Not on developer machines, whose settings point at the old accounts.
+if (!builder.Environment.IsDevelopment() && builder.Configuration.GetValue("TableBackup:Enabled", true))
+{
+    builder.Services.AddHostedService<TableBackupService>();
+}
+
 // ✅ VIDEO UPLOAD CONFIGURATION
 // Configure request size limit for file uploads (100MB max)
 builder.Services.Configure<FormOptions>(options =>
