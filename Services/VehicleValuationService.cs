@@ -87,7 +87,10 @@ namespace Valuation.Api.Services
 
             var detailsDto = new VehicleDetailsAIDto
             {
-                RegistrationNumber = vd?.RegistrationNumber ?? doc.VehicleNumber ?? string.Empty,
+                RegistrationNumber = string.IsNullOrWhiteSpace(vd?.RegistrationNumber) ||
+                                     vd.RegistrationNumber.Equals("null", StringComparison.OrdinalIgnoreCase)
+                    ? doc.VehicleNumber ?? string.Empty
+                    : vd.RegistrationNumber,
                 Make = vd?.Make,
                 Model = vd?.Model,
                 YearOfMfg = vd?.YearOfMfg,
