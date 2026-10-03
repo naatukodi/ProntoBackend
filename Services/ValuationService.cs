@@ -67,12 +67,13 @@ public class ValuationService : IValuationService
 
             var doc = resp.Resource;
             if (doc.VehicleDetails is null)
-                return new VehicleDetailsDto();
+                return new VehicleDetailsDto { RegistrationNumber = vehicleNumber };
 
             // Return the stored DTO as-is so every field (Rto, Lender, permit,
             // pollution, tax, etc.) survives the round-trip; a hand-written
             // field-by-field copy here kept drifting out of date.
             var dto = doc.VehicleDetails;
+            dto.RegistrationNumber = ResolveRegistrationNumber(dto.RegistrationNumber, vehicleNumber);
 
             // File streams are never returned on GET
             dto.StencilTrace = null;
@@ -147,7 +148,8 @@ public class ValuationService : IValuationService
             dto = new VehicleDetailsDto();
         MapSurepassToDto(api, dto);
 
-        dto.RegistrationNumber = registrationNumber;
+        // Surepass's own rc_number when it sends one, else the case's number
+        dto.RegistrationNumber = ResolveRegistrationNumber(api.RcNumber, registrationNumber);
 
         // 4) Update Cosmos DB
         var pk = GetPk(registrationNumber, applicantContact);
@@ -179,6 +181,11 @@ public class ValuationService : IValuationService
                 id: valuationId,
                 partitionKey: pk);
             var doc = resp.Resource;
+
+            // Older saves stored the text "null" as the number; print the case's own
+            if (doc.VehicleDetails != null)
+                doc.VehicleDetails.RegistrationNumber =
+                    ResolveRegistrationNumber(doc.VehicleDetails.RegistrationNumber, vehicleNumber);
 
             // Heal records where ranges were stored as 0 but RawResponse exists
             var vr = doc.ValuationResponse;
@@ -381,6 +388,16 @@ public class ValuationService : IValuationService
                                  DateTimeStyles.None, out var dt) ? dt : null;
     }
 
+    // The portal posts a missing number as the text "null", which then printed
+    // on the report. Anything blank or "null" falls back to the case's own
+    // vehicle number, which is part of the partition key and always known.
+    private static string ResolveRegistrationNumber(string? candidate, string caseVehicleNumber) =>
+        string.IsNullOrWhiteSpace(candidate) ||
+        candidate.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ||
+        candidate.Trim().Equals("undefined", StringComparison.OrdinalIgnoreCase)
+            ? caseVehicleNumber
+            : candidate.Trim();
+
     private void MapSurepassToDto(SurepassRcData api, VehicleDetailsDto dto)
     {
         // ── Registration date ─────────────────────────────────────────────────
@@ -543,6 +560,12 @@ public class ValuationService : IValuationService
 
         //  RESTORE remarks after all updates
         dto.Remarks = preservedRemarks;
+
+        // The form's number is read-only and arrives as "null" when Surepass had
+        // nothing; prefer the RC/stored number, then the case's own.
+        dto.RegistrationNumber = ResolveRegistrationNumber(
+            ResolveRegistrationNumber(dto.RegistrationNumber, updatedDto.RegistrationNumber ?? ""),
+            registrationNumber);
 
         // 2) Compute your partition key
         var pk = GetPk(registrationNumber, applicantContact);
