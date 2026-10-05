@@ -10,10 +10,17 @@ namespace Valuation.Api.Repositories
         /// </summary>
         string ModelName { get; }
 
-        Task<VehicleValuationAi?> GetVehicleValuationAsync(VehicleDetailsAIDto details);
+        /// <summary>
+        /// Low, mid and high market values for a case, worked out from comparable
+        /// listings found by searching Indian used-vehicle sites, with the listings used.
+        /// Takes 15–70 seconds. Throws InvalidOperationException when OpenAI is not configured.
+        /// </summary>
+        Task<VehicleValuationAi?> GetVehicleValuationAsync(
+            VehicleDetailsAIDto details, CancellationToken ct = default);
 
         /// <summary>
-        /// Single-paragraph market valuation for the "Instant AI Value" screen.
+        /// Single-paragraph market valuation for the "Vehga Value" screen, searched from
+        /// listing sites like the case valuation, with the listings checked under it.
         /// Throws InvalidOperationException when OpenAI is not configured.
         /// </summary>
         Task<string> GetMarketValueAsync(MarketValueRequestDto request);

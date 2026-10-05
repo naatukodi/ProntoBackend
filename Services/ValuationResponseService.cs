@@ -46,8 +46,11 @@ namespace Valuation.Api.Services
                 var vr = doc.ValuationResponse;
 
                 // Heal records where ranges were stored as 0 but RawResponse exists
+                // Structured answers are JSON and are never healed: their rationale quotes
+                // prices, and this prose regex would read one of them as a band.
                 if (vr != null
                     && !string.IsNullOrWhiteSpace(vr.RawResponse)
+                    && !vr.RawResponse.TrimStart().StartsWith("{")
                     && (vr.LowRange == null || vr.LowRange == 0)
                     && (vr.MidRange == null || vr.MidRange == 0)
                     && (vr.HighRange == null || vr.HighRange == 0))

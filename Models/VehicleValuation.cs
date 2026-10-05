@@ -10,5 +10,10 @@ namespace Valuation.Api.Models
 
         // (Optional) Raw ChatGPT text if you want to inspect it
         public string? RawResponse { get; set; }
+
+        // The listings behind the range, and when they were read. Null on older ranges.
+        public string? Rationale { get; set; }
+        public List<ValuationComparable>? Comparables { get; set; }
+        public DateTime? GeneratedAt { get; set; }
     }
 }
