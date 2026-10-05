@@ -16,6 +16,20 @@ public class TableRoleService : IRoleService
     private readonly TableClient _usersTable;
     private readonly IStateService _stateService;
 
+    // Job roles offered by the portal's Role dropdown, as opposed to the Can* permissions
+    private static readonly HashSet<string> JobRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "SuperAdmin", "StateAdmin", "Admin", "Stakeholder", "BackEnd", "AVO", "QC", "FinalReport"
+    };
+
+    // Stored role first; older users have none, so fall back to their job-role row,
+    // then to whatever row they have (the old behaviour).
+    private static string ResolveRoleId(string? stored, IEnumerable<string> rows) =>
+        !string.IsNullOrWhiteSpace(stored) ? stored
+        : rows.FirstOrDefault(r => JobRoles.Contains(r))
+          ?? rows.FirstOrDefault()
+          ?? string.Empty;
+
     public TableRoleService(IConfiguration config, IStateService stateService)
     {
         var conn = config.GetConnectionString("TableStorage")!;
@@ -51,13 +65,23 @@ public class TableRoleService : IRoleService
             State = user.State,
             Country = user.Country,
             Pincode = user.Pincode,
-            Password = user.Password
+            Password = user.Password,
+            RoleId = string.IsNullOrWhiteSpace(user.RoleId) ? null : user.RoleId
         };
 
         await _usersTable.UpsertEntityAsync(userEntity);
 
         if (!string.IsNullOrWhiteSpace(user.RoleId))
         {
+            // Changing the job role used to add the new row and leave the old one.
+            // Admin is kept: the "Admin" permission button (MIS) shares that row.
+            foreach (var old in await GetUserRolesAsync(user.UserId))
+            {
+                if (JobRoles.Contains(old)
+                    && !old.Equals(user.RoleId, StringComparison.OrdinalIgnoreCase)
+                    && !old.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+                    await RemoveRoleFromUserAsync(user.UserId, old);
+            }
             await AssignRoleToUserAsync(user.UserId, user.RoleId);
         }
     }
@@ -263,7 +287,7 @@ public class TableRoleService : IRoleService
                 Pincode = entity.Pincode,
                 AssignedStates = entity.assignedStates ?? "[]",
                 AssignedDistricts = entity.assignedDistricts ?? "[]",
-                RoleId = roles.FirstOrDefault() ?? string.Empty // assuming single role
+                RoleId = ResolveRoleId(entity.RoleId, roles)
             });
         }
         return users;
@@ -280,7 +304,7 @@ public class TableRoleService : IRoleService
                 UserId = userId,
                 Name = entity.Value.Name,
                 Email = entity.Value.Email,
-                RoleId = roles.FirstOrDefault() ?? string.Empty, // assuming single role
+                RoleId = ResolveRoleId(entity.Value.RoleId, roles),
                 Whatsapp = entity.Value.Whatsapp,
                 PhoneNumber = entity.Value.PhoneNumber,
                 Description = entity.Value.Description,
