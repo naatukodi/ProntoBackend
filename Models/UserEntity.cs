@@ -31,6 +31,11 @@ namespace Valuation.Api.Models
         public string? assignedStates { get; set; } // Comma-separated list of state keys
         public string? assignedDistricts { get; set; } // Comma-separated list of district keys
 
+        // The user's job role (AVO, BackEnd, Admin...). It also lives as a UserRoles
+        // row beside the Can* permissions; reading it back as "the first row" showed
+        // AVO after a change to Admin, because the old row was never removed.
+        public string? RoleId { get; set; }
+
         // Which companies this user may work for, comma-separated ("vehga", "pronto"),
         // following the same convention as assignedStates. Empty/null means Vehga only,
         // which is every user that predates multi-brand. The login brand picker offers
