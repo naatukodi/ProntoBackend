@@ -15,10 +15,12 @@ namespace Valuation.Api.Controllers
     public class VehiclePhotosController : ControllerBase
     {
         private readonly IVehiclePhotoService _photoService;
+        private readonly IClientRules _clientRules;
 
-        public VehiclePhotosController(IVehiclePhotoService photoService)
+        public VehiclePhotosController(IVehiclePhotoService photoService, IClientRules clientRules)
         {
             _photoService = photoService;
+            _clientRules = clientRules;
         }
 
         [HttpPut]
@@ -131,15 +133,25 @@ namespace Valuation.Api.Controllers
         {
             try
             {
+                // Some clients send only a few photos and sometimes no video, so nothing
+                // is mandatory on their cases (see ClientRules). The portal's photo page
+                // reads MediaOptional to stop marking slots as required.
+                var clientName = await _photoService.GetClientNameAsync(valuationId.ToString(), vehicleNumber, applicantContact);
+                if (_clientRules.IsMediaOptional(clientName))
+                    return Ok(new ValidatePhotosResponse { IsComplete = true, MediaOptional = true });
+
                 var photoUrls = await _photoService.GetPhotoUrlsAsync(valuationId.ToString(), vehicleNumber, applicantContact);
                 var videoUrls = await _photoService.GetVideoUrlsAsync(valuationId.ToString(), vehicleNumber, applicantContact);
 
+                // The video is checked on its own below. It used to be in this list as
+                // well, so a case without one reported it twice ("VehicleVideo" and
+                // "Vehicle Video") and the AVO was told 18 items were missing, not 17.
                 var mandatoryPhotoFields = new List<string>
                 {
                     "FrontLeftSide", "FrontRightSide", "RearLeftSide", "RearRightSide",
                     "FrontViewGrille", "RearViewTailgate", "DriverSideProfile", "PassengerSideProfile",
                     "EngineBay", "VinPlate", "ChassisImprint", "Odometer",
-                    "SelfieWithVehicle", "VehicleVideo",
+                    "SelfieWithVehicle",
                     "ChassisVerification", "ChassisStencilTrace", "WorkingOperationPhoto"
                 };
 

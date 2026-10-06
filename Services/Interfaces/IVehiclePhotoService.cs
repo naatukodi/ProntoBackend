@@ -14,6 +14,10 @@ namespace Valuation.Api.Services
 
         Task<Dictionary<string, string>?> GetVideoUrlsAsync(string valuationId, string vehicleNumber, string applicantContact);
 
+        // The case's client (Stakeholder.Name), which decides whether photos are mandatory.
+        // Null when the case or the name does not exist.
+        Task<string?> GetClientNameAsync(string valuationId, string vehicleNumber, string applicantContact);
+
         // ✅ NEW: Fetch custom photos for the PDF
         Task<List<SavedCustomPhoto>> GetCustomPhotosAsync(string valuationId, string vehicleNumber, string applicantContact);
 

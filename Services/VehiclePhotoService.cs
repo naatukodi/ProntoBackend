@@ -261,6 +261,22 @@ namespace Valuation.Api.Services
             }
         }
 
+        public async Task<string?> GetClientNameAsync(string valuationId, string vehicleNumber, string applicantContact)
+        {
+            var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
+            var container = _cosmosClient.GetDatabase(_databaseName).GetContainer(_containerName);
+
+            try
+            {
+                var response = await container.ReadItemAsync<ValuationDocument>(id: valuationId, partitionKey: pk);
+                return response.Resource.Stakeholder?.Name;
+            }
+            catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
+
         public async Task<Dictionary<string, string>?> GetVideoUrlsAsync(string valuationId, string vehicleNumber, string applicantContact)
         {
             var pk = new PartitionKey($"{vehicleNumber}|{applicantContact}");
