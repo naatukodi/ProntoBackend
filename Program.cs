@@ -46,6 +46,9 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("OpenAI", client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/");
+    // Valuations search listing sites, and a slow search can run past HttpClient's
+    // 100-second default. The photo reads and Vehga Value set shorter limits per call.
+    client.Timeout = TimeSpan.FromMinutes(3);
     client.DefaultRequestHeaders.Authorization =
         new AuthenticationHeaderValue("Bearer", builder.Configuration["OpenAI:ApiKey"]);
     client.DefaultRequestHeaders.Accept.Add(

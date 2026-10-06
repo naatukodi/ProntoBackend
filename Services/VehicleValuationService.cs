@@ -64,15 +64,7 @@ namespace Valuation.Api.Services
 
             var stored = doc.ValuationResponse;
             if (!force && stored is { MidRange: > 0 })
-            {
-                return new VehicleValuation
-                {
-                    RawResponse = stored.RawResponse,
-                    LowRange = stored.LowRange,
-                    MidRange = stored.MidRange,
-                    HighRange = stored.HighRange
-                };
-            }
+                return ToResult(stored);
 
             var vd = doc.VehicleDetails;
 
@@ -85,24 +77,35 @@ namespace Valuation.Api.Services
                 return null;
             }
 
+            var registration = string.IsNullOrWhiteSpace(vd?.RegistrationNumber) ||
+                               vd.RegistrationNumber.Equals("null", StringComparison.OrdinalIgnoreCase)
+                ? doc.VehicleNumber
+                : vd.RegistrationNumber;
+
             var detailsDto = new VehicleDetailsAIDto
             {
-                RegistrationNumber = string.IsNullOrWhiteSpace(vd?.RegistrationNumber) ||
-                                     vd.RegistrationNumber.Equals("null", StringComparison.OrdinalIgnoreCase)
-                    ? doc.VehicleNumber ?? string.Empty
-                    : vd.RegistrationNumber,
-                Make = vd?.Make,
-                Model = vd?.Model,
+                Segment = doc.VehicleSegment,
+                ClassOfVehicle = vd?.ClassOfVehicle,
+                BodyType = vd?.BodyType,
+                Make = vd?.Make ?? string.Empty,
+                Model = vd?.Model ?? string.Empty,
+                Variant = vd?.MakerVariant,
+                MonthOfMfg = vd?.MonthOfMfg,
                 YearOfMfg = vd?.YearOfMfg,
-                Colour = vd?.Colour,
                 Fuel = vd?.Fuel,
                 EngineCC = vd?.EngineCC,
-                IDV = vd?.IDV,
+                ExShowroomPrice = vd?.ExShowroomPrice,
                 DateOfRegistration = vd?.DateOfRegistration,
-                Odometer = doc.InspectionDetails?.Odometer
+                OwnerSerialNo = vd?.OwnerSerialNo,
+                Odometer = doc.InspectionDetails?.Odometer,
+                City = PlaceName(doc.InspectionDetails?.InspectionLocation) ?? PlaceName(vd?.Rto),
+                StateCode = registration is { Length: >= 2 } && char.IsLetter(registration[0]) && char.IsLetter(registration[1])
+                    ? registration[..2].ToUpperInvariant()
+                    : null,
+                Condition = ConditionSummary(doc.InspectionDetails)
             };
 
-            var ai = await _chatGptRepo.GetVehicleValuationAsync(detailsDto);
+            var ai = await _chatGptRepo.GetVehicleValuationAsync(detailsDto, ct);
             if (ai is null)
             {
                 _logger.LogWarning("The valuation model returned nothing for {Valuation}.", id);
@@ -125,17 +128,56 @@ namespace Valuation.Api.Services
                 RawResponse = ai.Raw ?? string.Empty,
                 LowRange = ai.LowRange,
                 MidRange = ai.MidRange,
-                HighRange = ai.HighRange
+                HighRange = ai.HighRange,
+                Rationale = ai.Rationale,
+                Comparables = ai.Comparables,
+                GeneratedAt = DateTime.UtcNow
             };
             await SaveAsync(doc, pk, ct);
 
-            return new VehicleValuation
+            return ToResult(doc.ValuationResponse);
+        }
+
+        private static VehicleValuation ToResult(ValuationResponse r) => new()
+        {
+            RawResponse = r.RawResponse,
+            LowRange = r.LowRange,
+            MidRange = r.MidRange,
+            HighRange = r.HighRange,
+            Rationale = r.Rationale,
+            Comparables = r.Comparables,
+            GeneratedAt = r.GeneratedAt
+        };
+
+        /// <summary>
+        /// A place to search listings near, or null. The inspection location can be a full
+        /// street address, and that has no place in a web search: anything long or with
+        /// digits in it (door numbers, pincodes, "AP16") is dropped.
+        /// </summary>
+        private static string? PlaceName(string? text) =>
+            !string.IsNullOrWhiteSpace(text) && text.Trim().Length <= 40 && !text.Any(char.IsDigit)
+                ? text.Trim()
+                : null;
+
+        /// <summary>The inspector's condition bands, e.g. "exterior good, engine average, tyres poor".</summary>
+        private static string? ConditionSummary(InspectionDetails? i)
+        {
+            if (i is null) return null;
+
+            var parts = new List<string>();
+            void Add(string label, string? value)
             {
-                RawResponse = doc.ValuationResponse.RawResponse,
-                LowRange = ai.LowRange,
-                MidRange = ai.MidRange,
-                HighRange = ai.HighRange
-            };
+                if (!string.IsNullOrWhiteSpace(value)) parts.Add($"{label} {value.Trim().ToLowerInvariant()}");
+            }
+
+            Add("exterior", i.ExteriorCondition);
+            Add("body", i.BodyCondition);
+            Add("engine", i.EngineCondition);
+            Add("tyres", i.OverallTyreCondition);
+            if (i.RoadWorthyCondition is bool roadworthy)
+                parts.Add(roadworthy ? "roadworthy" : "not roadworthy");
+
+            return parts.Count > 0 ? string.Join(", ", parts) : null;
         }
 
         /// <summary>

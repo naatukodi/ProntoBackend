@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Valuation.Api.Models;
 
 namespace Valuation.Api.Repositories
@@ -29,95 +30,234 @@ namespace Valuation.Api.Repositories
 
         private const string Model = "gpt-4o-mini";
 
+        // Valuations search listing sites, and that needs a different model from the
+        // photo reads. gpt-4o-mini and gpt-4.1-mini reject the search's domain filter
+        // outright. gpt-5-mini opens a listing and reads its price, year and km, where
+        // a lighter setting stopped at search-results pages with no year or price on
+        // them (tested on an Activa, a Swift and a Tata Ace, 2026-10-05).
+        private const string SearchModel = "gpt-5-mini";
+
+        /// <summary>
+        /// The Indian used-vehicle listing and price-guide sites a valuation may search.
+        /// Keeping the search to these keeps it on asking prices for real vehicles, and
+        /// off blogs, news and loan calculators. Subdomains are included.
+        /// </summary>
+        private static readonly string[] ListingSites =
+        {
+            // cars
+            "cars24.com", "cardekho.com", "carwale.com", "spinny.com", "cartrade.com",
+            "mahindrafirstchoice.com", "marutisuzukitruevalue.com", "zigwheels.com",
+            // two-wheelers
+            "bikedekho.com", "bikewale.com", "credr.com",
+            // commercial vehicles, three-wheelers, buses, tractors and construction equipment.
+            // TrucksDekho and BusesDekho redirect to these cardekho.com subdomains; both
+            // spellings are listed in case the filter does not reach subdomains.
+            "trucks.cardekho.com", "trucksdekho.com", "buses.cardekho.com", "busesdekho.com",
+            "cmv360.com", "91trucks.com", "tractorjunction.com", "khetigaadi.com",
+            "infrajunction.com", "91infra.com",
+            // classifieds and price guides. Indian Blue Book now redirects to Car&Bike's
+            // valuation page.
+            "olx.in", "quikr.com", "droom.in", "carandbike.com", "indianbluebook.com",
+            "orangebookvalue.com"
+        };
+
         /// <inheritdoc />
         public string ModelName => Model;
 
-        public async Task<VehicleValuationAi?> GetVehicleValuationAsync(VehicleDetailsAIDto d)
+        // The model used to price vehicles from memory, and its memory stops in late
+        // 2023: it named no source because it had none. It now has to find comparable
+        // listings first and work from their asking prices.
+        //
+        // Whole rupees as integers, deliberately: asking for "₹7.5 L" put a lakh/crore
+        // abbreviation between the model and the number, which then had to be parsed
+        // back. Structured output removes the parsing step entirely.
+        private const string ValuationSearchPrompt =
+            "You value used vehicles in India for lenders. Find what THIS vehicle sells for today by " +
+            "searching Indian used-vehicle listing and price-guide sites. Do not rely on remembered " +
+            "prices: they are years out of date.\n\n" +
+            "1. Look for listings of the same make and model, and the same variant if one is given, with " +
+            "the same fuel, manufactured within one year either side. Search in this order, and widen only " +
+            "while you have fewer than 3 comparables: (a) the vehicle's city, so your first search must " +
+            "name the city; (b) its state; (c) all of India.\n" +
+            "2. A comparable is ONE used vehicle with its own asking price. A search-results page listing " +
+            "many vehicles is not a comparable: open it, or a listing, to read each vehicle's price, year " +
+            "and km. Skip new or unregistered vehicles, spare parts, and damaged or accident vehicles, and " +
+            "drop a price far out of line with the rest. Listings from the vehicle's own city or district " +
+            "count most.\n" +
+            "   Record EVERY listing the range rests on, with its site, title, URL, asking price, year, km " +
+            "and location exactly as the site shows them: the range must follow from these comparables " +
+            "alone. Never invent a listing, a price or a URL.\n" +
+            "3. Listed prices are asking prices, and vehicles sell below them. From the comparables:\n" +
+            "   - lowRange: a quick-sale or dealer trade-in price for this vehicle.\n" +
+            "   - midRange: the fair market value between private parties, for this vehicle's year, km, " +
+            "owners and condition.\n" +
+            "   - highRange: the best realistic price, near the upper comparable asking prices.\n" +
+            "   Adjust for odometer against typical use, for the number of owners and for condition.\n" +
+            "4. Give each value as a whole number of rupees, e.g. 750000. Never use a lakh or crore " +
+            "abbreviation, a range or a currency symbol. lowRange <= midRange <= highRange.\n" +
+            "5. In the rationale, in plain text, say how many comparables you found and where, and how " +
+            "you got from their asking prices to the range.\n" +
+            "If you find no comparable listing and no price guide for this vehicle, return nulls rather " +
+            "than a guess.";
+
+        public async Task<VehicleValuationAi?> GetVehicleValuationAsync(
+            VehicleDetailsAIDto d, CancellationToken ct = default)
         {
-            // 1) Build system prompt.
-            //    Whole rupees as integers, deliberately: asking for "₹7.5 L" put a
-            //    lakh/crore abbreviation between the model and the number, which then had
-            //    to be parsed back. Structured output removes the parsing step entirely.
-            var system = new
-            {
-                role = "system",
-                content =
-                    "You are a vehicle-valuation assistant for the Indian market. " +
-                    "Given vehicle details, return three resale price points for the Indian " +
-                    "used-vehicle market: low, mid and high. " +
-                    "Give each as a whole number of rupees, e.g. 750000 — never a lakh or " +
-                    "crore abbreviation, never a range, never a currency symbol. " +
-                    "low <= mid <= high. Add a short rationale. " +
-                    "If the details are too thin to value the vehicle, return nulls rather " +
-                    "than a guess."
-            };
-
-            // 2) Build a single user message embedding all fields
-            var userSb = new StringBuilder();
-            userSb.AppendLine("Here are the vehicle details:");
-            userSb.AppendLine($"- RegistrationNumber: {d.RegistrationNumber}");
-            userSb.AppendLine($"- Make: {d.Make}");
-            userSb.AppendLine($"- Model: {d.Model}");
-            userSb.AppendLine($"- YearOfMfg: {d.YearOfMfg}");
-            userSb.AppendLine($"- Colour: {d.Colour}");
-            userSb.AppendLine($"- Fuel: {d.Fuel}");
-            userSb.AppendLine($"- EngineCC: {d.EngineCC}");
-            userSb.AppendLine($"- IDV: {d.IDV}");
-            userSb.AppendLine($"- DateOfRegistration: {d.DateOfRegistration:yyyy-MM-dd}");
-            userSb.AppendLine($"- City: {d.City}");
-            userSb.AppendLine($"- Odometer: {d.Odometer}");
-            userSb.AppendLine();
-            userSb.AppendLine("Please deliver:");
-
-            var user = new
-            {
-                role = "user",
-                content = userSb.ToString()
-            };
-
-            // 3) Assemble request.
-            //    temperature 0 because this is a lookup, not a composition, and 200 tokens
-            //    used to truncate the answer mid-sentence — which the old regex then read
-            //    as "no ranges found" and stored as three zeros.
-            var payload = new
-            {
-                model = Model,
-                messages = new[] { system, user },
-                temperature = 0,
-                max_tokens = 800,
-                response_format = new
-                {
-                    type = "json_schema",
-                    json_schema = new
-                    {
-                        name = "vehicle_valuation",
-                        strict = true,
-                        schema = ValuationSchema()
-                    }
-                }
-            };
-
-            var json = JsonSerializer.Serialize(payload);
-            using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var resp = await _openAiClient.PostAsync("/v1/chat/completions", content);
-            resp.EnsureSuccessStatusCode();
-
-            var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            var raw = doc.RootElement
-                         .GetProperty("choices")[0]
-                         .GetProperty("message")
-                         .GetProperty("content")
-                         .GetString();
-
+            var raw = await SearchListingsAsync("valuation", ValuationSearchPrompt,
+                BuildValuationInput(d), d.City, "vehicle_valuation", ValuationSchema(), ct);
             if (string.IsNullOrWhiteSpace(raw)) return null;
 
             var parsed = JsonSerializer.Deserialize<VehicleValuationAi>(
                 raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (parsed is null) return null;
 
+            parsed.Rationale = StripCitations(parsed.Rationale);
+            parsed.Comparables = CheckableComparables(parsed.Comparables);
             parsed.Raw = raw;
             return parsed;
         }
+
+        /// <summary>
+        /// The vehicle as the valuation prompt sees it. Blank fields are left out rather
+        /// than sent as "Variant: ", which reads as a value to the model.
+        /// </summary>
+        private static string BuildValuationInput(VehicleDetailsAIDto d)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Value this vehicle:");
+
+            void Line(string label, object? value)
+            {
+                var text = value?.ToString();
+                if (!string.IsNullOrWhiteSpace(text)) sb.AppendLine($"- {label}: {text}");
+            }
+
+            Line("Segment", d.Segment);
+            Line("Class of vehicle", d.ClassOfVehicle);
+            Line("Body type", d.BodyType);
+            Line("Make", d.Make);
+            Line("Model", d.Model);
+            Line("Variant", d.Variant);
+            Line("Manufactured", d.MonthOfMfg is int m and >= 1 and <= 12 && d.YearOfMfg is int y
+                ? (object)$"{m:00}/{y}" : d.YearOfMfg);
+            Line("Fuel", d.Fuel);
+            Line("Engine", d.EngineCC is > 0 ? $"{d.EngineCC} cc" : null);
+            Line("Price when new (ex-showroom, rupees)", d.ExShowroomPrice is > 0 ? $"{d.ExShowroomPrice:0}" : null);
+            Line("First registered", d.DateOfRegistration?.ToString("yyyy-MM-dd"));
+            Line("Owner number", d.OwnerSerialNo);
+            Line("Odometer", d.Odometer is > 0 ? $"{d.Odometer} km" : null);
+            Line("Location", d.City);
+            Line("Registered in state (code)", d.StateCode);
+            Line("Condition at inspection", d.Condition);
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// One Responses API call with the listing search switched on, returning the
+        /// structured answer's text. The search runs several requests on OpenAI's side, so
+        /// this takes 15–70 seconds where a plain completion took 2–4.
+        /// </summary>
+        private async Task<string?> SearchListingsAsync(
+            string purpose, string instructions, string input, string? city,
+            string schemaName, object schema, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(_openAiApiKey))
+                throw new InvalidOperationException(
+                    "OpenAI is not configured. Set `OpenAI:ApiKey` in appsettings.Development.json " +
+                    "or the `OpenAI__ApiKey` environment variable.");
+
+            var payload = new
+            {
+                model = SearchModel,
+                input = new object[]
+                {
+                    new { role = "system", content = instructions },
+                    new { role = "user", content = input }
+                },
+                tools = new[] { ListingSearchTool(city) },
+                // Every search and every page opened is billed, and a scooter took 19 of them
+                // and 110 seconds when left alone. Good answers in testing used 3 to 10.
+                max_tool_calls = 8,
+                // A cost ceiling, not a target: the test vehicles used about 5,000.
+                max_output_tokens = 25000,
+                text = new
+                {
+                    format = new { type = "json_schema", name = schemaName, strict = true, schema }
+                }
+            };
+
+            using var body = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            var resp = await _openAiClient.PostAsync("/v1/responses", body, ct);
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+                throw new HttpRequestException($"OpenAI returned {(int)resp.StatusCode}: {raw}", null, resp.StatusCode);
+
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+            var status = root.TryGetProperty("status", out var s) ? s.GetString() : null;
+
+            string? text = null;
+            var searches = 0;
+            foreach (var item in root.GetProperty("output").EnumerateArray())
+            {
+                var type = item.GetProperty("type").GetString();
+                if (type == "web_search_call")
+                    searches++;
+                else if (type == "message")
+                    foreach (var part in item.GetProperty("content").EnumerateArray())
+                        if (part.GetProperty("type").GetString() == "output_text")
+                            text = part.GetProperty("text").GetString();
+            }
+
+            if (root.TryGetProperty("usage", out var usage))
+                _logger.LogInformation(
+                    "Listing search [{Purpose}]: status={Status} searches={Searches} input={Input} output={Output}",
+                    purpose, status, searches,
+                    usage.GetProperty("input_tokens").GetInt32(),
+                    usage.GetProperty("output_tokens").GetInt32());
+
+            // An incomplete answer is JSON cut off part-way, not a short answer.
+            return status == "completed" ? text : null;
+        }
+
+        private static object ListingSearchTool(string? city)
+        {
+            var location = new Dictionary<string, string> { ["type"] = "approximate", ["country"] = "IN" };
+            if (!string.IsNullOrWhiteSpace(city) && city.Length <= 40)
+                location["city"] = city.Trim();
+
+            return new
+            {
+                type = "web_search",
+                filters = new { allowed_domains = ListingSites },
+                user_location = location
+            };
+        }
+
+        /// <summary>
+        /// Keeps only comparables a reviewer can check: priced, and linking to one of the
+        /// listing sites the search was limited to. A link anywhere else did not come from
+        /// the search.
+        /// </summary>
+        private static List<ValuationComparable> CheckableComparables(IEnumerable<ValuationComparable>? comparables) =>
+            (comparables ?? Enumerable.Empty<ValuationComparable>())
+                .Where(c => c.Price > 0 && IsListingSite(c.Url))
+                .ToList();
+
+        private static bool IsListingSite(string? url) =>
+            Uri.TryCreate(url, UriKind.Absolute, out var u)
+            && ListingSites.Any(site => u.Host.Equals(site, StringComparison.OrdinalIgnoreCase)
+                                     || u.Host.EndsWith("." + site, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>
+        /// Search answers cite their sources as markdown links, "([olx.in](https://…))".
+        /// The rationale is stored as text and the market value is shown as text, so the
+        /// words stay and the link syntax goes.
+        /// </summary>
+        private static string? StripCitations(string? text) =>
+            text is null ? null
+            : Regex.Replace(Regex.Replace(text, @"\s*\(\[[^\]]*\]\([^)]*\)\)", ""),
+                            @"\[([^\]]*)\]\([^)]*\)", "$1").Trim();
 
         /// <summary>
         /// How long to wait before trying the reader again.
@@ -140,31 +280,67 @@ namespace Valuation.Api.Repositories
         {
             type = "object",
             additionalProperties = false,
-            required = new[] { "lowRange", "midRange", "highRange", "rationale" },
+            required = new[] { "lowRange", "midRange", "highRange", "rationale", "comparables" },
             properties = new Dictionary<string, object>
             {
-                ["lowRange"]  = new { type = new[] { "number", "null" } },
-                ["midRange"]  = new { type = new[] { "number", "null" } },
-                ["highRange"] = new { type = new[] { "number", "null" } },
-                ["rationale"] = new { type = new[] { "string", "null" } }
+                ["lowRange"]    = new { type = new[] { "number", "null" } },
+                ["midRange"]    = new { type = new[] { "number", "null" } },
+                ["highRange"]   = new { type = new[] { "number", "null" } },
+                ["rationale"]   = new { type = new[] { "string", "null" } },
+                ["comparables"] = ComparablesSchema()
             }
         };
 
+        /// <summary>The listings a valuation rests on, one entry per vehicle.</summary>
+        private static object ComparablesSchema()
+        {
+            static object Nullable(string t) => new { type = new[] { t, "null" } };
 
-        private const string MarketValueSystemPrompt =
-            "You are an expert vehicle valuer for the Indian market. Your goal is to provide a realistic, " +
-            "single-paragraph market value assessment for a used vehicle. State the estimated price range " +
-            "clearly in Rupees. Do not use markdown or bullet points. Provide the answer in a concise, " +
-            "professional paragraph.";
+            return new
+            {
+                type = "array",
+                items = new
+                {
+                    type = "object",
+                    additionalProperties = false,
+                    required = new[] { "site", "title", "url", "price", "year", "km", "location" },
+                    properties = new Dictionary<string, object>
+                    {
+                        ["site"]     = new { type = "string" },
+                        ["title"]    = Nullable("string"),
+                        ["url"]      = Nullable("string"),
+                        ["price"]    = Nullable("number"),
+                        ["year"]     = Nullable("integer"),
+                        ["km"]       = Nullable("integer"),
+                        ["location"] = Nullable("string")
+                    }
+                }
+            };
+        }
+
+        private const string MarketValueSearchPrompt =
+            "You are an expert vehicle valuer for the Indian market. Find what this used vehicle sells " +
+            "for today by searching Indian used-vehicle listing and price-guide sites. Do not rely on " +
+            "remembered prices: they are years out of date.\n\n" +
+            "Find listings of the same make and model, manufactured within one year either side. Prefer " +
+            "the given location, then its state, then all of India. A comparable is ONE vehicle with its " +
+            "own asking price: open a results page or a listing to read each vehicle's price, year and km. " +
+            "Record each comparable exactly as the site shows it. Never invent a listing, a price or a URL.\n\n" +
+            "Listed prices are asking prices, and vehicles sell below them. In the summary, write one " +
+            "concise, professional paragraph in plain text: state the estimated market value range clearly " +
+            "in rupees, and say what it is based on. No markdown, no bullet points, no links. If you find " +
+            "nothing comparable, say so in the summary instead of guessing a price.";
+
+        /// <summary>The Vehga Value answer before it is laid out as text.</summary>
+        private sealed class MarketValueAi
+        {
+            public string? Summary { get; set; }
+            public List<ValuationComparable> Comparables { get; set; } = new();
+        }
 
         /// <inheritdoc />
         public async Task<string> GetMarketValueAsync(MarketValueRequestDto d)
         {
-            if (string.IsNullOrWhiteSpace(_openAiApiKey))
-                throw new InvalidOperationException(
-                    "OpenAI is not configured. Set `OpenAI:ApiKey` in appsettings.Development.json " +
-                    "or the `OpenAI__ApiKey` environment variable.");
-
             var userPrompt =
                 "Please provide the estimated market value for the following vehicle:\n" +
                 $"- Vehicle Type: {d.VehicleType}\n" +
@@ -174,46 +350,50 @@ namespace Valuation.Api.Repositories
                 $"- Kilometers Driven: {d.Kms} km\n" +
                 $"- Location: {d.Location}, India";
 
-            var payload = new
+            var schema = new
             {
-                model = Model,
-                messages = new[]
+                type = "object",
+                additionalProperties = false,
+                required = new[] { "summary", "comparables" },
+                properties = new Dictionary<string, object>
                 {
-                    new { role = "system", content = MarketValueSystemPrompt },
-                    new { role = "user", content = userPrompt }
-                },
-                temperature = 0.2,
-                max_tokens = 400
+                    ["summary"]     = new { type = "string" },
+                    ["comparables"] = ComparablesSchema()
+                }
             };
 
-            var json = JsonSerializer.Serialize(payload);
-            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            // Searching takes 15–70 seconds. The ceiling sits under the portal's own wait
+            // so the page hears a timeout from here rather than abandoning the request.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(110));
 
-            // 30s ceiling, matching what this screen has always enforced. It is scoped
-            // to this call rather than set on the shared "OpenAI" client so the QC
-            // valuation path keeps its own (longer) default timeout.
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var raw = await SearchListingsAsync("market value", MarketValueSearchPrompt, userPrompt,
+                d.Location, "market_value", schema, cts.Token);
+            if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
 
-            var resp = await _openAiClient.PostAsync("/v1/chat/completions", content, cts.Token);
-            var body = await resp.Content.ReadAsStringAsync(cts.Token);
+            var parsed = JsonSerializer.Deserialize<MarketValueAi>(
+                raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (parsed is null) return string.Empty;
 
-            if (!resp.IsSuccessStatusCode)
-                throw new HttpRequestException(
-                    $"OpenAI returned {(int)resp.StatusCode}: {body}", null, resp.StatusCode);
-
-            using var doc = JsonDocument.Parse(body);
-
-            // A response can be well-formed yet carry no text — e.g. when the model
-            // stops on a content filter. Treat that as an empty result, not a crash.
-            if (doc.RootElement.TryGetProperty("choices", out var choices)
-                && choices.GetArrayLength() > 0
-                && choices[0].TryGetProperty("message", out var message)
-                && message.TryGetProperty("content", out var textEl))
+            // The page shows this verbatim with line breaks kept, so the listings go
+            // under the paragraph as plain lines a reviewer can open and check.
+            var sb = new StringBuilder(StripCitations(parsed.Summary));
+            var listings = CheckableComparables(parsed.Comparables);
+            if (listings.Count > 0)
             {
-                return textEl.GetString()?.Trim() ?? string.Empty;
+                sb.AppendLine().AppendLine().AppendLine("Listings checked:");
+                foreach (var c in listings)
+                {
+                    var facts = new[]
+                    {
+                        c.Site, c.Year?.ToString(),
+                        c.Km is > 0 ? $"{c.Km:N0} km" : null,
+                        $"₹{c.Price:N0}", c.Location
+                    };
+                    sb.AppendLine("• " + string.Join(" · ", facts.Where(f => !string.IsNullOrWhiteSpace(f))));
+                    sb.AppendLine("  " + c.Url);
+                }
             }
-
-            return string.Empty;
+            return sb.ToString().Trim();
         }
 
         /// <summary>
