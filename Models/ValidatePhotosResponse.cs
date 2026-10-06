@@ -8,7 +8,8 @@ namespace Valuation.Api.Models
     public class ValidatePhotosResponse
     {
         /// <summary>
-        /// True if all 18 mandatory photos are uploaded
+        /// True if all 16 mandatory photos and the vehicle video are uploaded,
+        /// or always when the client needs none (MediaOptional)
         /// </summary>
         public bool IsComplete { get; set; }
 
@@ -16,5 +17,11 @@ namespace Valuation.Api.Models
         /// List of display names for missing mandatory photos
         /// </summary>
         public List<string> MissingPhotos { get; set; } = new();
+
+        /// <summary>
+        /// True when the case's client needs no photos or video at all
+        /// (ClientRules__MediaOptionalClients), so nothing on the photo page is required
+        /// </summary>
+        public bool MediaOptional { get; set; }
     }
 }

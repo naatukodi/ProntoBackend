@@ -140,6 +140,8 @@ builder.Services.AddScoped<IReferenceNumberService, ReferenceNumberService>();
 builder.Services.AddScoped<IQcVisionAuditService, QcVisionAuditService>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
+// Clients whose cases need no photos or video (App Service setting, see ClientRules).
+builder.Services.AddSingleton<IClientRules, ClientRules>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
 builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 
