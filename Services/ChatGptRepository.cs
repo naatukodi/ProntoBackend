@@ -49,10 +49,16 @@ namespace Valuation.Api.Repositories
             "mahindrafirstchoice.com", "marutisuzukitruevalue.com", "zigwheels.com",
             // two-wheelers
             "bikedekho.com", "bikewale.com", "credr.com",
-            // commercial vehicles, tractors and construction equipment
-            "91trucks.com", "tractorjunction.com", "khetigaadi.com", "91infra.com",
-            // classifieds and price guides
-            "olx.in", "quikr.com", "droom.in", "orangebookvalue.com"
+            // commercial vehicles, three-wheelers, buses, tractors and construction equipment.
+            // TrucksDekho and BusesDekho redirect to these cardekho.com subdomains; both
+            // spellings are listed in case the filter does not reach subdomains.
+            "trucks.cardekho.com", "trucksdekho.com", "buses.cardekho.com", "busesdekho.com",
+            "cmv360.com", "91trucks.com", "tractorjunction.com", "khetigaadi.com",
+            "infrajunction.com", "91infra.com",
+            // classifieds and price guides. Indian Blue Book now redirects to Car&Bike's
+            // valuation page.
+            "olx.in", "quikr.com", "droom.in", "carandbike.com", "indianbluebook.com",
+            "orangebookvalue.com"
         };
 
         /// <inheritdoc />
