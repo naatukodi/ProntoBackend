@@ -18,6 +18,10 @@ namespace Valuation.Api.Models
         private string? _engineStarted;
 
         public long? Odometer { get; set; }
+        /// <summary>What the AVO typed in place of a reading when the odometer cannot be read,
+        /// such as "NOT WORKING". Holds a value only while <see cref="Odometer"/> is empty:
+        /// saving either one clears the other.</summary>
+        public string? OdometerRemark { get; set; }
         public bool? VinPlate { get; set; }
         /// <summary>Whether the vehicle has been in an accident, as the AVO found it. Printed on
         /// the report cover beside DEDUPE; QC used to type it into REMARKS.</summary>

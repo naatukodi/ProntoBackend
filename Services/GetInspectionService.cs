@@ -121,8 +121,18 @@ namespace Valuation.Api.Services
                 doc.InspectionDetails.VehicleMoved = dto.VehicleMoved;
             if (dto.EngineStarted != null)
                 doc.InspectionDetails.EngineStarted = dto.EngineStarted;
+            // A reading and a remark replace each other, so a case switched from a number
+            // to "NOT WORKING" (or back) never keeps both. The mobile app sends only numbers.
             if (dto.Odometer != null)
+            {
                 doc.InspectionDetails.Odometer = dto.Odometer;
+                doc.InspectionDetails.OdometerRemark = null;
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.OdometerRemark))
+            {
+                doc.InspectionDetails.OdometerRemark = dto.OdometerRemark.Trim().ToUpperInvariant();
+                doc.InspectionDetails.Odometer = null;
+            }
             if (dto.VinPlate != null)
                 doc.InspectionDetails.VinPlate = dto.VinPlate;
             if (dto.Accidental != null)

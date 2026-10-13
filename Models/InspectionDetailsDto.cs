@@ -13,6 +13,9 @@ namespace Valuation.Api.Models
         public string? VehicleMoved { get; set; }
         public string? EngineStarted { get; set; }
         public long? Odometer { get; set; }
+        /// <summary>Words in place of a reading ("NOT WORKING"). The portal posts this or
+        /// <see cref="Odometer"/>, never both.</summary>
+        public string? OdometerRemark { get; set; }
         public bool? VinPlate { get; set; }
         public bool? Accidental { get; set; }
         public bool? SeizedByOtherFinancier { get; set; }
