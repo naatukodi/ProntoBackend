@@ -439,7 +439,7 @@ namespace Valuation.Api.Services
                         string.IsNullOrWhiteSpace(read.VinPlate) ? read.ChassisNumber : read.VinPlate,
                         vd?.ChassisNumber, vinLike: true);
 
-            CompareOdometer(outp, read.OdometerKm, ins?.Odometer);
+            CompareOdometer(outp, read.OdometerKm, ins?.Odometer, ins?.OdometerRemark);
 
             Judgement(outp, "accDaylight", read.Daylight,
                       "Photos are bright and clear enough to inspect.",
@@ -1261,9 +1261,14 @@ namespace Valuation.Api.Services
             return spaced.ToLowerInvariant();
         }
 
-        private static void CompareOdometer(QcAiAuditDto o, long? readKm, double? recorded)
+        private static void CompareOdometer(QcAiAuditDto o, long? readKm, double? recorded, string? remark)
         {
             const string key = "accOdo";
+            if (recorded is null or <= 0 && !string.IsNullOrWhiteSpace(remark))
+            {
+                Unresolved(o, key, $"AVO recorded the odometer as {remark.Trim()} instead of a reading, so there is nothing to compare against.");
+                return;
+            }
             if (recorded is null or <= 0) { Unresolved(o, key, "AVO recorded no odometer reading to compare against."); return; }
             if (readKm is null) { Unresolved(o, key, $"Odometer could not be read from the photo — AVO recorded {recorded:N0} km."); return; }
 
