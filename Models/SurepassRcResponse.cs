@@ -93,7 +93,9 @@ namespace Valuation.Api.Models
         public string? OwnerNumber { get; set; }
 
         [JsonPropertyName("financed")]
-        public bool Financed { get; set; }
+        // Nullable: Surepass sends null here (seen on a "backend_down" reply), and a
+        // plain bool made the whole response fail to parse, dropping every field.
+        public bool? Financed { get; set; }
 
         [JsonPropertyName("financer")]
         public string? Financer { get; set; }

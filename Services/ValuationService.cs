@@ -481,7 +481,7 @@ public class ValuationService : IValuationService
         dto.OwnerName        = api.OwnerName             ?? dto.OwnerName;
         dto.PresentAddress   = api.PresentAddress        ?? dto.PresentAddress;
         dto.PermanentAddress = api.PermanentAddress      ?? dto.PermanentAddress;
-        dto.Hypothecation    = api.Financed;
+        dto.Hypothecation    = api.Financed              ?? dto.Hypothecation;
         dto.Insurer          = api.InsuranceCompany      ?? dto.Insurer;
         dto.InsurancePolicyNo = api.InsurancePolicyNumber ?? dto.InsurancePolicyNo;
     }
