@@ -163,6 +163,17 @@ namespace Valuation.Api.Models
         [JsonPropertyName("permit_type")]
         public string? PermitType { get; set; }
 
+        // A national permit comes in its own fields, with no type and only an end
+        // date. MapSurepassToDto uses it when the permit fields above are empty.
+        [JsonPropertyName("national_permit_number")]
+        public string? NationalPermitNumber { get; set; }
+
+        [JsonPropertyName("national_permit_upto")]
+        public string? NationalPermitUpto { get; set; }
+
+        [JsonPropertyName("national_permit_issued_by")]
+        public string? NationalPermitIssuedBy { get; set; }
+
         [JsonPropertyName("blacklist_status")]
         public string? BlacklistStatus { get; set; }
 
