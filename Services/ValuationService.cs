@@ -462,6 +462,23 @@ public class ValuationService : IValuationService
         dto.TaxPaidUpto              = api.TaxPaidUpto;
         dto.OwnerSerialNo            = api.OwnerNumber;
 
+        // ── National permit ───────────────────────────────────────────────────
+        // Surepass lists a national permit in fields of its own, which were never
+        // read. When the permit fields are empty, fill them from it, so a vehicle
+        // whose only permit is the national one still shows a permit. The same
+        // fields are reused so the portal, app and report need no change; the type
+        // says which permit it is, since the national set has no type of its own.
+        if (string.IsNullOrWhiteSpace(api.PermitNumber) &&
+            !string.IsNullOrWhiteSpace(api.NationalPermitNumber))
+        {
+            var issuedBy = api.NationalPermitIssuedBy?.Trim();
+            dto.PermitNo        = api.NationalPermitNumber.Trim();
+            dto.PermitValidUpTo = SafeParseDate(api.NationalPermitUpto);
+            dto.PermitType      = string.IsNullOrEmpty(issuedBy)
+                ? "National Permit"
+                : $"National Permit (issued by {issuedBy})";
+        }
+
         // ── Boolean business logic ────────────────────────────────────────────
         // Surepass does not return a direct valid bool; use success from the wrapper (already filtered before this call)
         dto.RcStatus      = true;
@@ -481,7 +498,7 @@ public class ValuationService : IValuationService
         dto.OwnerName        = api.OwnerName             ?? dto.OwnerName;
         dto.PresentAddress   = api.PresentAddress        ?? dto.PresentAddress;
         dto.PermanentAddress = api.PermanentAddress      ?? dto.PermanentAddress;
-        dto.Hypothecation    = api.Financed;
+        dto.Hypothecation    = api.Financed              ?? dto.Hypothecation;
         dto.Insurer          = api.InsuranceCompany      ?? dto.Insurer;
         dto.InsurancePolicyNo = api.InsurancePolicyNumber ?? dto.InsurancePolicyNo;
     }

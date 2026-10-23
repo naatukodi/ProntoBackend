@@ -93,7 +93,9 @@ namespace Valuation.Api.Models
         public string? OwnerNumber { get; set; }
 
         [JsonPropertyName("financed")]
-        public bool Financed { get; set; }
+        // Nullable: Surepass sends null here (seen on a "backend_down" reply), and a
+        // plain bool made the whole response fail to parse, dropping every field.
+        public bool? Financed { get; set; }
 
         [JsonPropertyName("financer")]
         public string? Financer { get; set; }
@@ -160,6 +162,17 @@ namespace Valuation.Api.Models
 
         [JsonPropertyName("permit_type")]
         public string? PermitType { get; set; }
+
+        // A national permit comes in its own fields, with no type and only an end
+        // date. MapSurepassToDto uses it when the permit fields above are empty.
+        [JsonPropertyName("national_permit_number")]
+        public string? NationalPermitNumber { get; set; }
+
+        [JsonPropertyName("national_permit_upto")]
+        public string? NationalPermitUpto { get; set; }
+
+        [JsonPropertyName("national_permit_issued_by")]
+        public string? NationalPermitIssuedBy { get; set; }
 
         [JsonPropertyName("blacklist_status")]
         public string? BlacklistStatus { get; set; }
