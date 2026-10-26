@@ -30,6 +30,16 @@ namespace Valuation.Api.Repositories
 
         private const string Model = "gpt-4o-mini";
 
+        // The wheel check alone runs on a stronger model; see ReadMissingWheelsAsync on
+        // the interface for why. gpt-5-mini ignores "detail" and reads every photo near
+        // full resolution, which is what it takes to see a wheel that is not there.
+        private const string WheelModel = "gpt-5-mini";
+
+        // gpt-5-mini reasons before it answers and the reasoning is billed against this
+        // cap. A cost ceiling, not a target: 10-photo wheel checks used at most about
+        // 1,000, and an answer cut off at the cap comes back empty, which loses the check.
+        private const int WheelCompletionCap = 8000;
+
         // Valuations search listing sites, and that needs a different model from the
         // photo reads. gpt-4o-mini and gpt-4.1-mini reject the search's domain filter
         // outright. gpt-5-mini opens a listing and reads its price, year and km, where
@@ -62,7 +72,7 @@ namespace Valuation.Api.Repositories
         };
 
         /// <inheritdoc />
-        public string ModelName => Model;
+        public string ModelName => $"{Model}, wheels {WheelModel}";
 
         // The model used to price vehicles from memory, and its memory stops in late
         // 2023: it named no source because it had none. It now has to find comparable
@@ -403,7 +413,7 @@ namespace Valuation.Api.Repositories
             IReadOnlyDictionary<string, string> photos,
             IReadOnlySet<string> closeUpKeys,
             CancellationToken ct = default) =>
-            ReadPhotosAsync("identity", BuildIdentityPrompt(photos.Keys),
+            ReadPhotosAsync("identity", Model, BuildIdentityPrompt(photos.Keys),
                             "qc_photo_reading", IdentitySchema(), photos, closeUpKeys, ct);
 
         /// <summary>
@@ -414,7 +424,7 @@ namespace Valuation.Api.Repositories
             IReadOnlyDictionary<string, string> photos,
             IReadOnlySet<string> closeUpKeys,
             CancellationToken ct = default) =>
-            ReadPhotosAsync("condition", BuildConditionPrompt(photos.Keys),
+            ReadPhotosAsync("condition", Model, BuildConditionPrompt(photos.Keys),
                             "qc_condition_reading", ConditionSchema(), photos, closeUpKeys, ct);
 
         /// <summary>
@@ -424,16 +434,29 @@ namespace Valuation.Api.Repositories
         public Task<QcAiVisionResult?> ReadPhotoProvenanceAsync(
             IReadOnlyDictionary<string, string> photos,
             CancellationToken ct = default) =>
-            ReadPhotosAsync("provenance", BuildProvenancePrompt(photos.Keys),
+            ReadPhotosAsync("provenance", Model, BuildProvenancePrompt(photos.Keys),
                             "qc_photo_provenance", ProvenanceSchema(), photos,
                             new HashSet<string>(StringComparer.OrdinalIgnoreCase), ct);
 
         /// <summary>
-        /// Shared transport for all three passes: labels each image, applies the per-photo
-        /// detail map, and carries the retry rules. Only the prompt and the schema differ.
+        /// The wheel check: wheels and tyres the photos show to be missing. See
+        /// IChatGptRepository. No photo is asked for at high detail because this model
+        /// ignores the setting.
+        /// </summary>
+        public Task<QcAiVisionResult?> ReadMissingWheelsAsync(
+            IReadOnlyDictionary<string, string> photos,
+            CancellationToken ct = default) =>
+            ReadPhotosAsync("wheels", WheelModel, BuildWheelsPrompt(photos.Keys),
+                            "qc_missing_wheels", WheelsSchema(), photos,
+                            new HashSet<string>(StringComparer.OrdinalIgnoreCase), ct);
+
+        /// <summary>
+        /// Shared transport for every photo read: labels each image, applies the per-photo
+        /// detail map, and carries the retry rules. Only the model, the prompt and the
+        /// schema differ.
         /// </summary>
         private async Task<QcAiVisionResult?> ReadPhotosAsync(
-            string pass, string prompt, string schemaName, object schema,
+            string pass, string model, string prompt, string schemaName, object schema,
             IReadOnlyDictionary<string, string> photos,
             IReadOnlySet<string> closeUpKeys,
             CancellationToken ct)
@@ -468,23 +491,36 @@ namespace Valuation.Api.Repositories
                 });
             }
 
-            var payload = new
+            var messages = new[] { new { role = "user", content } };
+            var responseFormat = new
             {
-                model = Model,
-                temperature = 0,          // transcription, not creativity
-                max_tokens = 2000,
-                messages = new[] { new { role = "user", content } },
-                response_format = new
+                type = "json_schema",
+                json_schema = new
                 {
-                    type = "json_schema",
-                    json_schema = new
-                    {
-                        name = schemaName,
-                        strict = true,
-                        schema
-                    }
+                    name = schemaName,
+                    strict = true,
+                    schema
                 }
             };
+
+            // A reasoning model rejects temperature and max_tokens outright.
+            object payload = model == WheelModel
+                ? new
+                {
+                    model,
+                    reasoning_effort = "low",
+                    max_completion_tokens = WheelCompletionCap,
+                    messages,
+                    response_format = responseFormat
+                }
+                : new
+                {
+                    model,
+                    temperature = 0,      // transcription, not creativity
+                    max_tokens = 2000,
+                    messages,
+                    response_format = responseFormat
+                };
 
             var json = JsonSerializer.Serialize(payload);
 
@@ -556,8 +592,8 @@ namespace Valuation.Api.Repositories
             if (result != null && doc.RootElement.TryGetProperty("usage", out var usage))
             {
                 _logger.LogInformation(
-                    "QC photo read [{Pass}]: prompt={Prompt} completion={Completion} images={Images} highDetail={CloseUp}",
-                    pass,
+                    "QC photo read [{Pass}] {Model}: prompt={Prompt} completion={Completion} images={Images} highDetail={CloseUp}",
+                    pass, model,
                     usage.GetProperty("prompt_tokens").GetInt32(),
                     usage.GetProperty("completion_tokens").GetInt32(),
                     photos.Count,
@@ -874,6 +910,93 @@ namespace Valuation.Api.Repositories
                 }
             };
         }
+
+        /// <summary>
+        /// The wheel check's prompt. Each rule in it answers a measured failure: the
+        /// per-type wheel counts and the fork, swingarm, tractor-hub and dual-rim cases
+        /// are the ones every earlier wording missed, and the evidence rule is there
+        /// because a bare "look for missing wheels" reported all four wheels gone on old,
+        /// dark and black-and-white photos of complete vehicles.
+        /// </summary>
+        private static string BuildWheelsPrompt(IEnumerable<string> photoKeys)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("You are checking inspection photographs of a used vehicle in India for ONE thing only:");
+            sb.AppendLine("wheels or tyres that are missing. Ignore paint, rust, damage, number plates and the");
+            sb.AppendLine("camera overlay: other checks handle those.");
+            sb.AppendLine();
+            sb.AppendLine("First work out what kind of vehicle each photo shows and how many wheels it should have:");
+            sb.AppendLine("a motorcycle or scooter has 2 (front and rear); an auto-rickshaw has 3 (one front, two");
+            sb.AppendLine("rear); a car, SUV, van, pickup or tractor has 4; a truck, bus or trailer has 4 or more,");
+            sb.AppendLine("often with two tyres side by side at each end of a rear axle.");
+            sb.AppendLine();
+            sb.AppendLine("Then look at every wheel position each photo shows. A wheel or tyre is MISSING when a");
+            sb.AppendLine("photo shows any of these:");
+            sb.AppendLine("- a bare hub, brake disc, brake drum, wheel studs or axle end with no wheel mounted on it;");
+            sb.AppendLine("- on a motorcycle or scooter, an empty front fork or an empty rear swingarm, or the bike");
+            sb.AppendLine("  propped on a stand, block or jack with no wheel at that end;");
+            sb.AppendLine("- on a tractor, a bare hub where one of the big rear wheels or a front wheel belongs;");
+            sb.AppendLine("- a bare steel rim with no tyre on it — including one rim of a dual pair standing next");
+            sb.AppendLine("  to a tyre that is still there — or a tyre that has come off its rim;");
+            sb.AppendLine("- the vehicle standing on jack stands, a jack, blocks, bricks or wood with a wheel position");
+            sb.AppendLine("  empty;");
+            sb.AppendLine("- a wheel lying on the ground beside the vehicle while one of its wheel positions is empty.");
+            sb.AppendLine();
+            sb.AppendLine("A wheel you can see with a tyre on it is mounted, however old, rusty, dirty, flat or bald");
+            sb.AppendLine("it is and however old or abandoned the vehicle is. A flat tyre still on its rim is NOT");
+            sb.AppendLine("missing. Never report a wheel missing because a photo is dark, black-and-white, blurred");
+            sb.AppendLine("or taken from far away: report it only where you can point to the bare hub, empty fork or");
+            sb.AppendLine("swingarm, bare rim or support that shows it. A position no photo shows is not missing");
+            sb.AppendLine("either — say nothing about it, and do not assume the side you cannot see matches the");
+            sb.AppendLine("side you can.");
+            sb.AppendLine();
+            sb.AppendLine("Report:");
+            sb.AppendLine("- wheelsMissing: one entry per missing wheel or tyre, with photoKey (the [photo: KEY]");
+            sb.AppendLine("  label of the photo that shows it most clearly), position (e.g. \"rear right\",");
+            sb.AppendLine("  \"front\", \"outer rear left\") and evidence (what is at that position instead, e.g.");
+            sb.AppendLine("  \"bare brake drum, resting on bricks\", \"empty fork\", \"bare rim\"). An empty list is");
+            sb.AppendLine("  the right answer when every wheel the photos show is mounted.");
+            sb.AppendLine("- observations: anything about the wheels a reviewer should look at themselves, such as");
+            sb.AppendLine("  a wheel position hidden behind something in the frame.");
+            sb.AppendLine();
+            sb.AppendLine("These findings go into a report a lender relies on: a vehicle standing without its wheels");
+            sb.AppendLine("must never be passed as complete, and a complete vehicle must never be reported as");
+            sb.AppendLine("missing one.");
+            sb.AppendLine();
+            sb.AppendLine("Each image is preceded by a [photo: KEY] label. The key says what the slot is MEANT to");
+            sb.AppendLine("hold and is only a hint: slots are sometimes filled with the wrong picture. Trust the");
+            sb.AppendLine("image over its key and judge what is actually in front of you.");
+            sb.AppendLine("Photo keys in this case: " + string.Join(", ", photoKeys));
+            return sb.ToString();
+        }
+
+        /// <summary>The wheel check's schema: WheelsMissing and Observations only.</summary>
+        private static object WheelsSchema() => new
+        {
+            type = "object",
+            additionalProperties = false,
+            required = new[] { "wheelsMissing", "observations" },
+            properties = new Dictionary<string, object>
+            {
+                ["wheelsMissing"] = new
+                {
+                    type = "array",
+                    items = new
+                    {
+                        type = "object",
+                        additionalProperties = false,
+                        required = new[] { "photoKey", "position", "evidence" },
+                        properties = new Dictionary<string, object>
+                        {
+                            ["photoKey"] = new { type = "string" },
+                            ["position"] = new { type = "string" },
+                            ["evidence"] = new { type = "string" }
+                        }
+                    }
+                },
+                ["observations"] = new { type = "array", items = new { type = "string" } }
+            }
+        };
 
     }
 }

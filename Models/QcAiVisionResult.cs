@@ -89,6 +89,14 @@ namespace Valuation.Api.Models
         [JsonPropertyName("missingParts")]
         public List<string> MissingParts { get; set; } = new();
 
+        /// <summary>
+        /// Wheels and tyres the photos show to be absent, from the dedicated wheel check.
+        /// The caller folds these into <see cref="MissingParts"/>, where the portal reads
+        /// them; they are kept here as well so the photo that showed each one survives.
+        /// </summary>
+        [JsonPropertyName("wheelsMissing")]
+        public List<QcAiMissingWheel> WheelsMissing { get; set; } = new();
+
         // ── Per-photo stamp text, for location and timestamp consistency ──────
         // Photos that came through WhatsApp have no EXIF at all, so the burned-in
         // GPS Map Camera overlay is the only capture record that survives.
@@ -124,6 +132,21 @@ namespace Valuation.Api.Models
         /// <summary>The characters exactly as seen, or null if not legible.</summary>
         [JsonPropertyName("characters")]
         public string? Characters { get; set; }
+    }
+
+    /// <summary>One missing wheel or tyre, and the photo that shows it.</summary>
+    public class QcAiMissingWheel
+    {
+        [JsonPropertyName("photoKey")]
+        public string? PhotoKey { get; set; }
+
+        /// <summary>As seen, e.g. "rear right", "front", "outer rear left".</summary>
+        [JsonPropertyName("position")]
+        public string? Position { get; set; }
+
+        /// <summary>What is at that position instead, e.g. "bare brake drum, on bricks".</summary>
+        [JsonPropertyName("evidence")]
+        public string? Evidence { get; set; }
     }
 
     public class QcAiPhotoStamp

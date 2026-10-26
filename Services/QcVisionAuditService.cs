@@ -152,6 +152,15 @@ namespace Valuation.Api.Services
         private const int MaxIdentityHigh = 2;      // odometer + one chassis is what pays
         private const int MaxConditionHigh = 2;
 
+        // The wheel check runs on gpt-5-mini, which prices an image by its size and
+        // ignores "detail" altogether: 1,446 tokens at 1280x960, 2,286 at 1600x1200, and
+        // 3,692 at 2048x1536 and anything larger, where it stops growing. It is costed at
+        // that ceiling plus its reasoning, which is spent before the answer and counts
+        // against the minute like any other token. The allowance is per model, so it is
+        // paced in a window of its own and kept out of TripleCeiling.
+        private const int WheelPhotoTokens = 3700;  // gpt-5-mini's per-photo ceiling
+        private const int WheelReasoning = 8000;    // ChatGptRepository's completion cap
+
         // The provider bills tokens per minute, not per request, so a big case can
         // sit inside the limit request-by-request and still breach it as a whole.
         // TripleCeiling above only decides how much full detail is affordable; it
@@ -348,6 +357,17 @@ namespace Valuation.Api.Services
                 }
             }
 
+            // The wheel check looks at the photos Pass 2 looks at. It is versioned on its
+            // own, so adding it made old cases run it once without re-reading the rest.
+            var wheelPrint = Fingerprint(conditionPhotos, WheelsVersion);
+            var wheelRec = Reusable(stored?.Wheels, wheelPrint, force);
+
+            // Started now and awaited at the merge, so it runs alongside Passes 2 and 3:
+            // another model, another allowance, and neither depends on the other.
+            var wheelsTask = wheelRec != null || conditionPhotos.Count == 0
+                ? Task.FromResult<(QcAiVisionResult?, string)>((wheelRec?.Reading, ""))
+                : ReadWheelsAsync(conditionPhotos, ct);
+
             var condition = condRec?.Reading;
             var conditionNote = "";
             if (condition == null && conditionPhotos.Count > 0)
@@ -400,15 +420,18 @@ namespace Valuation.Api.Services
                         : notes[0];
             }
 
-            var read = Merge(identity, condition, provenance);
+            var (wheels, wheelsNote) = await wheelsTask;
+
+            var read = Merge(identity, condition, provenance, wheels);
             if (conditionNote.Length > 0) read.Observations.Add(conditionNote);
             if (provenanceNote.Length > 0) read.Observations.Add(provenanceNote);
+            if (wheelsNote.Length > 0) read.Observations.Add(wheelsNote);
             FanOutDuplicates(read, duplicates);
 
-            var reused = idRec != null && condRec != null && provRec != null;
+            var reused = idRec != null && condRec != null && provRec != null && wheelRec != null;
             if (reused)
             {
-                outp.ReadAt = new[] { idRec!.ReadAt, condRec!.ReadAt, provRec!.ReadAt }.Max();
+                outp.ReadAt = new[] { idRec!.ReadAt, condRec!.ReadAt, provRec!.ReadAt, wheelRec!.ReadAt }.Max();
                 outp.Cached = true;
             }
 
@@ -522,17 +545,19 @@ namespace Valuation.Api.Services
                 _logger.LogInformation(
                     "QC read {Case}: model={Model} promptVersion={Version} photos={Total} "
                     + "distinct={Distinct} p1={P1} p2={P2} p3={P3} projected={Projected} "
-                    + "ceiling={Ceiling} identityOk={IdOk} conditionOk={CondOk} provenanceOk={ProvOk}",
+                    + "ceiling={Ceiling} identityOk={IdOk} conditionOk={CondOk} provenanceOk={ProvOk} "
+                    + "wheelsOk={WheelsOk} wheelsMissing={WheelsMissing}",
                     valuationId, _ai.ModelName, PromptVersion, photos.Count, distinct.Count,
                     identityPhotos.Count, conditionPhotos.Count, provenancePhotos.Count,
                     projected, _minuteCeiling, identity != null, condition != null,
-                    provenance != null);
+                    provenance != null, wheels != null, read.WheelsMissing.Count);
 
             if (!reused)
                 await PersistAsync(doc, read!, fingerprint, outp.ReadAt!.Value, ct,
                     Keep(idRec, identity, idPrint, outp.ReadAt!.Value),
                     Keep(condRec, condition, condPrint, outp.ReadAt!.Value),
-                    Keep(provRec, provenance, provPrint, outp.ReadAt!.Value));
+                    Keep(provRec, provenance, provPrint, outp.ReadAt!.Value),
+                    Keep(wheelRec, wheels, wheelPrint, outp.ReadAt!.Value));
 
             return outp;
         }
@@ -548,7 +573,7 @@ namespace Valuation.Api.Services
         private async Task PersistAsync(ValuationDocument doc, QcAiVisionResult reading,
                                         string fingerprint, DateTime readAt, CancellationToken ct,
                                         QcAiPassRecord? identity, QcAiPassRecord? condition,
-                                        QcAiPassRecord? provenance)
+                                        QcAiPassRecord? provenance, QcAiPassRecord? wheels)
         {
             try
             {
@@ -561,7 +586,8 @@ namespace Valuation.Api.Services
                     PromptVersion = PromptVersion,
                     Identity = identity,
                     Condition = condition,
-                    Provenance = provenance
+                    Provenance = provenance,
+                    Wheels = wheels
                 };
 
                 await Container.PatchItemAsync<ValuationDocument>(
@@ -583,6 +609,12 @@ namespace Valuation.Api.Services
         /// because we started asking about tyre wear.
         /// </summary>
         private const string PromptVersion = "v9-three-pass";
+
+        /// <summary>
+        /// The wheel check's own version, folded into its fingerprint only. Bump it when
+        /// its prompt, schema or model changes; the other passes are left alone.
+        /// </summary>
+        private const string WheelsVersion = "w1-gpt-5-mini";
 
         /// <summary>
         /// Photo keys whose blob cannot be fetched.
@@ -758,9 +790,25 @@ namespace Valuation.Api.Services
         }
 
 
-        /// <summary>What one request of this shape will cost, by the measured formula.</summary>
+        /// <summary>What one gpt-4o-mini request of this shape will cost, by the measured formula.</summary>
         private static int Project(int photos, int highDetail) =>
             PromptOverhead + (photos * LowPhotoTokens) + (highDetail * HighPhotoExtra);
+
+        /// <summary>What the wheel check will cost at most, on its own model.</summary>
+        private static int ProjectWheels(int photos) =>
+            PromptOverhead + (photos * WheelPhotoTokens) + WheelReasoning;
+
+        /// <summary>
+        /// The wheel check, paced in its own model's window. A failure becomes a note, as
+        /// for Passes 2 and 3, and Pass 2's own wheel mentions stand in for it.
+        /// </summary>
+        private async Task<(QcAiVisionResult?, string)> ReadWheelsAsync(
+            IReadOnlyDictionary<string, string> photos, CancellationToken ct)
+        {
+            await PaceAsync(WheelPaceGate, WheelSpent, ProjectWheels(photos.Count), ct);
+            return await TryPassAsync(() => _ai.ReadMissingWheelsAsync(photos, ct),
+                                      "Wheels could not be checked for missing ones");
+        }
 
         /// <summary>
         /// Splits Pass 3 only when the case as a whole is projected over the minute
@@ -796,9 +844,17 @@ namespace Valuation.Api.Services
         /// waited on forever - it cannot ever fit, and the repository's own 429 retry
         /// is the right handler for it.
         /// </summary>
-        private async Task PaceAsync(int tokens, CancellationToken ct)
+        private Task PaceAsync(int tokens, CancellationToken ct) => PaceAsync(PaceGate, Spent, tokens, ct);
+
+        /// <summary>
+        /// The same pacing in a window of its own, for a model with its own allowance. The
+        /// wheel check's model is paced against the same configured figure, because its
+        /// real allowance is not published to us either.
+        /// </summary>
+        private async Task PaceAsync(SemaphoreSlim gate, Queue<(DateTime At, int Tokens)> spent,
+                                     int tokens, CancellationToken ct)
         {
-            await PaceGate.WaitAsync(ct);
+            await gate.WaitAsync(ct);
             try
             {
                 // A single request bigger than the whole ceiling can never fit inside a
@@ -806,19 +862,19 @@ namespace Valuation.Api.Services
                 // repository's own 429 retry is the right handler if the provider objects.
                 if (tokens >= _minuteCeiling)
                 {
-                    Spent.Enqueue((DateTime.UtcNow, tokens));
+                    spent.Enqueue((DateTime.UtcNow, tokens));
                     return;
                 }
 
                 while (true)
                 {
                     var now = DateTime.UtcNow;
-                    while (Spent.Count > 0 && (now - Spent.Peek().At).TotalSeconds >= 60)
-                        Spent.Dequeue();
-                    if (Spent.Count == 0) break;
-                    var used = Spent.Sum(s => s.Tokens);
+                    while (spent.Count > 0 && (now - spent.Peek().At).TotalSeconds >= 60)
+                        spent.Dequeue();
+                    if (spent.Count == 0) break;
+                    var used = spent.Sum(s => s.Tokens);
                     if (used + tokens <= _minuteCeiling) break;
-                    var wait = TimeSpan.FromSeconds(60) - (now - Spent.Peek().At);
+                    var wait = TimeSpan.FromSeconds(60) - (now - spent.Peek().At);
                     if (wait <= TimeSpan.Zero) continue;
                     _logger.LogInformation(
                         "QC read pacing: {Used} tokens used this minute, {Want} wanted, "
@@ -826,13 +882,15 @@ namespace Valuation.Api.Services
                         used, tokens, wait.TotalSeconds);
                     await Task.Delay(wait, ct);
                 }
-                Spent.Enqueue((DateTime.UtcNow, tokens));
+                spent.Enqueue((DateTime.UtcNow, tokens));
             }
-            finally { PaceGate.Release(); }
+            finally { gate.Release(); }
         }
 
         private static readonly SemaphoreSlim PaceGate = new(1, 1);
         private static readonly Queue<(DateTime At, int Tokens)> Spent = new();
+        private static readonly SemaphoreSlim WheelPaceGate = new(1, 1);
+        private static readonly Queue<(DateTime At, int Tokens)> WheelSpent = new();
 
         /// <summary>A pass record is reusable when it read the same photos and force is off.</summary>
         private static QcAiPassRecord? Reusable(QcAiPassRecord? rec, string fingerprint, bool force) =>
@@ -898,16 +956,20 @@ namespace Valuation.Api.Services
         };
 
         /// <summary>
-        /// Combines the three passes into the one result the checks below consume.
+        /// Combines the passes into the one result the checks below consume.
         ///
         /// Each field has exactly one owner, and a pass that returned nothing simply does
         /// not write: a missing condition pass leaves the exterior band null rather than
         /// overwriting a good identity reading with blanks, and vice versa. That is why
         /// this copies field by field instead of merging objects.
+        ///
+        /// MissingParts is the one shared field: Pass 2 owns everything in it except
+        /// wheels and tyres, which the wheel check owns whenever it ran.
         /// </summary>
         private static QcAiVisionResult Merge(QcAiVisionResult identity,
                                               QcAiVisionResult? condition,
-                                              QcAiVisionResult? provenance)
+                                              QcAiVisionResult? provenance,
+                                              QcAiVisionResult? wheels)
         {
             // Pass 1 owns identity, and is the base.
             var merged = new QcAiVisionResult
@@ -945,13 +1007,50 @@ namespace Valuation.Api.Services
                     merged.Observations.AddRange(provenance.Observations);
             }
 
+            // The wheel check owns missing wheels. Pass 2 names one now and then, but sees
+            // far fewer and places them loosely, so its wheel entries give way rather than
+            // sit beside these as a second, differently worded account of the same wheel.
+            // Should the wheel check fail, Pass 2's stay: some evidence beats none. New
+            // lists throughout, because the passes' own readings are cached as they are.
+            if (wheels != null)
+            {
+                merged.WheelsMissing = new List<QcAiMissingWheel>(wheels.WheelsMissing ?? new());
+                merged.MissingParts = merged.MissingParts
+                    .Where(p => !WheelPart.IsMatch(p))
+                    .Concat(merged.WheelsMissing.Select(DescribeWheel))
+                    .ToList();
+                if (wheels.Observations is { Count: > 0 })
+                    merged.Observations.AddRange(wheels.Observations);
+            }
+
             return merged;
         }
 
-        /// <summary>Identifies a photo set, so a changed or added photo forces a re-read.</summary>
-        private static string Fingerprint(IReadOnlyDictionary<string, string> photos)
+        /// <summary>A missing-parts entry that names a wheel, tyre or rim.</summary>
+        private static readonly Regex WheelPart =
+            new(@"\b(wheel|tyre|tire|rim)s?\b(?!\s*arch)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// "rear right wheel (bare brake drum, resting on bricks) - rear left side photo".
+        /// The photo is named because the model's left and right are its own: it has
+        /// called a rear wheel the front one, and the reviewer should look, not trust.
+        /// </summary>
+        private static string DescribeWheel(QcAiMissingWheel w)
         {
-            var joined = PromptVersion + "|" +
+            var position = (w.Position ?? "").Trim();
+            if (position.Length == 0) position = "wheel";
+            else if (!WheelPart.IsMatch(position)) position += " wheel";
+            var evidence = string.IsNullOrWhiteSpace(w.Evidence) ? "" : $" ({w.Evidence!.Trim()})";
+            return $"{position}{evidence} - {Pretty(w.PhotoKey)} photo";
+        }
+
+        /// <summary>Identifies a photo set, so a changed or added photo forces a re-read.</summary>
+        private static string Fingerprint(IReadOnlyDictionary<string, string> photos) =>
+            Fingerprint(photos, PromptVersion);
+
+        private static string Fingerprint(IReadOnlyDictionary<string, string> photos, string version)
+        {
+            var joined = version + "|" +
                          string.Join("|", photos.OrderBy(p => p.Key, StringComparer.Ordinal)
                                                 .Select(p => $"{p.Key}={p.Value}"));
             var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(joined));
