@@ -29,7 +29,8 @@
         public DateTime ReadAt { get; set; }
 
         /// <summary>
-        /// The vision model that produced this reading, e.g. "gpt-4o-mini".
+        /// The vision models that produced this reading, e.g. "gpt-4o-mini, wheels
+        /// gpt-5-mini".
         ///
         /// Stored in its own right rather than left inside the fingerprint. The
         /// fingerprint is a hash built for cache identity and answers only "do these
@@ -60,6 +61,14 @@
 
         /// <summary>Pass 3: the burned-in capture place and time, per photo.</summary>
         public QcAiPassRecord? Provenance { get; set; }
+
+        /// <summary>
+        /// The wheel check: wheels and tyres the photos show to be missing. Versioned on
+        /// its own rather than by <see cref="PromptVersion"/>, so adding it did not make
+        /// every case re-read the three passes it never touched. Null on records written
+        /// before it existed, which is what makes those cases run it once.
+        /// </summary>
+        public QcAiPassRecord? Wheels { get; set; }
     }
 
     /// <summary>One pass's reading, with the fingerprint of the photos it was made from.</summary>

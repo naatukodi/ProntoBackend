@@ -5,8 +5,9 @@ namespace Valuation.Api.Repositories
     public interface IChatGptRepository
     {
         /// <summary>
-        /// The vision model these reads run against, recorded with every stored
+        /// The vision models these reads run against, recorded with every stored
         /// reading so a finding can be traced back to the model that produced it.
+        /// The wheel check runs on its own model, so this names both.
         /// </summary>
         string ModelName { get; }
 
@@ -81,6 +82,25 @@ namespace Valuation.Api.Repositories
         /// gave 6 stamps out of 6, and the same six at high detail gave 5.
         /// </summary>
         Task<QcAiVisionResult?> ReadPhotoProvenanceAsync(
+            IReadOnlyDictionary<string, string> photos,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// THE WHEEL CHECK — wheels and tyres the photos show to be missing: a bare hub,
+        /// drum or disc, an empty fork or swingarm, a bare rim, a vehicle on blocks. Only
+        /// WheelsMissing and Observations are populated.
+        ///
+        /// Its own request on its own model, and both were measured (2026-10-23, 53
+        /// labelled photos and 10-photo cases). Pass 2's model, asked about wheels
+        /// alongside the bodywork, caught 9 of 17 missing wheels hidden in a case, all but
+        /// never saw a tractor's bare hub or a truck's bare rim, and asked outright insisted
+        /// a motorcycle with no rear wheel had one. Moving all of Pass 2 onto gpt-5-mini
+        /// caught more, but it listed two to three times as many bodywork findings and the
+        /// portal grades damage by counting them. Asked about wheels alone, gpt-5-mini
+        /// caught all 60 single-photo and all 34 in-case missing wheels, motorcycles
+        /// included, with no false alarm on a complete vehicle.
+        /// </summary>
+        Task<QcAiVisionResult?> ReadMissingWheelsAsync(
             IReadOnlyDictionary<string, string> photos,
             CancellationToken ct = default);
     }
