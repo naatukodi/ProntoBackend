@@ -149,6 +149,10 @@ builder.Services.AddScoped<IRoleService, TableRoleService>();
 builder.Services.AddScoped<TableRoleService>();
 builder.Services.AddScoped<ICommonNoteService, CommonNoteService>();
 
+// Staff-app push notifications (FCM). Off until the Fcm__ServiceAccountJson setting exists.
+builder.Services.AddSingleton<FcmClient>();
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+
 // ✅ VIDEO UPLOAD CONFIGURATION
 // Configure request size limit for file uploads (100MB max)
 builder.Services.Configure<FormOptions>(options =>

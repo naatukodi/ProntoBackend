@@ -100,6 +100,11 @@ public class WorkflowController : ControllerBase
                                            Uri.UnescapeDataString(applicantContact));
             }
 
+            // QC is done, so the case now waits on an approver: tell them on their phones.
+            if (stepOrder == 4)
+                StartFinalReportNoticeInBackground(valuationId.ToString(), vehicleNumber,
+                                                   Uri.UnescapeDataString(applicantContact));
+
             if (stepOrder == 5)
             {
                 var decodedContact = Uri.UnescapeDataString(applicantContact);
@@ -183,6 +188,30 @@ public class WorkflowController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Market range warm-up failed for {Valuation}; the approval page will ask again.", valuationId);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Sends the "ready for final report" push outside the request, for the same reasons
+    /// as <see cref="StartPhotoReadInBackground"/>.
+    ///
+    /// Swallowed on failure: a missed notice leaves the case on the Final Report
+    /// dashboard exactly as before, and QC's submit must never fail because of it.
+    /// </summary>
+    private void StartFinalReportNoticeInBackground(string valuationId, string vehicleNumber, string applicantContact)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var push = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
+                await push.NotifyFinalReportReadyAsync(valuationId, vehicleNumber, applicantContact);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Final report notice failed for {Valuation}; it still shows on the dashboard.", valuationId);
             }
         });
     }
