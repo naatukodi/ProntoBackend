@@ -140,6 +140,8 @@ builder.Services.AddScoped<IReferenceNumberService, ReferenceNumberService>();
 builder.Services.AddScoped<IQcVisionAuditService, QcVisionAuditService>();
 builder.Services.AddTransient<IVehicleValuationService, VehicleValuationService>();
 builder.Services.AddScoped<IVehiclePhotoService, VehiclePhotoService>();
+// Phone uploads the portal announces (bell, pop-up, dashboard badge).
+builder.Services.AddScoped<IMediaUploadLog, MediaUploadLog>();
 // Clients whose cases need no photos or video (App Service setting, see ClientRules).
 builder.Services.AddSingleton<IClientRules, ClientRules>();
 builder.Services.AddScoped<IValuationResponseService, ValuationResponseService>();
@@ -148,6 +150,10 @@ builder.Services.AddScoped<IFinalReportPdfService, FinalReportPdfService>();
 builder.Services.AddScoped<IRoleService, TableRoleService>();
 builder.Services.AddScoped<TableRoleService>();
 builder.Services.AddScoped<ICommonNoteService, CommonNoteService>();
+
+// Staff-app push notifications (FCM). Off until the Fcm__ServiceAccountJson setting exists.
+builder.Services.AddSingleton<FcmClient>();
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 
 // ✅ VIDEO UPLOAD CONFIGURATION
 // Configure request size limit for file uploads (100MB max)
