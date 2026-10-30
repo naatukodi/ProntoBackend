@@ -41,6 +41,11 @@ namespace Valuation.Api.Models
         // ✅ NEW: Properties for Custom Images
         public IList<IFormFile>? CustomImageFiles { get; set; }
         public string? CustomImagesMetadata { get; set; }
+
+        // Who sent the upload, for the portal's "photos uploaded" messages. The camera
+        // app sends "CameraApp" and its agency login; the portal sends neither.
+        public string? UploadSource { get; set; }
+        public string? UploadedBy { get; set; }
     }
 
     public class AnnotatePhotoRequest

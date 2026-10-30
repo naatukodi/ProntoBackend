@@ -16,11 +16,14 @@ namespace Valuation.Api.Controllers
     {
         private readonly IVehiclePhotoService _photoService;
         private readonly IClientRules _clientRules;
+        private readonly IMediaUploadLog _uploadLog;
 
-        public VehiclePhotosController(IVehiclePhotoService photoService, IClientRules clientRules)
+        public VehiclePhotosController(IVehiclePhotoService photoService, IClientRules clientRules,
+                                       IMediaUploadLog uploadLog)
         {
             _photoService = photoService;
             _clientRules = clientRules;
+            _uploadLog = uploadLog;
         }
 
         [HttpPut]
@@ -34,12 +37,32 @@ namespace Valuation.Api.Controllers
             try
             {
                 var resultMap = await _photoService.UpdatePhotosAsync(dto);
+
+                var source = PhoneUploadSource(dto);
+                if (source != null) await _uploadLog.RecordAsync(dto, source, resultMap);
+
                 return Ok(resultMap);
             }
             catch (ArgumentException ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// "CameraApp" or "MobileApp" for an upload from a phone, which the portal
+        /// announces; null for the portal's own AVO page, whose user needs no message
+        /// about their own upload. The camera app says so in UploadSource. Older camera
+        /// APKs, and the staff app, say nothing, but a Dart HTTP client's User-Agent
+        /// gives them away.
+        /// </summary>
+        private string? PhoneUploadSource(VehiclePhotosDto dto)
+        {
+            if (string.Equals(dto.UploadSource, "CameraApp", StringComparison.OrdinalIgnoreCase))
+                return "CameraApp";
+            return Request.Headers.UserAgent.ToString().StartsWith("Dart/", StringComparison.Ordinal)
+                ? "MobileApp"
+                : null;
         }
 
         [HttpGet]
@@ -143,55 +166,7 @@ namespace Valuation.Api.Controllers
                 var photoUrls = await _photoService.GetPhotoUrlsAsync(valuationId.ToString(), vehicleNumber, applicantContact);
                 var videoUrls = await _photoService.GetVideoUrlsAsync(valuationId.ToString(), vehicleNumber, applicantContact);
 
-                // The video is checked on its own below. It used to be in this list as
-                // well, so a case without one reported it twice ("VehicleVideo" and
-                // "Vehicle Video") and the AVO was told 18 items were missing, not 17.
-                var mandatoryPhotoFields = new List<string>
-                {
-                    "FrontLeftSide", "FrontRightSide", "RearLeftSide", "RearRightSide",
-                    "FrontViewGrille", "RearViewTailgate", "DriverSideProfile", "PassengerSideProfile",
-                    "EngineBay", "VinPlate", "ChassisImprint", "Odometer",
-                    "SelfieWithVehicle",
-                    "ChassisVerification", "ChassisStencilTrace", "WorkingOperationPhoto"
-                };
-
-                var photoDisplayNames = new Dictionary<string, string>
-                {
-                    { "FrontLeftSide", "Front Left Side" }, { "FrontRightSide", "Front Right Side" },
-                    { "RearLeftSide", "Rear Left Side" }, { "RearRightSide", "Rear Right Side" },
-                    { "FrontViewGrille", "Front View (Grille)" }, { "RearViewTailgate", "Rear View (Tailgate)" },
-                    { "DriverSideProfile", "Driver's Side Profile" }, { "PassengerSideProfile", "Passenger Side Profile" },
-                    { "Dashboard", "Dashboard" }, { "InstrumentCluster", "Instrument Cluster" },
-                    { "EngineBay", "Engine Bay" }, { "VinPlate", "VIN Plate" },
-                    { "ChassisImprint", "Chassis Imprint" },
-                    { "GearInterior", "Gear (Interior)" }, { "FrontSeat", "Front Seat" }, { "RearSeat", "Rear Seat" },
-                    { "DashboardCloseup", "Dashboard Close-up" }, { "Odometer", "Odometer" },
-                    { "SelfieWithVehicle", "Selfie with Vehicle" },
-                    { "TireFrontLeft", "Tire Front Left" }, { "TireFrontRight", "Tire Front Right" },
-                    { "TireRearLeft", "Tire Rear Left" }, { "TireRearRight", "Tire Rear Right" },
-                    { "Underbody", "Under Body" },
-                    { "ChassisVerification", "Chassis Verification" }, { "ChassisStencilTrace", "Chassis Stencil Trace" },
-                    { "WorkingOperationPhoto", "Working / Operation Photo" }
-                };
-
-                var normalizedPhotoUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (photoUrls != null) foreach (var kvp in photoUrls) normalizedPhotoUrls[kvp.Key] = kvp.Value;
-
-                var normalizedVideoUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (videoUrls != null) foreach (var kvp in videoUrls) normalizedVideoUrls[kvp.Key] = kvp.Value;
-
-                var missingPhotos = new List<string>();
-                foreach (var field in mandatoryPhotoFields)
-                {
-                    if (!normalizedPhotoUrls.ContainsKey(field) || string.IsNullOrWhiteSpace(normalizedPhotoUrls[field]))
-                    {
-                        var displayName = photoDisplayNames.ContainsKey(field) ? photoDisplayNames[field] : field;
-                        missingPhotos.Add(displayName);
-                    }
-                }
-
-                bool videoExists = normalizedVideoUrls.ContainsKey("VehicleVideo") && !string.IsNullOrWhiteSpace(normalizedVideoUrls["VehicleVideo"]);
-                if (!videoExists) missingPhotos.Add("Vehicle Video");
+                var missingPhotos = MandatoryMedia.Missing(photoUrls, videoUrls);
 
                 var response = new ValidatePhotosResponse
                 {
