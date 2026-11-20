@@ -24,6 +24,10 @@ namespace Valuation.Api.Models
         public string? OwnerSerialNo { get; set; }
         public long? Odometer { get; set; }
 
+        /// <summary>True when <see cref="Odometer"/> is engine hours from an hour meter
+        /// (tractors, cranes), not kilometres.</summary>
+        public bool OdometerInHours { get; set; }
+
         /// <summary>A place name to search listings near, never a street address.</summary>
         public string? City { get; set; }
 

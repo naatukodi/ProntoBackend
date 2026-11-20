@@ -213,7 +213,7 @@ namespace Valuation.Api.Services
                 Variant = Up(vd?.MakerVariant),
                 VehicleCategory = Up(doc.VehicleSegment ?? sh?.VehicleSegment),
                 Inspector = Up(insp?.VehicleInspectedBy ?? doc.AssignedTo),
-                Year = vd?.YearOfMfg?.ToString() ?? "",
+                Year = vd?.ResolveManufacture().Year?.ToString() ?? "",
                 VehicleClass = Up(vd?.ClassOfVehicle),
                 ValuationPrice = valuationPrice,
                 ExecutiveName = Up(sh?.ExecutiveName),

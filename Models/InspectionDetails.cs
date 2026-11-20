@@ -22,6 +22,26 @@ namespace Valuation.Api.Models
         /// such as "NOT WORKING". Holds a value only while <see cref="Odometer"/> is empty:
         /// saving either one clears the other.</summary>
         public string? OdometerRemark { get; set; }
+
+        /// <summary>What <see cref="Odometer"/> counts: "KM", or "HOURS" for machines that
+        /// log engine hours on an hour meter instead (tractors, cranes and other farm or
+        /// construction equipment). The AVO picks it; empty means KM, which is what every
+        /// case before 2026-11-19 was. Must exist in BOTH copies of this model (Valuation.Api
+        /// and ProntoPDFGeneration).</summary>
+        public string? OdometerUnit { get; set; }
+
+        /// <summary>True when the reading is engine hours rather than kilometres.</summary>
+        public bool OdometerInHours() => IsHours(OdometerUnit);
+
+        /// <summary>"km" or "hours", for text that states a reading.</summary>
+        public string OdometerUnitLabel() => OdometerInHours() ? "hours" : "km";
+
+        /// <summary>Folds whatever a client posts ("hrs", "Hours", "H") onto KM / HOURS.</summary>
+        public static string NormaliseOdometerUnit(string? unit) => IsHours(unit) ? "HOURS" : "KM";
+
+        private static bool IsHours(string? unit) =>
+            unit?.Trim().ToUpperInvariant() is "HOURS" or "HOUR" or "HRS" or "HR" or "H";
+
         public bool? VinPlate { get; set; }
         /// <summary>Whether the vehicle has been in an accident, as the AVO found it. Printed on
         /// the report cover beside DEDUPE; QC used to type it into REMARKS.</summary>

@@ -42,10 +42,13 @@ namespace Valuation.Api.Repositories
         /// must be read. Everything else goes at low detail. The caller sizes this set
         /// against a token budget rather than a fixed list, so cost stays bounded however
         /// many photos a case has.</param>
+        /// <param name="odometerInHours">The AVO recorded the reading in engine hours (a
+        /// tractor's or crane's hour meter), so the dial is read as hours, not km.</param>
         Task<QcAiVisionResult?> ReadInspectionPhotosAsync(
             IReadOnlyDictionary<string, string> photos,
             IReadOnlySet<string> closeUpKeys,
-            CancellationToken ct = default);
+            CancellationToken ct = default,
+            bool odometerInHours = false);
 
         /// <summary>
         /// PASS 2 — judges vehicle condition from the body, tyre and engine-bay photos:

@@ -133,6 +133,10 @@ namespace Valuation.Api.Services
                 doc.InspectionDetails.OdometerRemark = dto.OdometerRemark.Trim().ToUpperInvariant();
                 doc.InspectionDetails.Odometer = null;
             }
+            // Tractors and cranes often log engine hours instead of km. A client that
+            // does not send the unit leaves the case's existing one alone.
+            if (!string.IsNullOrWhiteSpace(dto.OdometerUnit))
+                doc.InspectionDetails.OdometerUnit = InspectionDetails.NormaliseOdometerUnit(dto.OdometerUnit);
             if (dto.VinPlate != null)
                 doc.InspectionDetails.VinPlate = dto.VinPlate;
             if (dto.Accidental != null)
