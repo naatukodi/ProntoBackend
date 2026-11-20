@@ -79,11 +79,14 @@ public class ValuationService : IValuationService
             dto.StencilTrace = null;
             dto.ChassisNoPhoto = null;
 
-            // Older documents may lack mfg month/year — derive from registration date
-            if ((dto.YearOfMfg is null or 0) && dto.DateOfRegistration.HasValue)
+            // Cases saved before 2026-11-19 hold the registration month in Year/Month
+            // of Mfg; older ones may have neither. Show the manufacturing date when
+            // VAHAN gave one, the registration date only when it did not.
+            var (mfgYear, mfgMonth) = dto.ResolveManufacture();
+            if (mfgYear.HasValue)
             {
-                dto.YearOfMfg = dto.DateOfRegistration.Value.Year;
-                dto.MonthOfMfg = dto.DateOfRegistration.Value.Month;
+                dto.YearOfMfg = mfgYear;
+                if (mfgMonth.HasValue) dto.MonthOfMfg = mfgMonth;
             }
 
             return dto;
@@ -406,11 +409,7 @@ public class ValuationService : IValuationService
         // ── Registration date ─────────────────────────────────────────────────
         var regDt = SafeParseDate(api.RegistrationDate);
         if (regDt.HasValue)
-        {
             dto.DateOfRegistration = regDt;
-            dto.YearOfMfg = regDt.Value.Year;
-            dto.MonthOfMfg = regDt.Value.Month;
-        }
 
         // ── Manufacturing date ("M/YYYY" format) ──────────────────────────────
         if (!string.IsNullOrWhiteSpace(api.ManufacturingDate))
@@ -424,6 +423,18 @@ public class ValuationService : IValuationService
             {
                 dto.ManufacturedDate = new DateTime(mfgYear, mfgMonth, 1);
             }
+        }
+
+        // Year/Month of Mfg used to be copied from the registration date, so a
+        // vehicle registered long after it was built read as brand new: JH13N8259,
+        // made MAR-2025 and registered NOV-2026, printed an age of 0 yrs 0 mo.
+        // The registration date is only the stand-in when VAHAN sends no
+        // manufacturing date.
+        var mfgSource = dto.ManufacturedDate ?? regDt;
+        if (mfgSource.HasValue)
+        {
+            dto.YearOfMfg = mfgSource.Value.Year;
+            dto.MonthOfMfg = mfgSource.Value.Month;
         }
 
         // ── Other dates ───────────────────────────────────────────────────────

@@ -155,7 +155,8 @@ namespace Valuation.Api.Repositories
             Line("Price when new (ex-showroom, rupees)", d.ExShowroomPrice is > 0 ? $"{d.ExShowroomPrice:0}" : null);
             Line("First registered", d.DateOfRegistration?.ToString("yyyy-MM-dd"));
             Line("Owner number", d.OwnerSerialNo);
-            Line("Odometer", d.Odometer is > 0 ? $"{d.Odometer} km" : null);
+            Line(d.OdometerInHours ? "Hour meter" : "Odometer",
+                 d.Odometer is > 0 ? (d.OdometerInHours ? $"{d.Odometer} engine hours" : $"{d.Odometer} km") : null);
             Line("Location", d.City);
             Line("Registered in state (code)", d.StateCode);
             Line("Condition at inspection", d.Condition);
@@ -412,8 +413,9 @@ namespace Valuation.Api.Repositories
         public Task<QcAiVisionResult?> ReadInspectionPhotosAsync(
             IReadOnlyDictionary<string, string> photos,
             IReadOnlySet<string> closeUpKeys,
-            CancellationToken ct = default) =>
-            ReadPhotosAsync("identity", Model, BuildIdentityPrompt(photos.Keys),
+            CancellationToken ct = default,
+            bool odometerInHours = false) =>
+            ReadPhotosAsync("identity", Model, BuildIdentityPrompt(photos.Keys, odometerInHours),
                             "qc_photo_reading", IdentitySchema(), photos, closeUpKeys, ct);
 
         /// <summary>
@@ -603,7 +605,7 @@ namespace Valuation.Api.Repositories
             return result;
         }
 
-        private static string BuildIdentityPrompt(IEnumerable<string> photoKeys)
+        private static string BuildIdentityPrompt(IEnumerable<string> photoKeys, bool odometerInHours = false)
         {
             var sb = new StringBuilder();
             sb.AppendLine("You are reading photographs from a vehicle inspection in India.");
@@ -626,16 +628,33 @@ namespace Valuation.Api.Repositories
             sb.AppendLine("  as chassisNumber — fill both from it rather than leaving vinPlate null.");
             sb.AppendLine("  A VIN never contains the letters I, O or Q, so read those shapes as 1 and 0.");
             sb.AppendLine("  A zero is often struck through; that slash is not a character.");
-            sb.AppendLine("- odometerKm: the lifetime odometer total in km, digits only.");
-            sb.AppendLine("  A cluster shows several numbers. The total is the longest run of digits and");
-            sb.AppendLine("  has no decimal point. Anything with a decimal point is a trip meter or a fuel");
-            sb.AppendLine("  average, a value like 01:53 is the clock, and a bare 0 or 0.0 is never the");
-            sb.AppendLine("  total on a vehicle being valued. If the total is glared out, dirty or partly");
-            sb.AppendLine("  hidden, return null — do NOT substitute another number from the display.");
-            sb.AppendLine("  Read the total right to the last digit. A used vehicle reads five or six");
-            sb.AppendLine("  digits, so 156 where the dial shows 156361 is a truncated read, not a low");
-            sb.AppendLine("  reading. If glare hides the trailing digits, return null for the whole value");
-            sb.AppendLine("  rather than the part you could make out.");
+            if (odometerInHours)
+            {
+                // Tractors and cranes log engine hours, not km. Their hour meter shows a
+                // tenths digit after a point (386.0), which the km rules below would
+                // dismiss as a trip meter — JH13N8259's Eicher reads exactly that way.
+                sb.AppendLine("- odometerKm: this machine records use on an HOUR METER, not in km. Return the");
+                sb.AppendLine("  engine-hours total in whole hours, digits only, in this field.");
+                sb.AppendLine("  The hour meter usually shows one digit after a decimal point (386.0) and may");
+                sb.AppendLine("  be marked h, hrs or with an hourglass. Drop the digit after the point: 386.0");
+                sb.AppendLine("  is 386, 1523.7 is 1523. It is often a small LCD under or inside the RPM");
+                sb.AppendLine("  gauge; an RPM needle or a value like 01:53 (the clock) is not it. If the");
+                sb.AppendLine("  reading is glared out, dirty or partly hidden, return null — do NOT");
+                sb.AppendLine("  substitute another number from the display.");
+            }
+            else
+            {
+                sb.AppendLine("- odometerKm: the lifetime odometer total in km, digits only.");
+                sb.AppendLine("  A cluster shows several numbers. The total is the longest run of digits and");
+                sb.AppendLine("  has no decimal point. Anything with a decimal point is a trip meter or a fuel");
+                sb.AppendLine("  average, a value like 01:53 is the clock, and a bare 0 or 0.0 is never the");
+                sb.AppendLine("  total on a vehicle being valued. If the total is glared out, dirty or partly");
+                sb.AppendLine("  hidden, return null — do NOT substitute another number from the display.");
+                sb.AppendLine("  Read the total right to the last digit. A used vehicle reads five or six");
+                sb.AppendLine("  digits, so 156 where the dial shows 156361 is a truncated read, not a low");
+                sb.AppendLine("  reading. If glare hides the trailing digits, return null for the whole value");
+                sb.AppendLine("  rather than the part you could make out.");
+            }
             sb.AppendLine();
             sb.AppendLine("Judge:");
             sb.AppendLine("- daylight: 'pass' if photos are bright and clear enough to inspect, else 'fail'.");

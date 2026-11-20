@@ -82,6 +82,7 @@ namespace Valuation.Api.Services
                 ? doc.VehicleNumber
                 : vd.RegistrationNumber;
 
+            var (mfgYear, mfgMonth) = vd?.ResolveManufacture() ?? (null, null);
             var detailsDto = new VehicleDetailsAIDto
             {
                 Segment = doc.VehicleSegment,
@@ -90,14 +91,15 @@ namespace Valuation.Api.Services
                 Make = vd?.Make ?? string.Empty,
                 Model = vd?.Model ?? string.Empty,
                 Variant = vd?.MakerVariant,
-                MonthOfMfg = vd?.MonthOfMfg,
-                YearOfMfg = vd?.YearOfMfg,
+                MonthOfMfg = mfgMonth,
+                YearOfMfg = mfgYear,
                 Fuel = vd?.Fuel,
                 EngineCC = vd?.EngineCC,
                 ExShowroomPrice = vd?.ExShowroomPrice,
                 DateOfRegistration = vd?.DateOfRegistration,
                 OwnerSerialNo = vd?.OwnerSerialNo,
                 Odometer = doc.InspectionDetails?.Odometer,
+                OdometerInHours = doc.InspectionDetails?.OdometerInHours() == true,
                 City = PlaceName(doc.InspectionDetails?.InspectionLocation) ?? PlaceName(vd?.Rto),
                 StateCode = registration is { Length: >= 2 } && char.IsLetter(registration[0]) && char.IsLetter(registration[1])
                     ? registration[..2].ToUpperInvariant()

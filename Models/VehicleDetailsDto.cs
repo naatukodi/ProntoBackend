@@ -82,6 +82,24 @@
 
         public DateTime? ManufacturedDate { get; set; }
 
+        /// <summary>
+        /// Year and month of manufacture, for anything that works out the vehicle's age.
+        ///
+        /// <see cref="ManufacturedDate"/> wins. Until 2026-11-19 the Surepass lookup copied
+        /// the REGISTRATION date into <see cref="YearOfMfg"/>/<see cref="MonthOfMfg"/> and kept
+        /// the real manufacturing date only in <see cref="ManufacturedDate"/>, so every case
+        /// saved before then still holds the registration month in those two fields. The
+        /// report's "Mfg" label has always printed ManufacturedDate first; this keeps the age
+        /// in step with it. A method, not a property, so it is never serialised.
+        /// </summary>
+        public (int? Year, int? Month) ResolveManufacture()
+        {
+            if (ManufacturedDate is DateTime m) return (m.Year, m.Month);
+            if (YearOfMfg is > 0) return (YearOfMfg, MonthOfMfg is >= 1 and <= 12 ? MonthOfMfg : null);
+            if (DateOfRegistration is DateTime r) return (r.Year, r.Month);
+            return (null, null);
+        }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
         public string? AssignedTo { get; set; }

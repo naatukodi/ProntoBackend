@@ -321,7 +321,14 @@ namespace Valuation.Api.Services
 
             // One fingerprint per pass, over that pass's own photos. Swapping a damaged
             // panel re-runs condition and provenance and leaves identity alone.
-            var idPrint = Fingerprint(identityPhotos);
+            // An hour-meter case is read with a different odometer instruction, so the
+            // unit is part of what identity was read under: switching a case between km
+            // and hours re-reads it. A km case's fingerprint is unchanged, so no stored
+            // reading is thrown away by this.
+            var odoHours = doc.InspectionDetails?.OdometerInHours() == true;
+            var idPrint = odoHours
+                ? Fingerprint(identityPhotos, PromptVersion + "|odometer-hours")
+                : Fingerprint(identityPhotos);
             var condPrint = Fingerprint(conditionPhotos);
             var provPrint = Fingerprint(provenancePhotos);
 
@@ -339,7 +346,7 @@ namespace Valuation.Api.Services
                 try
                 {
                     await PaceAsync(Project(identityPhotos.Count, identityHigh.Count), ct);
-                    identity = await _ai.ReadInspectionPhotosAsync(identityPhotos, identityHigh, ct);
+                    identity = await _ai.ReadInspectionPhotosAsync(identityPhotos, identityHigh, ct, odoHours);
                 }
                 catch (Exception ex)
                 {
@@ -462,7 +469,8 @@ namespace Valuation.Api.Services
                         string.IsNullOrWhiteSpace(read.VinPlate) ? read.ChassisNumber : read.VinPlate,
                         vd?.ChassisNumber, vinLike: true);
 
-            CompareOdometer(outp, read.OdometerKm, ins?.Odometer, ins?.OdometerRemark);
+            CompareOdometer(outp, read.OdometerKm, ins?.Odometer, ins?.OdometerRemark,
+                            ins?.OdometerUnitLabel() ?? "km");
 
             Judgement(outp, "accDaylight", read.Daylight,
                       "Photos are bright and clear enough to inspect.",
@@ -1360,16 +1368,19 @@ namespace Valuation.Api.Services
             return spaced.ToLowerInvariant();
         }
 
-        private static void CompareOdometer(QcAiAuditDto o, long? readKm, double? recorded, string? remark)
+        /// <param name="unit">"km", or "hours" for an hour meter — only the wording changes.</param>
+        private static void CompareOdometer(QcAiAuditDto o, long? readKm, double? recorded, string? remark,
+                                            string unit = "km")
         {
             const string key = "accOdo";
+            var meter = unit == "hours" ? "Hour meter" : "Odometer";
             if (recorded is null or <= 0 && !string.IsNullOrWhiteSpace(remark))
             {
-                Unresolved(o, key, $"AVO recorded the odometer as {remark.Trim()} instead of a reading, so there is nothing to compare against.");
+                Unresolved(o, key, $"AVO recorded the {meter.ToLowerInvariant()} as {remark.Trim()} instead of a reading, so there is nothing to compare against.");
                 return;
             }
-            if (recorded is null or <= 0) { Unresolved(o, key, "AVO recorded no odometer reading to compare against."); return; }
-            if (readKm is null) { Unresolved(o, key, $"Odometer could not be read from the photo — AVO recorded {recorded:N0} km."); return; }
+            if (recorded is null or <= 0) { Unresolved(o, key, $"AVO recorded no {meter.ToLowerInvariant()} reading to compare against."); return; }
+            if (readKm is null) { Unresolved(o, key, $"{meter} could not be read from the photo — AVO recorded {recorded:N0} {unit}."); return; }
 
             var declared = (long)Math.Round(recorded.Value);
 
@@ -1388,10 +1399,10 @@ namespace Valuation.Api.Services
             if (readKm.Value == 0 || (readDigits <= declaredDigits - 2) || (isPrefix && readKm.Value != declared))
             {
                 Unresolved(o, key,
-                    $"Odometer photo appears to read {readKm.Value:N0} km against the " +
-                    $"{declared:N0} km AVO recorded — too few digits to be the lifetime total, " +
+                    $"{meter} photo appears to read {readKm.Value:N0} {unit} against the " +
+                    $"{declared:N0} {unit} AVO recorded — too few digits to be the lifetime total, " +
                     "so this is a partial read of the dial or another number on the cluster " +
-                    "rather than a rollback. Check the odometer photo yourself.");
+                    $"rather than a rollback. Check the {meter.ToLowerInvariant()} photo yourself.");
                 return;
             }
 
@@ -1399,13 +1410,13 @@ namespace Valuation.Api.Services
             {
                 o.Cl[key] = "pass";
                 o.Status[key] = "resolved";
-                o.Why[key] = $"Odometer photo reads {readKm.Value:N0} km, matching the {declared:N0} km AVO recorded.";
+                o.Why[key] = $"{meter} photo reads {readKm.Value:N0} {unit}, matching the {declared:N0} {unit} AVO recorded.";
             }
             else
             {
                 o.Cl[key] = "fail";
                 o.Status[key] = "resolved";
-                o.Why[key] = $"Odometer photo reads {readKm.Value:N0} km but AVO recorded {declared:N0} km. " +
+                o.Why[key] = $"{meter} photo reads {readKm.Value:N0} {unit} but AVO recorded {declared:N0} {unit}. " +
                              "A single mis-read digit looks the same as a rollback here — check the photo before acting.";
             }
         }

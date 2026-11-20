@@ -16,6 +16,9 @@ namespace Valuation.Api.Models
         /// <summary>Words in place of a reading ("NOT WORKING"). The portal posts this or
         /// <see cref="Odometer"/>, never both.</summary>
         public string? OdometerRemark { get; set; }
+        /// <summary>"KM" or "HOURS" — what <see cref="Odometer"/> counts. Left out by
+        /// clients that predate it, which keeps whatever the case already has.</summary>
+        public string? OdometerUnit { get; set; }
         public bool? VinPlate { get; set; }
         public bool? Accidental { get; set; }
         public bool? SeizedByOtherFinancier { get; set; }
